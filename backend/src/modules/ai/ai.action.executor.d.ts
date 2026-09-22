@@ -16,7 +16,7 @@
  *   - dismiss_recovery         → recoveryService.dismissOpportunity()
  *   - confirm_appointment      → appointmentService.updateStatus("confirmed")
  */
-export declare const ALLOWED_ACTION_TYPES: readonly ["mark_recovery_contacted", "mark_recovery_responded", "dismiss_recovery", "confirm_appointment", "book_appointment"];
+export declare const ALLOWED_ACTION_TYPES: readonly ["mark_recovery_contacted", "mark_recovery_responded", "dismiss_recovery", "confirm_appointment", "book_appointment", "reschedule_appointment"];
 export type AllowedActionType = typeof ALLOWED_ACTION_TYPES[number];
 export interface AIActionRequest {
     type: string;

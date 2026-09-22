@@ -98,15 +98,17 @@ export const followupService = {
     }
   },
 
-  getTasks: async (tenantId: string, filters?: { status?: string; priority?: string }) => {
+  getTasks: async (tenantId: string, filters?: { status?: string; priority?: string; type?: string }) => {
     const query: any = { tenantId };
     if (filters?.status) query.status = filters.status;
     if (filters?.priority) query.priority = filters.priority;
+    if (filters?.type) query.type = filters.type;
 
     return FollowUpTask.find(query)
       .populate("patientId", "firstName lastName phone email")
       .populate("recoveryId", "type status priority estimatedValue bookedValue")
       .populate("waitlistEntryId", "treatment status priority preferredDays preferredTimeRanges")
+      .populate("sourceAppointmentId")
       .sort({ scheduledFor: 1 });
   },
 

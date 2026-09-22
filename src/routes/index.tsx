@@ -9,7 +9,6 @@ import {
   Wallet,
   ShieldAlert
 } from "lucide-react";
-import { toast } from "sonner";
 import {
   AIStatusBadge,
   AppointmentStatusBadge,
@@ -22,8 +21,6 @@ import {
   EmptyState
 } from "@/components/shared/ui-kit";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { useAppState } from "@/hooks/use-app-state";
 import { useAuth } from "@/contexts/auth-context";
 import { formatLongDate, money, relativeDay } from "@/lib/format";
 import { api } from "@/lib/api";
@@ -44,7 +41,6 @@ export const Route = createFileRoute("/")({
 });
 
 function Dashboard() {
-  const { aiGlobalActive, setAiGlobalActive } = useAppState();
   const { user } = useAuth();
   
   const todayStr = (new Date().toISOString().split("T")[0]) as string;
@@ -94,17 +90,6 @@ function Dashboard() {
         subtitle={formatLongDate(todayStr)}
         actions={
           <>
-            <div className="panel flex items-center gap-2.5 px-3 py-2">
-              <Sparkles className="size-4 text-ai" />
-              <span className="text-[13px] font-medium">Assistant IA</span>
-              <Switch
-                checked={aiGlobalActive}
-                onCheckedChange={(v) => {
-                  setAiGlobalActive(v);
-                  toast.success(v ? "Assistant IA activé" : "Assistant IA mis en pause");
-                }}
-              />
-            </div>
             <Button asChild>
               <Link to="/recovery">Lancer une récupération</Link>
             </Button>

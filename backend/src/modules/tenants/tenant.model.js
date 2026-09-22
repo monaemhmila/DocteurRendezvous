@@ -37,12 +37,24 @@ exports.Tenant = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
 const TenantSchema = new mongoose_1.Schema({
     name: { type: String, required: true },
+    specialty: { type: String, default: "Générale" },
+    email: { type: String },
+    phone: { type: String },
+    address: { type: String },
+    status: {
+        type: String,
+        enum: ["active", "suspended", "trial"],
+        default: "active",
+    },
+    suspensionReason: { type: String },
+    plan: {
+        type: String,
+        enum: ["starter", "pro", "enterprise"],
+        default: "pro",
+    },
     settings: {
-        whatsappConfig: {
-            phoneNumberId: String,
-            accessToken: String,
-        },
-        businessHours: mongoose_1.Schema.Types.Mixed,
+        type: mongoose_1.Schema.Types.Mixed,
+        default: {},
     },
 }, { timestamps: true });
 exports.Tenant = mongoose_1.default.model("Tenant", TenantSchema);

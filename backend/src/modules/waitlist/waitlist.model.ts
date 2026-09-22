@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from "mongoose";
 
 export interface IWaitlistEntry extends Document {
+  _id: mongoose.Types.ObjectId;
   tenantId: string;
   patientId: mongoose.Types.ObjectId;
   treatment: string;

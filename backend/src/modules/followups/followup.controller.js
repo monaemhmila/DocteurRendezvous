@@ -8,10 +8,11 @@ exports.followupController = {
             const tenantId = req.user?.tenantId;
             if (!tenantId)
                 return res.status(403).json({ error: "No tenant context" });
-            const { status, priority } = req.query;
+            const { status, priority, type } = req.query;
             const tasks = await followup_service_1.followupService.getTasks(tenantId, {
                 status: status,
                 priority: priority,
+                type: type,
             });
             res.json(tasks);
         }

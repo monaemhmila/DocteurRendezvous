@@ -768,7 +768,7 @@ async function runIntegrationTests() {
       patientId: reg22Patient._id,
       doctorId: "doc_main",
       treatment: "Soin",
-      date: sevenMonthsAgo.toISOString().split("T")[0],
+      date: sevenMonthsAgo.toISOString().split("T")[0] || "",
       startTime: "10:00",
       endTime: "10:30",
       status: "completed",

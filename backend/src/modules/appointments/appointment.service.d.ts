@@ -1,4 +1,16 @@
 import { IAppointment } from "./appointment.model";
+export declare const reminderService: {
+    /**
+     * Process automated 24h reminders (Rappel J-1) for appointments scheduled for tomorrow.
+     */
+    processUpcomingReminders: () => Promise<{
+        sentCount: number;
+    }>;
+    /**
+     * Start background reminder interval (runs every 30 minutes).
+     */
+    startBackgroundWorker: (intervalMs?: number) => void;
+};
 export declare const appointmentService: {
     getAppointments: (tenantId: string, patientId?: string) => Promise<(import("mongoose").Document<unknown, {}, IAppointment, {}, import("mongoose").DefaultSchemaOptions> & IAppointment & Required<{
         _id: import("mongoose").Types.ObjectId;

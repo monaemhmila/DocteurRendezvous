@@ -1,10 +1,14 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.waitlistController = void 0;
 const waitlist_service_1 = require("./waitlist.service");
 const waitlist_model_1 = require("./waitlist.model");
 const followup_model_1 = require("../followups/followup.model");
 const appointment_model_1 = require("../appointments/appointment.model");
+const mongoose_1 = __importDefault(require("mongoose"));
 exports.waitlistController = {
     getEntries: async (req, res) => {
         try {
@@ -30,16 +34,36 @@ exports.waitlistController = {
             const tenantId = req.user?.tenantId;
             if (!tenantId)
                 return res.status(403).json({ error: "No tenant context" });
+            const { patientId, treatment, priority, notes, preferredDays, preferredTimeRanges } = req.body;
+            if (!patientId || !mongoose_1.default.Types.ObjectId.isValid(patientId)) {
+                return res.status(400).json({ error: "Patient invalide" });
+            }
+            if (!treatment || typeof treatment !== "string" || !treatment.trim()) {
+                return res.status(400).json({ error: "Le soin souhaité est requis" });
+            }
             // Validate patient ownership
             const { Patient } = await import("../patients/patient.model");
-            const patient = await Patient.findOne({ _id: req.body.patientId, tenantId });
+            const patient = await Patient.findOne({ _id: patientId, tenantId });
             if (!patient)
-                return res.status(404).json({ error: "Patient not found or does not belong to tenant" });
-            const entry = await waitlist_service_1.waitlistService.createEntry(req.body, tenantId);
-            res.status(201).json(entry);
+                return res.status(404).json({ error: "Patient introuvable pour ce cabinet" });
+            const entry = await waitlist_service_1.waitlistService.createEntry({
+                patientId,
+                treatment: treatment.trim(),
+                priority: priority || "medium",
+                notes: notes || "",
+                preferredDays: preferredDays || [],
+                preferredTimeRanges: preferredTimeRanges || [],
+            }, tenantId);
+            const populatedEntry = await waitlist_model_1.WaitlistEntry.findById(entry._id).populate("patientId", "firstName lastName phone email");
+            res.status(201).json(populatedEntry || entry);
         }
         catch (error) {
-            res.status(400).json({ error: error.message });
+            if (error.code === 11000) {
+                return res.status(400).json({
+                    error: "Ce patient est déjà inscrit sur la liste d'attente pour ce traitement.",
+                });
+            }
+            res.status(400).json({ error: error.message || "Erreur lors de l'ajout" });
         }
     },
     cancelEntry: async (req, res) => {
@@ -131,7 +155,7 @@ exports.waitlistController = {
                     status: "fulfilled",
                     fulfilledByAppointmentId: newAppointment._id
                 }
-            }, { new: true });
+            }, { returnDocument: 'after' });
             if (!updatedEntry) {
                 // Edge case: it was fulfilled by someone else in the millisecond between read and write
                 // The appointment is created but might be orphaned or considered a separate booking.

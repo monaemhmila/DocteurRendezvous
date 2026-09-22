@@ -251,7 +251,14 @@ function PatientsPage() {
                         <div className="flex items-center gap-3">
                           <PatientAvatar initials={pInitials} id={p.id} size="sm" />
                           <div>
-                            <p className="font-medium">{pName}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium">{pName}</p>
+                              {(p.metrics?.noShowCount ?? 0) > 0 && (
+                                <span className="inline-flex items-center rounded-full bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive ring-1 ring-inset ring-destructive/20" title={`${p.metrics!.noShowCount} No-Show(s)`}>
+                                  🐇 {p.metrics!.noShowCount}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>

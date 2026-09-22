@@ -13,9 +13,15 @@ export declare const availabilityService: {
         timePreference?: string;
     }) => Promise<{
         error: string;
+        isPastDate?: never;
         slots?: never;
     } | {
         error?: never;
+        slots: never[];
+        isPastDate: boolean;
+    } | {
+        error?: never;
+        isPastDate?: never;
         slots: {
             startTime: string;
             endTime: string;

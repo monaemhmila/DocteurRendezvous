@@ -80,14 +80,32 @@ export const waitlistService = {
     console.log("ELIGIBLE CANDIDATES:", eligible.map(c => ({ treatment: c.treatment, _id: c._id })));
     if (eligible.length === 0) return null;
 
-    // Sort by priority and wait time
+    // Check which candidates already have a pending offer to distribute slots fairly
+    const activeOffers = await FollowUpTask.find({
+      tenantId,
+      type: "slot_fill_offer",
+      status: { $in: ["pending", "in_progress"] }
+    }).select("waitlistEntryId");
+    
+    const activeEntryIds = new Set(
+      activeOffers.map(o => o.waitlistEntryId?.toString()).filter(Boolean)
+    );
+
+    // Sort by priority, diversity (candidates without active offers first), and wait time
     const priorityWeights: any = { high: 50, medium: 25, low: 0 };
     
     eligible.sort((a, b) => {
+      // 1. Fair distribution: Candidates who don't already have an offer in progress come first
+      const hasOfferA = activeEntryIds.has(a._id.toString()) ? 1 : 0;
+      const hasOfferB = activeEntryIds.has(b._id.toString()) ? 1 : 0;
+      if (hasOfferA !== hasOfferB) {
+        return hasOfferA - hasOfferB;
+      }
+
+      // 2. Score by priority and wait time
       let scoreA = 100 + (priorityWeights[a.priority] || 0);
       let scoreB = 100 + (priorityWeights[b.priority] || 0);
 
-      // +1 point per day waiting
       const daysWaitingA = Math.floor((Date.now() - a.createdAt.getTime()) / (1000 * 60 * 60 * 24));
       const daysWaitingB = Math.floor((Date.now() - b.createdAt.getTime()) / (1000 * 60 * 60 * 24));
       
@@ -103,6 +121,7 @@ export const waitlistService = {
     });
 
     const topCandidate = eligible[0];
+    if (!topCandidate) return null;
 
     // Create the FollowUpTask offer
     try {

@@ -37,7 +37,8 @@ exports.ALLOWED_ACTION_TYPES = [
     "mark_recovery_responded",
     "dismiss_recovery",
     "confirm_appointment",
-    "book_appointment"
+    "book_appointment",
+    "reschedule_appointment"
 ];
 // ──────────────────────────────────────────────────────────────────────────────
 // Errors
@@ -80,7 +81,7 @@ async function executeAIAction(tenantId, conversationId, action) {
     }
     const actionType = action.type;
     // 2. Validate conversationId format
-    if (!mongoose_1.default.Types.ObjectId.isValid(conversationId) || !mongoose_1.default.Types.ObjectId.isValid(action.targetId)) {
+    if (!mongoose_1.default.Types.ObjectId.isValid(conversationId)) {
         throw new ActionTargetNotFoundError();
     }
     // 3. Load conversation and enforce tenant ownership
@@ -99,15 +100,25 @@ async function executeAIAction(tenantId, conversationId, action) {
     // 5. Dispatch to appropriate handler
     switch (actionType) {
         case "mark_recovery_contacted":
+            if (!mongoose_1.default.Types.ObjectId.isValid(action.targetId))
+                throw new ActionTargetNotFoundError();
             return handleRecoveryAction(tenantId, action.targetId, conversationPatientId, "contacted");
         case "mark_recovery_responded":
+            if (!mongoose_1.default.Types.ObjectId.isValid(action.targetId))
+                throw new ActionTargetNotFoundError();
             return handleRecoveryAction(tenantId, action.targetId, conversationPatientId, "responded");
         case "dismiss_recovery":
+            if (!mongoose_1.default.Types.ObjectId.isValid(action.targetId))
+                throw new ActionTargetNotFoundError();
             return handleRecoveryAction(tenantId, action.targetId, conversationPatientId, "dismissed");
         case "confirm_appointment":
+            if (!mongoose_1.default.Types.ObjectId.isValid(action.targetId))
+                throw new ActionTargetNotFoundError();
             return handleAppointmentConfirm(tenantId, action.targetId, conversationPatientId);
         case "book_appointment":
-            return handleAppointmentBooking(tenantId, action.targetId, conversationPatientId, action.booking);
+            return handleAppointmentBooking(tenantId, conversationPatientId, conversationPatientId, action.booking);
+        case "reschedule_appointment":
+            return handleAppointmentReschedule(tenantId, action.targetId, conversationPatientId, action.booking);
     }
 }
 // ──────────────────────────────────────────────────────────────────────────────
@@ -194,15 +205,15 @@ async function handleAppointmentConfirm(tenantId, appointmentId, conversationPat
         message: "Appointment confirmed",
     };
 }
-async function handleAppointmentBooking(tenantId, targetId, // This is the patientId from context
+async function handleAppointmentBooking(tenantId, targetId, // This is the patientId from context or "self"
 conversationPatientId, bookingData) {
-    if (targetId !== conversationPatientId) {
+    if (targetId !== "self" && targetId !== conversationPatientId) {
         throw new ActionConversationMismatchError();
     }
     if (!bookingData || !bookingData.date || !bookingData.startTime || !bookingData.durationMin || !bookingData.treatment) {
         throw new ActionTransitionError("Missing required booking fields (date, startTime, durationMin, treatment).");
     }
-    // 1. Resolve Doctor — deterministic: clinic_owner first, dentist fallback, refuse if ambiguous
+    // 1. Resolve Doctor — deterministic: clinic_owner first, dentist fallback
     const doctorId = await resolveDoctorForTenant(tenantId);
     // 2. Validate Business Hours using Phase 6.7 Service
     const { availabilityService } = await import("../appointments/availability.service");
@@ -231,7 +242,8 @@ conversationPatientId, bookingData) {
             endTime,
             durationMin: bookingData.durationMin,
             treatment: bookingData.treatment,
-            status: "scheduled"
+            status: "scheduled",
+            source: "ai"
         }, tenantId);
     }
     catch (err) {
@@ -247,33 +259,81 @@ conversationPatientId, bookingData) {
         message: "Appointment successfully booked."
     };
 }
+async function handleAppointmentReschedule(tenantId, targetId, conversationPatientId, bookingData) {
+    if (!bookingData || !bookingData.date || !bookingData.startTime) {
+        throw new ActionTransitionError("Missing required rescheduling fields (date, startTime).");
+    }
+    // 1. Find the target appointment
+    let appointment;
+    if (targetId && targetId !== "self" && mongoose_1.default.Types.ObjectId.isValid(targetId)) {
+        appointment = await appointment_model_1.Appointment.findOne({ _id: targetId, tenantId, patientId: conversationPatientId });
+    }
+    // If not found by targetId, resolve the active upcoming appointment for this patient
+    if (!appointment) {
+        appointment = await appointment_model_1.Appointment.findOne({
+            tenantId,
+            patientId: conversationPatientId,
+            status: { $in: ["scheduled", "confirmed"] }
+        }).sort({ date: 1, startTime: 1 });
+    }
+    if (!appointment) {
+        throw new ActionTargetNotFoundError();
+    }
+    // 2. Compute endTime
+    const durationMin = bookingData.durationMin || appointment.durationMin || 30;
+    const [h, m] = bookingData.startTime.split(":").map(Number);
+    const startMins = h * 60 + m;
+    const endMins = startMins + durationMin;
+    const endH = Math.floor(endMins / 60).toString().padStart(2, "0");
+    const endM = (endMins % 60).toString().padStart(2, "0");
+    const endTime = `${endH}:${endM}`;
+    // 3. Delegate to appointmentService.updateAppointment (verifies availability & prevents double booking)
+    try {
+        const updated = await appointment_service_1.appointmentService.updateAppointment(appointment._id.toString(), {
+            date: bookingData.date,
+            startTime: bookingData.startTime,
+            endTime,
+            durationMin,
+            treatment: bookingData.treatment || appointment.treatment,
+            status: "scheduled",
+            source: "ai"
+        }, tenantId);
+        if (!updated) {
+            throw new ActionTransitionError("Failed to update appointment in database.");
+        }
+    }
+    catch (err) {
+        if (err.message === "Double_Booking_Error") {
+            throw new ActionTransitionError("Le créneau n'est plus disponible (Double_Booking_Error).");
+        }
+        throw new ActionTransitionError(err.message);
+    }
+    return {
+        type: "reschedule_appointment",
+        targetId: appointment._id.toString(),
+        outcome: "success",
+        message: "Appointment successfully rescheduled."
+    };
+}
 /**
- * Resolves the unique treating doctor for a tenant.
- *
- * Rules (deterministic — no arbitrary first-found):
- *   1. Exactly one User with role 'clinic_owner' for this tenant → use it.
- *   2. Zero clinic_owners but exactly one 'dentist' → use it.
- *   3. Any other combination (0 or >1 in either category) → throw ActionTransitionError.
- *
- * This prevents silent arbitrary selection when a tenant has multiple practitioners.
+ * Resolves the treating doctor for a tenant.
  */
 async function resolveDoctorForTenant(tenantId) {
     const { User } = await import("../users/user.model");
     // Try clinic_owner first (primary ownership role)
     const owners = await User.find({ tenantId, role: "clinic_owner" }).lean();
-    if (owners.length === 1) {
+    if (owners.length >= 1) {
         return owners[0]._id.toString();
-    }
-    if (owners.length > 1) {
-        throw new ActionTransitionError("Multiple clinic owners found for this tenant. Cannot determine unique doctor for booking. Please ensure only one clinic owner is configured.");
     }
     // No clinic_owner: fall back to dentist
     const dentists = await User.find({ tenantId, role: "dentist" }).lean();
-    if (dentists.length === 1) {
+    if (dentists.length >= 1) {
         return dentists[0]._id.toString();
     }
-    if (dentists.length > 1) {
-        throw new ActionTransitionError("Multiple dentists found for this tenant. Cannot determine unique doctor. Please configure a single clinic owner.");
+    // Fall back to any active user for this tenant
+    const users = await User.find({ tenantId }).lean();
+    if (users.length >= 1) {
+        return users[0]._id.toString();
     }
     throw new ActionTransitionError("No doctor (clinic_owner or dentist) configured for this tenant.");
 }

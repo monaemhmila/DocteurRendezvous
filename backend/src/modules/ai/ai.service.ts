@@ -36,6 +36,16 @@ import { IAIProvider, IChatMessage } from "./ai.provider.interface";
 import { buildSystemPrompt, IAIContext } from "./ai.prompt";
 import { ConversationNotFoundError } from "./ai.errors";
 import { availabilityService } from "../appointments/availability.service";
+import {
+  buildTemporalContext,
+  TemporalContext,
+  DEFAULT_TIMEZONE,
+  getBusinessHoursForDate,
+  formatBusinessHoursBlocks,
+  summarizeAllBusinessHours,
+  getWeekdayFr,
+  formatDateFr,
+} from "./temporal.utils";
 
 const MAX_MESSAGES = 20;
 
@@ -55,6 +65,10 @@ export interface AIActionProposal {
 export interface AISuggestionResult {
   suggestion: string;
   intent?: string;
+  patientInfo?: {
+    firstName?: string;
+    lastName?: string;
+  };
   scheduling?: {
     date?: string;
     timePreference?: string;
@@ -82,30 +96,12 @@ export interface AISuggestionResult {
 }
 
 /**
- * Render the tenant's businessHours settings as a short human-readable summary.
- * Business hours are REAL tenant data — used to prevent the AI from inventing
- * opening times. The format is intentionally lossy: only present days/times.
+ * Render the tenant's businessHours settings as a full per-day summary.
+ * Uses the deterministic temporal.utils module.
  */
 function summarizeBusinessHours(businessHours: any): string | undefined {
   if (!businessHours) return undefined;
-  // Flat format: { start: "09:00", end: "18:00" }
-  if (businessHours.start && businessHours.end) {
-    return `${businessHours.start}-${businessHours.end}`;
-  }
-  // Per-day format: { "monday": [{ start, end }, ...], ... }
-  const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-  const parts: string[] = [];
-  for (const day of days) {
-    const blocks = businessHours[day];
-    if (Array.isArray(blocks) && blocks.length > 0) {
-      const times = blocks
-        .filter((b: any) => b && b.start && b.end)
-        .map((b: any) => `${b.start}-${b.end}`)
-        .join(", ");
-      if (times) parts.push(`${day} ${times}`);
-    }
-  }
-  return parts.length > 0 ? parts.join("; ") : undefined;
+  return summarizeAllBusinessHours(businessHours);
 }
 
 export class AIService {
@@ -153,15 +149,49 @@ export class AIService {
 
     const tenantIdObj = new mongoose.Types.ObjectId(tenantId);
 
-    // Load REAL business hours (tenant-scoped — from req.user tenantId, never from input).
-    // Never exposed to the model when absent: the model may not invent opening times.
-    const tenantDoc = await Tenant.findById(tenantIdObj).select("settings.businessHours").lean();
+    // Load REAL clinic data, business hours, services & custom clinic instructions (tenant-scoped).
+    const tenantDoc = await Tenant.findById(tenantIdObj).lean();
+    const aiConfig = tenantDoc?.settings?.aiConfig || {};
+    const services = tenantDoc?.settings?.services || tenantDoc?.settings?.aiConfig?.services;
+    const tenantTimezone = (tenantDoc as any)?.timezone || DEFAULT_TIMEZONE;
     const businessHoursSummary = tenantDoc?.settings?.businessHours
       ? summarizeBusinessHours(tenantDoc.settings.businessHours)
       : undefined;
 
-    // Load patient context and business context
-    let aiContext: IAIContext | undefined = undefined;
+    // Build timezone-aware temporal context (today, tomorrow, day-after, weekdays)
+    const temporalCtx = buildTemporalContext(tenantTimezone);
+
+    // Build per-day business hours for today, tomorrow, day-after-tomorrow
+    const rawBH = tenantDoc?.settings?.businessHours;
+    let relevantDaysHours: string | undefined;
+    if (rawBH) {
+      const todayBH = getBusinessHoursForDate(temporalCtx.currentDate, rawBH);
+      const tomorrowBH = getBusinessHoursForDate(temporalCtx.tomorrow, rawBH);
+      const dayAfterBH = getBusinessHoursForDate(temporalCtx.dayAfterTomorrow, rawBH);
+      relevantDaysHours = [
+        `${formatDateFr(temporalCtx.currentDate)} (aujourd'hui): ${formatBusinessHoursBlocks(todayBH)}`,
+        `${formatDateFr(temporalCtx.tomorrow)} (demain): ${formatBusinessHoursBlocks(tomorrowBH)}`,
+        `${formatDateFr(temporalCtx.dayAfterTomorrow)} (après-demain): ${formatBusinessHoursBlocks(dayAfterBH)}`,
+      ].join("\n");
+    }
+
+    // Initialize aiContext with all clinic and practitioner settings
+    const aiContext: IAIContext = {
+      clinicName: tenantDoc?.name,
+      clinicSpecialty: tenantDoc?.specialty,
+      clinicAddress: tenantDoc?.address,
+      clinicPhone: tenantDoc?.phone || tenantDoc?.settings?.whatsappConfig?.phoneNumber,
+      customInstructions: aiConfig.customInstructions,
+      tone: aiConfig.tone,
+      bookingMode: aiConfig.mode,
+      services: Array.isArray(services) && services.length > 0 ? services : undefined,
+      capabilities: aiConfig.capabilities,
+      escalationRules: aiConfig.escalationRules,
+      businessHours: businessHoursSummary,
+      noShowPolicy: tenantDoc?.settings?.noShowPolicy,
+      temporalContext: temporalCtx,
+      relevantDaysHours,
+    };
 
     if (conversation.patientId) {
       const patientIdObj = new mongoose.Types.ObjectId(conversation.patientId.toString());
@@ -170,15 +200,23 @@ export class AIService {
         _id: patientIdObj,
         tenantId: tenantIdObj,
       })
-        .select("firstName lastName language")
+        .select("firstName lastName language status metrics")
         .lean();
 
       if (patient) {
-        aiContext = {
-          ...(patient.firstName !== undefined ? { firstName: patient.firstName } : {}),
-          ...(patient.lastName !== undefined ? { lastName: patient.lastName } : {}),
-          ...(patient.language !== undefined ? { language: patient.language } : {}),
-        };
+        const isPlaceholder = !patient.firstName || 
+          patient.firstName.toLowerCase() === "patient" || 
+          patient.firstName.toLowerCase() === "unknown" ||
+          !patient.lastName || 
+          patient.lastName.toLowerCase() === "whatsapp" ||
+          patient.status === "lead";
+
+        aiContext.patientId = patient._id.toString();
+        if (patient.firstName !== undefined) aiContext.firstName = patient.firstName;
+        if (patient.lastName !== undefined) aiContext.lastName = patient.lastName;
+        if (patient.language !== undefined) aiContext.language = patient.language;
+        aiContext.isNewPatient = isPlaceholder;
+        aiContext.patientNoShowCount = patient.metrics?.noShowCount || 0;
 
         // Fetch Next Appointment
         const now = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
@@ -233,12 +271,10 @@ export class AIService {
     }
 
     if (businessHoursSummary) {
-      aiContext = aiContext || {};
       aiContext.businessHours = businessHoursSummary;
     }
 
     if (conversation.pendingBookingContext) {
-      aiContext = aiContext || {};
       aiContext.pendingBookingContext = {
         date: conversation.pendingBookingContext.date,
         proposedSlots: conversation.pendingBookingContext.proposedSlots,
@@ -263,54 +299,125 @@ export class AIService {
     let suggestion: string = rawResponse;
     let intent: string | undefined;
     let scheduling: any;
+    let patientInfo: { firstName?: string; lastName?: string } | undefined;
     let action: AIActionProposal | null = null;
     let proposedSlots: Array<{ startTime: string; endTime: string }> | undefined;
     let needsHumanEscalation = false;
     let structured = false;
 
-    try {
-      const stripped = rawResponse.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
-      let parsed: any = JSON.parse(stripped);
-
-      intent = parsed.intent;
-      scheduling = parsed.scheduling;
-
-      // Two-Pass: If intent is scheduling and date/duration are present, fetch availability
-      if (intent === "appointment_availability" && scheduling?.date && scheduling?.durationMin) {
-        const slotsResult = await availabilityService.getAvailableSlots({
-          tenantId,
-          date: scheduling.date,
-          durationMin: scheduling.durationMin,
-          timePreference: scheduling.timePreference,
-        });
-
-        let systemUpdate = "";
-        if (slotsResult.error) {
-          systemUpdate = `[SYSTEM] Cannot fetch slots: ${slotsResult.error}`;
-        } else if (slotsResult.slots && slotsResult.slots.length > 0) {
-          // Capture slots returned so the caller can persist them as pendingBookingContext
-          proposedSlots = slotsResult.slots;
-          const slotsStr = slotsResult.slots.map(s => `${s.startTime}-${s.endTime}`).join(", ");
-          systemUpdate = `[SYSTEM] Available slots for ${scheduling.date}: ${slotsStr}. Formulate a response presenting these options.`;
-        } else {
-          systemUpdate = `[SYSTEM] No available slots for ${scheduling.date} with duration ${scheduling.durationMin}min. Formulate a response apologizing and asking for another date.`;
+    const safeParse = (str: string) => {
+      try {
+        const trimmed = str.trim();
+        if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+          return JSON.parse(trimmed);
         }
+        const match = str.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+        if (match && match[1]) {
+          return JSON.parse(match[1].trim());
+        }
+        const firstBrace = str.indexOf("{");
+        const lastBrace = str.lastIndexOf("}");
+        if (firstBrace !== -1 && lastBrace > firstBrace) {
+          return JSON.parse(str.slice(firstBrace, lastBrace + 1));
+        }
+      } catch (e) {}
+      return null;
+    };
 
-        // Add the Pass 1 response and the System Update to messages
-        aiMessages.push({ role: "assistant", content: rawResponse });
-        aiMessages.push({ role: "system", content: systemUpdate });
+    try {
+      let parsed: any = safeParse(rawResponse);
 
-        // Call AI Provider (PASS 2)
-        rawResponse = await this.provider.generateCompletion(aiMessages);
-        const secondStripped = rawResponse.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
-        parsed = JSON.parse(secondStripped);
-      }
-
-      if (parsed && typeof parsed.reply === "string") {
-        structured = true;
-        suggestion = parsed.reply;
+      if (parsed) {
         intent = parsed.intent;
         scheduling = parsed.scheduling;
+
+
+        // Two-Pass: If intent is scheduling or rescheduling and date is present, fetch availability
+        // durationMin is optional — if missing, default to 30 min (standard consultation)
+        if ((intent === "appointment_availability" || intent === "appointment_change_request") && scheduling?.date) {
+          if (!scheduling.durationMin) scheduling.durationMin = 30;
+
+          const requestedDateFr = formatDateFr(scheduling.date);
+          // requestedWeekdayFr is derived deterministically from the date string alone.
+          // slotsResult.weekdayFr (built from the same logic) will always match.
+          const requestedWeekdayFr = getWeekdayFr(scheduling.date);
+
+          const slotsResult = await availabilityService.getAvailableSlots({
+            tenantId,
+            date: scheduling.date,
+            durationMin: scheduling.durationMin,
+            timePreference: scheduling.timePreference,
+          });
+
+          // businessHoursStr comes from the SAME resolveDaySchedule() call inside getAvailableSlots().
+          // We NEVER recompute it from rawBH here — that was the P0 divergence source (Phase 6.14).
+          const hoursDisplay = slotsResult.businessHoursStr
+            ? ` Horaires du ${slotsResult.weekdayFr ?? requestedWeekdayFr}: ${slotsResult.businessHoursStr}.`
+            : "";
+
+          let systemUpdate = "";
+          if (slotsResult.status === "PAST" || slotsResult.isPastDate) {
+            systemUpdate = `[SYSTEM] La date demandée (${requestedDateFr}) est DÉJÀ PASSÉE. Informez le patient poliment que ce créneau/date est passé et proposez de vérifier les disponibilités à partir d'aujourd'hui ou du prochain jour ouvert.`;
+          } else if (slotsResult.status === "CLOSED") {
+            // SINGLE DECISION POINT: status comes only from slotsResult (Phase 6.14).
+            // requestedDayBH is REMOVED — it was the source of the P0 inconsistency.
+            const nextDay = await availabilityService.findNextBookableDay({
+              tenantId,
+              startDateIso: scheduling.date,
+              durationMin: scheduling.durationMin,
+            });
+
+            if (nextDay) {
+              systemUpdate = `[SYSTEM] Le cabinet est FERMÉ le ${requestedDateFr} (${slotsResult.weekdayFr ?? requestedWeekdayFr}). Le prochain jour d'ouverture avec des créneaux disponibles est le ${nextDay.dateFr} (${nextDay.weekdayFr}). RÈGLE STRICTE: Expliquez que le cabinet est fermé ce jour-là. Proposez le ${nextDay.weekdayFr} ${nextDay.dateFr} et demandez au patient si cette date lui convient. NE PROPOSEZ PAS ENCORE D'HORAIRES PRÉCIS pour le ${nextDay.weekdayFr} sans son accord.`;
+            } else {
+              systemUpdate = `[SYSTEM] Le cabinet est FERMÉ le ${requestedDateFr} (${slotsResult.weekdayFr ?? requestedWeekdayFr}). Informez le patient que le cabinet est fermé ce jour-là et proposez de vérifier les disponibilités lors de la prochaine réouverture.`;
+            }
+          } else if (slotsResult.status === "OPEN_WITH_AVAILABILITY" && slotsResult.slots && slotsResult.slots.length > 0) {
+            proposedSlots = slotsResult.slots;
+            const slotsStr = slotsResult.slots.map((s) => `${s.startTime.replace(":", "h")}`).join(", ");
+            systemUpdate = `[SYSTEM] Date: ${requestedDateFr}.${hoursDisplay} Créneaux disponibles: ${slotsStr}. Formulez une réponse claire présentant ces créneaux. N'inventez aucun autre horaire.`;
+          } else if (slotsResult.status === "OPEN_FULL" || (slotsResult.slots && slotsResult.slots.length === 0)) {
+            proposedSlots = undefined;
+            const nextDay = await availabilityService.findNextBookableDay({
+              tenantId,
+              startDateIso: scheduling.date,
+              durationMin: scheduling.durationMin,
+            });
+
+            if (nextDay) {
+              systemUpdate = `[SYSTEM] Le planning est COMPLET le ${requestedDateFr} (${slotsResult.weekdayFr ?? requestedWeekdayFr}).${hoursDisplay} Le prochain jour avec des créneaux disponibles est le ${nextDay.dateFr} (${nextDay.weekdayFr}). RÈGLE STRICTE: Expliquez poliment que le planning est complet pour ce jour. Mentionnez que le prochain jour ouvert avec disponibilités est le ${nextDay.weekdayFr} ${nextDay.dateFr} et demandez si le patient souhaite voir les créneaux pour cette date. NE PROPOSEZ PAS ENCORE D'HORAIRES PRÉCIS pour le ${nextDay.weekdayFr} sans son accord.`;
+            } else {
+              systemUpdate = `[SYSTEM] Le planning est COMPLET le ${requestedDateFr} (${slotsResult.weekdayFr ?? requestedWeekdayFr}).${hoursDisplay} Aucun créneau disponible dans les prochains jours. Demandez au patient s'il souhaite être mis sur liste d'attente.`;
+            }
+          } else if (slotsResult.error) {
+            systemUpdate = `[SYSTEM] Cannot fetch slots: ${slotsResult.error}`;
+          }
+
+          // Add the Pass 1 response and the System Update to messages
+          aiMessages.push({ role: "assistant", content: rawResponse });
+          aiMessages.push({ role: "system", content: systemUpdate });
+
+          // Call AI Provider (PASS 2)
+          rawResponse = await this.provider.generateCompletion(aiMessages);
+          const secondParsed = safeParse(rawResponse);
+          if (secondParsed) {
+            parsed = secondParsed;
+          }
+        }
+      }
+
+      if (parsed && typeof parsed.reply === "string" && parsed.reply.trim()) {
+        structured = true;
+        suggestion = parsed.reply.trim();
+        intent = parsed.intent;
+        scheduling = parsed.scheduling;
+        if (parsed.patientInfo && typeof parsed.patientInfo === "object") {
+          const fn = typeof parsed.patientInfo.firstName === "string" && parsed.patientInfo.firstName.trim() ? parsed.patientInfo.firstName.trim() : undefined;
+          const ln = typeof parsed.patientInfo.lastName === "string" && parsed.patientInfo.lastName.trim() ? parsed.patientInfo.lastName.trim() : undefined;
+          if (fn || ln) {
+            patientInfo = { firstName: fn, lastName: ln };
+          }
+        }
         needsHumanEscalation = parsed.needsHumanEscalation === true;
         if (
           parsed.action &&
@@ -325,7 +432,6 @@ export class AIService {
             reason: parsed.action.reason,
             confidence: parsed.action.confidence,
           };
-          // Carry the booking details if the model proposed one with the confirmed slot.
           if (parsed.action.booking && typeof parsed.action.booking.date === "string") {
             action.booking = {
               date: parsed.action.booking.date,
@@ -335,16 +441,27 @@ export class AIService {
             };
           }
         }
+      } else if (rawResponse && rawResponse.trim()) {
+        // Fallback: If AI returned natural text without JSON wrapping, clean and use as reply
+        const cleanText = rawResponse.replace(/```[a-z]*\s*/gi, "").replace(/```/g, "").trim();
+        if (cleanText) {
+          suggestion = cleanText;
+          structured = true;
+        }
       }
     } catch {
-      // Provider did not return valid JSON — treat the raw text as the suggestion.
-      // This is a graceful fallback for the manual review flow (action remains null,
-      // structured stays false so the text is NEVER auto-sent to a patient).
+      // Fallback
+      const cleanText = rawResponse.replace(/```[a-z]*\s*/gi, "").replace(/```/g, "").trim();
+      if (cleanText) {
+        suggestion = cleanText;
+        structured = true;
+      }
     }
 
     return {
       suggestion,
       ...(intent !== undefined ? { intent } : {}),
+      ...(patientInfo !== undefined ? { patientInfo } : {}),
       ...(scheduling !== undefined ? { scheduling } : {}),
       ...(proposedSlots !== undefined ? { proposedSlots } : {}),
       action,

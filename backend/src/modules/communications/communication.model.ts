@@ -32,6 +32,21 @@ export interface IConversation extends Document {
    * NEVER set by the AI directly — always set by the backend.
    */
   needsHuman?: boolean;
+  /**
+   * Stores the patient's booking request when their name is missing.
+   * Used to resume the booking once the patient provides their identity.
+   */
+  pendingBookingIntent?: {
+    date: string;
+    startTime: string;
+    durationMin: number;
+    treatment: string;
+    awaitingIdentity: boolean;
+    /** Phase 6.17.1: resolved name of the target patient if booking is for another person */
+    targetPatientInfo?: { firstName: string; lastName: string };
+    /** Phase 6.17.1: true while waiting for confirmation of ambiguous family vs self */
+    awaitingTargetConfirmation?: boolean;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -50,6 +65,20 @@ const ConversationSchema = new Schema<IConversation>(
       durationMin: { type: Number },
       proposedSlots: [{ startTime: String, endTime: String }],
       proposedAt: { type: Date },
+    },
+    // Temporarily holds booking intent while asking for patient name (Phase 6.16/6.17)
+    // Extended in Phase 6.17.1: targetPatientInfo + awaitingTargetConfirmation for family bookings
+    pendingBookingIntent: {
+      date: { type: String },
+      startTime: { type: String },
+      durationMin: { type: Number },
+      treatment: { type: String },
+      awaitingIdentity: { type: Boolean },
+      targetPatientInfo: {
+        firstName: { type: String },
+        lastName: { type: String },
+      },
+      awaitingTargetConfirmation: { type: Boolean },
     },
     // Flagged when the AI requests a human takeover (see interface comment)
     needsHuman: { type: Boolean, default: false },

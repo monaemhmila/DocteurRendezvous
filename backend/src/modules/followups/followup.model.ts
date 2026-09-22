@@ -83,7 +83,7 @@ FollowUpTaskSchema.index(
   }
 );
 
-export const FollowUpTask = mongoose.model<IFollowUpTask>("FollowUpTask", FollowUpTaskSchema);
+export const FollowUpTask = (mongoose.models.FollowUpTask as mongoose.Model<IFollowUpTask>) || mongoose.model<IFollowUpTask>("FollowUpTask", FollowUpTaskSchema);
 
 export interface IFollowUpAttempt extends Document {
   tenantId: string;
@@ -132,4 +132,4 @@ FollowUpAttemptSchema.pre("validate", function () {
 
 FollowUpAttemptSchema.index({ tenantId: 1, recoveryId: 1, attemptNumber: 1 });
 
-export const FollowUpAttempt = mongoose.model<IFollowUpAttempt>("FollowUpAttempt", FollowUpAttemptSchema);
+export const FollowUpAttempt = (mongoose.models.FollowUpAttempt as mongoose.Model<IFollowUpAttempt>) || mongoose.model<IFollowUpAttempt>("FollowUpAttempt", FollowUpAttemptSchema);

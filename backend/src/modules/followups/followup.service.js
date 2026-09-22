@@ -103,10 +103,13 @@ exports.followupService = {
             query.status = filters.status;
         if (filters?.priority)
             query.priority = filters.priority;
+        if (filters?.type)
+            query.type = filters.type;
         return followup_model_1.FollowUpTask.find(query)
             .populate("patientId", "firstName lastName phone email")
             .populate("recoveryId", "type status priority estimatedValue bookedValue")
             .populate("waitlistEntryId", "treatment status priority preferredDays preferredTimeRanges")
+            .populate("sourceAppointmentId")
             .sort({ scheduledFor: 1 });
     },
     getTaskById: async (id, tenantId) => {

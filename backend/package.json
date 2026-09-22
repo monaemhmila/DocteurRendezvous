@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "seed-db": "tsx src/scripts/seed-database.ts",
-    "test": "tsx src/tests/recovery.test.ts"
+    "test": "tsx src/tests/recovery.test.ts",
+    "test:all": "tsx src/tests/ai.test.ts && tsx src/tests/automation.test.ts && tsx src/tests/communication.test.ts && tsx src/tests/detection.test.ts && tsx src/tests/followup.test.ts && tsx src/tests/integration.test.ts && tsx src/tests/phase4.test.ts && tsx src/tests/phase6.9.test.ts && tsx src/tests/phase6.10.test.ts && tsx src/tests/recovery.test.ts && tsx src/tests/waitlist.test.ts"
   },
   "keywords": [],
   "author": "",

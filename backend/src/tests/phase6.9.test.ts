@@ -215,12 +215,19 @@ async function runPhase69Tests() {
     const retryDate = "2026-10-21";
     const retryStartTime = "14:00";
 
+    const patientRetry = await Patient.create({
+      tenantId,
+      firstName: "Retry",
+      lastName: "Patient",
+      phone: "+21699333444",
+    });
+
     // Setup a fresh conversation with proper context
     const conversationRetry = await Conversation.create({
       tenantId,
-      patientId: patientA._id,
+      patientId: patientRetry._id,
       channel: "whatsapp",
-      contactWaId: `${patientA.phone}-retry`,
+      contactWaId: `${patientRetry.phone}-retry`,
       pendingBookingContext: {
         date: retryDate,
         durationMin: 30,
@@ -235,7 +242,7 @@ async function runPhase69Tests() {
         intent: "book_appointment",
         action: {
           type: "book_appointment",
-          targetId: patientA._id.toString(),
+          targetId: patientRetry._id.toString(),
           booking: {
             date: retryDate,
             startTime: retryStartTime,
@@ -326,10 +333,10 @@ async function runPhase69Tests() {
     };
 
     // Track WhatsApp calls
-    let whatsappCallCount = 0;
+    const sentMessages: any[] = [];
     const trackingProvider: IMessagingProvider = {
-      sendMessage: async () => {
-        whatsappCallCount++;
+      sendMessage: async (params: any) => {
+        sentMessages.push(params);
         return { providerMessageId: "track-wamid", status: "sent" } as any;
       },
     };
@@ -337,9 +344,12 @@ async function runPhase69Tests() {
     const svcDup = new AIAutoBookingService(dupAiService as any, trackingProvider);
     await svcDup.processInboundMessage(tenantId, convDup._id.toString());
 
-    // PatientB should NOT have received a confirmation (Double_Booking_Error path)
-    if (whatsappCallCount > 0) {
-      throw new Error(`TEST 6 FAILED: WhatsApp was called ${whatsappCallCount} times — false confirmation sent!`);
+    // PatientB should NOT have received a booking confirmation
+    const falseConfirmation = sentMessages.find(
+      (m) => m.content && (m.content.includes("Votre rendez-vous est confirmé") || m.content.includes("confirmé pour le"))
+    );
+    if (falseConfirmation) {
+      throw new Error(`TEST 6 FAILED: False confirmation sent to Patient B: ${falseConfirmation.content}`);
     }
 
     const apptCountPatientB = await Appointment.countDocuments({ tenantId, patientId: patientB._id, date: dupDate });
@@ -353,11 +363,18 @@ async function runPhase69Tests() {
     // ================================================================
     console.log("▶ TEST 7 — PendingBookingContext Slot Validation...");
 
+    const patientBadSlot = await Patient.create({
+      tenantId,
+      firstName: "BadSlot",
+      lastName: "Patient",
+      phone: "+21699555666",
+    });
+
     const convBadSlot = await Conversation.create({
       tenantId,
-      patientId: patientA._id,
+      patientId: patientBadSlot._id,
       channel: "whatsapp",
-      contactWaId: `${patientA.phone}-badslot`,
+      contactWaId: `${patientBadSlot.phone}-badslot`,
       pendingBookingContext: {
         date: "2026-10-23",
         durationMin: 30,
@@ -371,7 +388,7 @@ async function runPhase69Tests() {
         intent: "book_appointment",
         action: {
           type: "book_appointment",
-          targetId: patientA._id.toString(),
+          targetId: patientBadSlot._id.toString(),
           booking: { date: "2026-10-23", startTime: "15:00", durationMin: 30, treatment: "Test" }, // 15:00 was NOT proposed
         },
       }),

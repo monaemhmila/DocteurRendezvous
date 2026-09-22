@@ -26,6 +26,13 @@ export interface IConversation extends Document {
      * NEVER set by the AI directly — always set by the backend after validating slots.
      */
     pendingBookingContext?: IPendingBookingContext;
+    /**
+     * Set by the AI conversation service when the AI requests a human takeover
+     * (needsHumanEscalation). While true, automatic AI processing is suspended
+     * for this conversation — the team handles it from the dashboard.
+     * NEVER set by the AI directly — always set by the backend.
+     */
+    needsHuman?: boolean;
     createdAt: Date;
     updatedAt: Date;
 }

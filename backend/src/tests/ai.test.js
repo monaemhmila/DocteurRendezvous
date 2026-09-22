@@ -916,6 +916,18 @@ async function runTests() {
             mockProvider.reset();
             // Setup a valid doctor and business hours for tenantA
             await tenant_model_1.Tenant.findByIdAndUpdate(tenantAId, { $set: { "settings.businessHours": { "wednesday": [{ start: "09:00", end: "18:00" }] } } });
+            // Dynamic booking date (no hardcoded calendar date): a Wednesday far enough in the
+            // future that it never collides with TEST 14's dynamic "tomorrow" appointment and never
+            // depends on the real run date. Wednesday is required (wednesday-only business hours here).
+            const bookingRef = new Date();
+            bookingRef.setDate(bookingRef.getDate() + 30);
+            while (bookingRef.getDay() !== 3)
+                bookingRef.setDate(bookingRef.getDate() + 1);
+            const bookingDate = bookingRef.toISOString().split("T")[0];
+            // Isolation: no leftover may exist on the dynamic date, and the strict 6.8/6.9 rule
+            // requires exactly one doctor — remove any dentist left by earlier tests, create exactly one.
+            await appointment_model_1.Appointment.deleteMany({ tenantId: tenantAId, date: bookingDate });
+            await mongoose_1.default.model("User").deleteMany({ tenantId: tenantAId });
             const uniqueEmail = `docA_booking_${Date.now()}@dentalai.com`;
             const doc = await mongoose_1.default.model("User").create({
                 tenantId: tenantAId,
@@ -929,7 +941,7 @@ async function runTests() {
             const req1 = makeReq(tenantAId.toString(), convWithPatient._id.toString(), {
                 type: "book_appointment",
                 targetId: patientA._id.toString(),
-                booking: { date: "2026-09-16", startTime: "10:00", treatment: "Consultation" }
+                booking: { date: bookingDate, startTime: "10:00", treatment: "Consultation" }
             });
             const res1 = new MockResponse();
             await executeAIActionHandler(req1, res1);
@@ -939,7 +951,7 @@ async function runTests() {
             const req2 = makeReq(tenantAId.toString(), convWithPatient._id.toString(), {
                 type: "book_appointment",
                 targetId: new mongoose_1.default.Types.ObjectId().toString(),
-                booking: { date: "2026-09-16", startTime: "10:00", durationMin: 30, treatment: "Checkup" }
+                booking: { date: bookingDate, startTime: "10:00", durationMin: 30, treatment: "Checkup" }
             });
             const res2 = new MockResponse();
             await executeAIActionHandler(req2, res2);
@@ -949,14 +961,14 @@ async function runTests() {
             const req3 = makeReq(tenantAId.toString(), convWithPatient._id.toString(), {
                 type: "book_appointment",
                 targetId: patientA._id.toString(),
-                booking: { date: "2026-09-16", startTime: "14:00", durationMin: 30, treatment: "Checkup" }
+                booking: { date: bookingDate, startTime: "14:00", durationMin: 30, treatment: "Checkup" }
             });
             const res3 = new MockResponse();
             await executeAIActionHandler(req3, res3);
             if (res3.statusCode !== 200)
                 throw new Error(`Booking failed: ${res3.statusCode} - ${JSON.stringify(res3.body)}`);
             // Verify Appointment was created
-            const appts = await appointment_model_1.Appointment.find({ tenantId: tenantAId, date: "2026-09-16" });
+            const appts = await appointment_model_1.Appointment.find({ tenantId: tenantAId, date: bookingDate });
             if (appts.length !== 1)
                 throw new Error("Appointment not created correctly");
             if (appts[0].status !== "scheduled")
@@ -965,7 +977,7 @@ async function runTests() {
             const req4 = makeReq(tenantAId.toString(), convWithPatient._id.toString(), {
                 type: "book_appointment",
                 targetId: patientA._id.toString(),
-                booking: { date: "2026-09-16", startTime: "14:15", durationMin: 30, treatment: "Checkup" }
+                booking: { date: bookingDate, startTime: "14:15", durationMin: 30, treatment: "Checkup" }
             });
             const res4 = new MockResponse();
             await executeAIActionHandler(req4, res4);

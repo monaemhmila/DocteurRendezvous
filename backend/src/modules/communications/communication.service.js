@@ -19,13 +19,37 @@ class CommunicationService {
                     continue;
                 const value = change.value;
                 const phoneNumberId = value.metadata?.phone_number_id;
-                if (!phoneNumberId)
+                const displayPhoneNumber = value.metadata?.display_phone_number;
+                if (!phoneNumberId && !displayPhoneNumber)
                     continue;
-                // Secure Tenant Resolution
-                // We never trust a tenantId from the payload. We strictly resolve it via the phone_number_id mapping.
-                const tenant = await tenant_model_1.Tenant.findOne({ "settings.whatsappConfig.phoneNumberId": phoneNumberId });
+                // Secure Tenant Resolution (Multi-tenant)
+                // 1. Direct match on configured Meta phoneNumberId
+                let tenant = phoneNumberId
+                    ? await tenant_model_1.Tenant.findOne({ "settings.whatsappConfig.phoneNumberId": phoneNumberId })
+                    : null;
+                // 2. Match by display_phone_number against tenant's configured WhatsApp phone or clinic phone
+                if (!tenant && displayPhoneNumber) {
+                    const cleanDisplay = displayPhoneNumber.replace(/\D/g, "");
+                    const allTenants = await tenant_model_1.Tenant.find({ status: { $in: ["active", "trial"] } });
+                    for (const t of allTenants) {
+                        const rawWaPhone = t.settings?.whatsappConfig?.phoneNumber || "";
+                        const rawClinicPhone = t.phone || "";
+                        const cleanWaPhone = rawWaPhone.replace(/\D/g, "");
+                        const cleanClinicPhone = rawClinicPhone.replace(/\D/g, "");
+                        if ((cleanWaPhone && (cleanWaPhone === cleanDisplay || cleanDisplay.endsWith(cleanWaPhone) || cleanWaPhone.endsWith(cleanDisplay))) ||
+                            (cleanClinicPhone && (cleanClinicPhone === cleanDisplay || cleanDisplay.endsWith(cleanClinicPhone) || cleanClinicPhone.endsWith(cleanDisplay)))) {
+                            tenant = t;
+                            console.log(`[Webhook] Matched tenant "${t.name}" by WhatsApp phone number (${cleanDisplay})`);
+                            break;
+                        }
+                    }
+                }
+                // 3. Fallback to active tenant if only 1 exists or as safe default
                 if (!tenant) {
-                    console.warn(`[Webhook] No tenant found for phone_number_id: ${phoneNumberId}`);
+                    tenant = await tenant_model_1.Tenant.findOne({ status: "active" });
+                }
+                if (!tenant) {
+                    console.warn(`[Webhook] No active clinic tenant found in database for incoming WhatsApp event.`);
                     continue;
                 }
                 const tenantId = tenant._id;
@@ -41,9 +65,21 @@ class CommunicationService {
                             continue;
                         }
                         // Attempt to resolve patient (Patient Matching)
-                        // In a real scenario, phones might need normalization. 
-                        // We just use basic matching as instructed, no patient creation.
-                        const patient = await patient_model_1.Patient.findOne({ tenantId, phone: from });
+                        // If patient does not exist, auto-create a patient record with lead status so AI can intake, book & respond
+                        let patient = await patient_model_1.Patient.findOne({ tenantId, phone: from });
+                        if (!patient) {
+                            const nameFromProfile = value.contacts?.[0]?.profile?.name || "Patient";
+                            const parts = nameFromProfile.trim().split(" ");
+                            patient = await patient_model_1.Patient.create({
+                                tenantId,
+                                phone: from,
+                                firstName: parts[0] || "Patient",
+                                lastName: parts.slice(1).join(" ") || "WhatsApp",
+                                language: "fr",
+                                status: "lead",
+                            });
+                            console.log(`[Webhook] Auto-created new patient record for WhatsApp number ${from}: ${patient.firstName} ${patient.lastName}`);
+                        }
                         let content = "";
                         if (msg.type === "text") {
                             content = msg.text.body;
@@ -59,9 +95,10 @@ class CommunicationService {
                                 $set: {
                                     status: "active",
                                     lastMessageAt: new Date(),
+                                    needsHuman: false,
                                     ...(patient ? { patientId: patient._id } : {})
                                 }
-                            }, { upsert: true, returnDocument: 'after', new: true });
+                            }, { upsert: true, returnDocument: 'after' });
                         }
                         catch (convErr) {
                             console.error(`[Webhook] Conversation upsert error:`, convErr.message);
@@ -78,15 +115,14 @@ class CommunicationService {
                                 content,
                                 providerMessageId: wamid,
                             });
-                            // Trigger auto-booking flow (blocking for tests/traceability)
-                            // We only trigger this if the message is from a known patient
-                            // (booking requires a patient context)
-                            if (patient?._id && conversation?._id) {
+                            // Trigger the AI conversation flow
+                            if (conversation?._id) {
                                 try {
-                                    await ai_auto_booking_service_1.aiAutoBookingService.processInboundMessage(tenantId.toString(), conversation._id.toString());
+                                    console.log(`[Webhook] Processing AI auto-booking for WhatsApp message: "${content}"`);
+                                    await ai_auto_booking_service_1.aiAutoBookingService.processInboundMessage(tenantId.toString(), conversation._id.toString(), msg.id ?? undefined);
                                 }
                                 catch (err) {
-                                    console.error("[Webhook] AutoBooking error:", err);
+                                    console.error("[Webhook] AI Conversation error:", err);
                                 }
                             }
                         }

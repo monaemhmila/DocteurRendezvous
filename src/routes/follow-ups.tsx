@@ -187,17 +187,20 @@ function KpiCard({ title, value, icon: Icon, color }: any) {
 }
 
 function TaskRow({ task, onComplete }: { task: IFollowUpTask, onComplete: () => void }) {
-  const patient = task.patientId as IPatient;
+  const patient = (task.patientId && typeof task.patientId === "object") ? (task.patientId as IPatient) : null;
   const isActionable = ["pending", "in_progress"].includes(task.status);
+  const pFirstName = patient?.firstName || "Patient";
+  const pLastName = patient?.lastName || "";
+  const pInitials = `${pFirstName[0] || "P"}${pLastName[0] || "T"}`.toUpperCase();
 
   return (
     <tr className="hover:bg-muted/30 transition-colors">
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
-          <PatientAvatar initials={`${patient.firstName[0]}${patient.lastName[0]}`} id={patient._id} size="sm" />
+          <PatientAvatar initials={pInitials} id={patient?._id || (task.patientId as string) || "pt"} size="sm" />
           <div>
-            <div className="font-medium text-foreground">{patient.firstName} {patient.lastName}</div>
-            <div className="text-xs text-muted-foreground">{patient.phone}</div>
+            <div className="font-medium text-foreground">{pFirstName} {pLastName}</div>
+            <div className="text-xs text-muted-foreground">{patient?.phone || "—"}</div>
           </div>
         </div>
       </td>

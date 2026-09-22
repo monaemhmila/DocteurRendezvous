@@ -11,9 +11,10 @@ const getAppointments = async (req, res) => {
         const { patientId } = req.query;
         const appointments = await appointment_service_1.appointmentService.getAppointments(tenantId, patientId);
         const formatted = appointments.map((a) => ({
+            _id: a._id.toString(),
             id: a._id.toString(),
-            patientId: a.patientId ? a.patientId._id.toString() : "",
-            patientName: a.patientId ? `${a.patientId.firstName} ${a.patientId.lastName}` : "Patient inconnu",
+            patientId: a.patientId ? (a.patientId._id ? a.patientId._id.toString() : a.patientId.toString()) : "",
+            patientName: a.patientId && a.patientId.firstName ? `${a.patientId.firstName} ${a.patientId.lastName}` : "Patient inconnu",
             doctorId: a.doctorId,
             date: a.date,
             startTime: a.startTime || a.time || "00:00",
@@ -37,12 +38,9 @@ const createAppointment = async (req, res) => {
         const tenantId = req.user?.tenantId;
         if (!tenantId)
             return res.status(403).json({ error: "No tenant context" });
-        // Make sure we default the doctorId to the logged in user if not provided
-        const body = {
-            ...req.body,
-            doctorId: req.body.doctorId || req.user?.id
-        };
-        const saved = await appointment_service_1.appointmentService.createAppointment(body, tenantId);
+        // Doctor resolution is backend-owned and deterministic; the frontend must
+        // never choose or send doctorId.
+        const saved = await appointment_service_1.appointmentService.createAppointment(req.body, tenantId);
         res.status(201).json({ id: saved._id, ...saved.toObject() });
     }
     catch (error) {
@@ -63,6 +61,9 @@ const updateAppointment = async (req, res) => {
         res.json({ id: updated._id, ...updated.toObject() });
     }
     catch (error) {
+        if (error.message === "Double_Booking_Error") {
+            return res.status(409).json({ error: "Time slot is not available" });
+        }
         res.status(500).json({ error: "Failed to update appointment" });
     }
 };
@@ -138,20 +139,42 @@ const getNoShows = async (req, res) => {
         if (!tenantId)
             return res.status(403).json({ error: "No tenant context" });
         const { Appointment } = await import("./appointment.model");
+        const { Recovery } = await import("../recovery/recovery.model");
         const noShows = await Appointment.find({ tenantId, status: "no_show" })
-            .populate("patientId", "firstName lastName phone")
-            .sort({ date: -1, startTime: -1 });
-        const formatted = noShows.map((a) => ({
-            id: a._id.toString(),
-            patientId: a.patientId ? a.patientId._id.toString() : "",
-            patientName: a.patientId ? `${a.patientId.firstName} ${a.patientId.lastName}` : "Patient inconnu",
-            doctorId: a.doctorId,
-            date: a.date,
-            startTime: a.startTime || "00:00",
-            endTime: a.endTime || "00:00",
-            treatment: a.treatment,
-            status: a.status
-        }));
+            .populate("patientId", "firstName lastName phone email metrics")
+            .sort({ date: -1, startTime: -1 })
+            .lean();
+        const noShowIds = noShows.map((a) => a._id);
+        const recoveries = await Recovery.find({
+            tenantId,
+            sourceAppointmentId: { $in: noShowIds },
+        }).lean();
+        const recoveryMap = new Map();
+        recoveries.forEach((r) => {
+            if (r.sourceAppointmentId) {
+                recoveryMap.set(r.sourceAppointmentId.toString(), r);
+            }
+        });
+        const formatted = noShows.map((a) => {
+            const patient = a.patientId;
+            const rec = recoveryMap.get(a._id.toString());
+            return {
+                id: a._id.toString(),
+                _id: a._id.toString(),
+                patientId: patient ? (patient._id ? patient._id.toString() : patient.toString()) : "",
+                patientName: patient && patient.firstName ? `${patient.firstName} ${patient.lastName || ""}`.trim() : "Patient inconnu",
+                phone: patient?.phone || "",
+                noShowCount: patient?.metrics?.noShowCount ?? (patient?.metrics?.noShows ?? 1),
+                doctorId: a.doctorId,
+                date: a.date,
+                startTime: a.startTime || "00:00",
+                endTime: a.endTime || "00:00",
+                treatment: a.treatment,
+                status: a.status,
+                recoveryStatus: rec ? rec.status : "identified",
+                recoveryId: rec ? rec._id.toString() : null,
+            };
+        });
         res.json(formatted);
     }
     catch (error) {

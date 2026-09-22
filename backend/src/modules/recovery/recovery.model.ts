@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from "mongoose";
 
 export interface IRecovery extends Document {
+  _id: mongoose.Types.ObjectId;
   tenantId: string;
   patientId: mongoose.Types.ObjectId;
   appointmentId?: mongoose.Types.ObjectId;
@@ -17,6 +18,8 @@ export interface IRecovery extends Document {
   bookedValue: number;
   recoveredValue: number;
   notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const RecoverySchema = new Schema(
@@ -107,4 +110,4 @@ RecoverySchema.index(
   }
 );
 
-export const Recovery = mongoose.model<IRecovery>("Recovery", RecoverySchema);
+export const Recovery = (mongoose.models.Recovery as mongoose.Model<IRecovery>) || mongoose.model<IRecovery>("Recovery", RecoverySchema);

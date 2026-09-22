@@ -18,6 +18,7 @@ export declare const followupService: {
     getTasks: (tenantId: string, filters?: {
         status?: string;
         priority?: string;
+        type?: string;
     }) => Promise<(import("mongoose").Document<unknown, {}, IFollowUpTask, {}, import("mongoose").DefaultSchemaOptions> & IFollowUpTask & Required<{
         _id: import("mongoose").Types.ObjectId;
     }> & {

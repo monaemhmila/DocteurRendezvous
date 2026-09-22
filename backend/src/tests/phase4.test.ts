@@ -172,8 +172,8 @@ async function runPhase4Tests() {
     console.log("\n▶ GROUP E — Analytics Endpoint...");
     
     // Create recoveries for metrics
-    await Recovery.create({ tenantId: tenantA, patientId: p1._id, type: "no_show", status: "visited", createdAt: new Date() });
-    await Recovery.create({ tenantId: tenantA, patientId: p1._id, type: "cancellation", status: "no_response", createdAt: new Date() });
+    await Recovery.create({ tenantId: tenantA, patientId: p1._id, type: "no_show", status: "visited", createdAt: new Date() } as any);
+    await Recovery.create({ tenantId: tenantA, patientId: p1._id, type: "cancellation", status: "no_response", createdAt: new Date() } as any);
     
     const req19: any = { user: { tenantId: tenantA } };
     const res19 = createMockRes();

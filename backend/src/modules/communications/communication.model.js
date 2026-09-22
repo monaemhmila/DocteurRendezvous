@@ -49,6 +49,8 @@ const ConversationSchema = new mongoose_1.Schema({
         proposedSlots: [{ startTime: String, endTime: String }],
         proposedAt: { type: Date },
     },
+    // Flagged when the AI requests a human takeover (see interface comment)
+    needsHuman: { type: Boolean, default: false },
 }, { timestamps: true });
 // Prevent duplicate conversations for the same tenant and contact
 ConversationSchema.index({ tenantId: 1, contactWaId: 1 }, { unique: true });

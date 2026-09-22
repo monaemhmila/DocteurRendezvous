@@ -16,6 +16,7 @@ const getPatients = async (req, res) => {
             patients = await patient_service_1.patientService.getPatients(tenantId);
         }
         const formatted = patients.map((p) => ({
+            _id: p._id.toString(),
             id: p._id.toString(),
             firstName: p.firstName,
             lastName: p.lastName,
@@ -29,15 +30,16 @@ const getPatients = async (req, res) => {
             notes: p.notes,
             nextAppointmentAt: p.nextAppointmentAt,
             metrics: {
-                totalVisits: p.metrics.totalVisits,
-                noShowCount: p.metrics.noShowCount,
-                lastVisit: p.metrics.lastVisit,
-                revenue: p.metrics.revenue,
+                totalVisits: p.metrics?.totalVisits ?? 0,
+                noShowCount: p.metrics?.noShowCount ?? 0,
+                lastVisit: p.metrics?.lastVisit,
+                revenue: p.metrics?.revenue ?? 0,
             },
         }));
         res.json(formatted);
     }
     catch (error) {
+        console.error("getPatients error:", error);
         res.status(500).json({ error: "Failed to fetch patients" });
     }
 };
@@ -50,6 +52,7 @@ const getPatientById = async (req, res) => {
         if (!patient)
             return res.status(404).json({ error: "Patient not found" });
         res.json({
+            _id: patient._id.toString(),
             id: patient._id.toString(),
             firstName: patient.firstName,
             lastName: patient.lastName,

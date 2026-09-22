@@ -1,6 +1,7 @@
 import { Recovery, IRecovery } from "./recovery.model";
 import { Patient } from "../patients/patient.model";
-import { FOLLOWUP_CONFIG } from "../followups/followup.service";
+import { Appointment } from "../appointments/appointment.model";
+import { followupService, FOLLOWUP_CONFIG } from "../followups/followup.service";
 
 // Define a list of active non-terminal statuses to prevent duplicate active opportunities
 const ACTIVE_STATUSES = ["identified", "queued", "contacted", "responded", "booked"];
@@ -39,7 +40,6 @@ async function validateTenantAndPatientOwnership(
 
   // 2. If sourceAppointmentId is provided, validate it exists and belongs to tenantId + patientId
   if (sourceAppointmentId) {
-    const { Appointment } = await import("../appointments/appointment.model");
     const sourceAppt = await Appointment.findOne({ _id: sourceAppointmentId, tenantId, patientId });
     if (!sourceAppt) {
       throw new Error("Source appointment not found or does not match patient/tenant");
@@ -48,7 +48,6 @@ async function validateTenantAndPatientOwnership(
 
   // 3. If recoveryAppointmentId is provided, validate it exists and belongs to tenantId + patientId
   if (recoveryAppointmentId) {
-    const { Appointment } = await import("../appointments/appointment.model");
     const recoveryAppt = await Appointment.findOne({ _id: recoveryAppointmentId, tenantId, patientId });
     if (!recoveryAppt) {
       throw new Error("Recovery appointment not found or does not match patient/tenant");
@@ -153,7 +152,18 @@ export const recoveryService = {
       validateTransition(opportunity.status, data.status);
     }
 
-    return Recovery.findOneAndUpdate({ _id: id, tenantId }, { $set: data }, { new: true });
+    const {
+      tenantId: _ignoredTenantId,
+      createdAt: _ignoredCreatedAt,
+      updatedAt: _ignoredUpdatedAt,
+      ...safeData
+    } = data as any;
+
+    return Recovery.findOneAndUpdate(
+      { _id: id, tenantId },
+      { $set: safeData },
+      { returnDocument: 'after', runValidators: true }
+    );
   },
 
   dismissOpportunity: async (id: string, tenantId: string) => {
@@ -220,7 +230,6 @@ export const recoveryService = {
     await opportunity.save();
 
     // Re-use the existing FollowUpTask — complete it rather than creating a new one.
-    const { followupService } = await import("../followups/followup.service");
     await followupService.completeTaskForRecovery(
       opportunity._id.toString(),
       tenantId,
@@ -246,7 +255,6 @@ export const recoveryService = {
     await opportunity.save();
 
     // Ensure any still-active FollowUpTask is completed (defensive, idempotent)
-    const { followupService } = await import("../followups/followup.service");
     await followupService.completeTaskForRecovery(
       opportunity._id.toString(),
       tenantId,
@@ -257,9 +265,6 @@ export const recoveryService = {
   },
 
   detectRecoveryOpportunities: async (tenantId: string) => {
-    const { followupService } = await import("../followups/followup.service");
-    const { Appointment } = await import("../appointments/appointment.model");
-
     // Detection types subject to the 30-day cooldown
     const DETECTION_TYPES = ["inactive_patient", "overdue_checkup"];
     const COOLDOWN_DAYS = FOLLOWUP_CONFIG.RECOVERY_REDETECTION_COOLDOWN_DAYS;

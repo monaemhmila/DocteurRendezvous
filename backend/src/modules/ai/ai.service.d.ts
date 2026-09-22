@@ -6,11 +6,15 @@
  *   2. Load conversation by conversationId; verify tenant ownership
  *   3. Load last 20 messages (sorted ascending for chronological context)
  *   4. Load patient (only safe, non-clinical fields) if linked to conversation
- *   5. Load relevant business context (appointment, recovery, follow-up)
+ *   5. Load relevant business context (appointment, recovery, follow-up, business hours)
  *   6. Build the system prompt and conversation context
  *   7. Call the AI provider
  *   8. Parse the structured JSON response
- *   9. Return { suggestion, action }
+ *   9. Return { suggestion, action, intent, scheduling, proposedSlots, needsHumanEscalation, structured }
+ *
+ * Multi-turn conversation: the REAL messages persisted for this conversation are
+ * loaded from MongoDB and forwarded to the provider (inbound → "user",
+ * outbound → "assistant"). No parallel in-memory history is kept.
  *
  * STRICT GUARANTEES:
  *   - Never writes to Message, Conversation, or any other model
@@ -18,6 +22,7 @@
  *   - Never accepts tenantId from any external input (body, query, params)
  *   - Enforces tenant isolation before loading any data
  *   - confidence is returned as-is; it is NEVER used as authorization
+ *   - WhatsApp access tokens / credentials are NEVER included in the prompt
  */
 import { IAIProvider } from "./ai.provider.interface";
 export interface AIActionProposal {
@@ -25,10 +30,20 @@ export interface AIActionProposal {
     targetId: string;
     reason: string;
     confidence: number;
+    booking?: {
+        date: string;
+        startTime: string;
+        durationMin: number;
+        treatment: string;
+    };
 }
 export interface AISuggestionResult {
     suggestion: string;
     intent?: string;
+    patientInfo?: {
+        firstName?: string;
+        lastName?: string;
+    };
     scheduling?: {
         date?: string;
         timePreference?: string;
@@ -46,6 +61,16 @@ export interface AISuggestionResult {
         endTime: string;
     }>;
     action: AIActionProposal | null;
+    /**
+     * True when the AI explicitly requested that a human take over the conversation.
+     * When true the backend must NOT auto-execute any action.
+     */
+    needsHumanEscalation: boolean;
+    /**
+     * True only when the provider response was valid structured JSON and a clean
+     * "reply" was extracted. Only structured replies may be auto-sent to a patient.
+     */
+    structured: boolean;
 }
 export declare class AIService {
     private provider;

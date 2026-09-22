@@ -43,7 +43,12 @@ async function getAISuggestion(req, res) {
     }
     try {
         const result = await defaultAIService.getSuggestion(tenantId, conversationId);
-        res.status(200).json({ suggestion: result.suggestion, action: result.action ?? null });
+        res.status(200).json({
+            suggestion: result.suggestion,
+            intent: result.intent ?? null,
+            needsHumanEscalation: result.needsHumanEscalation,
+            action: result.action ?? null,
+        });
     }
     catch (err) {
         if (err instanceof ai_errors_1.ConversationNotFoundError) {

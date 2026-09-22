@@ -33,15 +33,45 @@ export const waitlistController = {
       const tenantId = req.user?.tenantId;
       if (!tenantId) return res.status(403).json({ error: "No tenant context" });
 
+      const { patientId, treatment, priority, notes, preferredDays, preferredTimeRanges } = req.body;
+
+      if (!patientId || !mongoose.Types.ObjectId.isValid(patientId)) {
+        return res.status(400).json({ error: "Patient invalide" });
+      }
+      if (!treatment || typeof treatment !== "string" || !treatment.trim()) {
+        return res.status(400).json({ error: "Le soin souhaité est requis" });
+      }
+
       // Validate patient ownership
       const { Patient } = await import("../patients/patient.model");
-      const patient = await Patient.findOne({ _id: req.body.patientId, tenantId });
-      if (!patient) return res.status(404).json({ error: "Patient not found or does not belong to tenant" });
+      const patient = await Patient.findOne({ _id: patientId, tenantId });
+      if (!patient) return res.status(404).json({ error: "Patient introuvable pour ce cabinet" });
 
-      const entry = await waitlistService.createEntry(req.body, tenantId);
-      res.status(201).json(entry);
+      const entry = await waitlistService.createEntry(
+        {
+          patientId,
+          treatment: treatment.trim(),
+          priority: priority || "medium",
+          notes: notes || "",
+          preferredDays: preferredDays || [],
+          preferredTimeRanges: preferredTimeRanges || [],
+        },
+        tenantId
+      );
+
+      const populatedEntry = await WaitlistEntry.findById(entry._id).populate(
+        "patientId",
+        "firstName lastName phone email"
+      );
+
+      res.status(201).json(populatedEntry || entry);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      if (error.code === 11000) {
+        return res.status(400).json({
+          error: "Ce patient est déjà inscrit sur la liste d'attente pour ce traitement.",
+        });
+      }
+      res.status(400).json({ error: error.message || "Erreur lors de l'ajout" });
     }
   },
 
@@ -51,7 +81,8 @@ export const waitlistController = {
       if (!tenantId) return res.status(403).json({ error: "No tenant context" });
 
       const { id } = req.params;
-      const entry = await waitlistService.cancelEntry(id, tenantId);
+      if (!id) return res.status(400).json({ error: "ID is required" });
+      const entry = await waitlistService.cancelEntry(id as string, tenantId);
       res.json(entry);
     } catch (error: any) {
       if (error.message.includes("WaitlistEntry not found")) {
@@ -67,6 +98,7 @@ export const waitlistController = {
       if (!tenantId) return res.status(403).json({ error: "No tenant context" });
 
       const { id: waitlistEntryId } = req.params;
+      if (!waitlistEntryId) return res.status(400).json({ error: "waitlistEntryId is required" });
       const { taskId } = req.body;
 
       if (!taskId) return res.status(400).json({ error: "taskId is required" });
@@ -144,7 +176,7 @@ export const waitlistController = {
             fulfilledByAppointmentId: newAppointment._id 
           } 
         },
-        { new: true }
+        { returnDocument: 'after' }
       );
 
       if (!updatedEntry) {

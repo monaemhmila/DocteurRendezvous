@@ -18,5 +18,11 @@
 import { IAIProvider, IChatMessage } from "./ai.provider.interface";
 export declare class OpenAICompatibleProvider implements IAIProvider {
     generateCompletion(messages: IChatMessage[]): Promise<string>;
+    /**
+     * Built-in Intelligent Dental Assistant engine for local demo & sandbox testing.
+     * Parses natural language patient queries, extracts requested dates & slots,
+     * and formats structured JSON responses conforming to the system prompt schema.
+     */
+    private generateSmartLocalCompletion;
 }
 //# sourceMappingURL=openai-compatible.provider.d.ts.map

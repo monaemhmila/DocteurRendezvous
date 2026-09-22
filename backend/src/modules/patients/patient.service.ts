@@ -12,7 +12,13 @@ export const patientService = {
     return patient.save();
   },
   updatePatient: async (id: string, data: Partial<IPatient>, tenantId: string) => {
-    return Patient.findOneAndUpdate({ _id: id, tenantId }, { $set: data }, { new: true });
+    const { tenantId: _ignoredTenantId, createdAt: _ignoredCreatedAt, updatedAt: _ignoredUpdatedAt, ...safeData } =
+      data as any;
+    return Patient.findOneAndUpdate(
+      { _id: id, tenantId },
+      { $set: safeData },
+      { returnDocument: 'after', runValidators: true }
+    );
   },
   deletePatient: async (id: string, tenantId: string) => {
     return Patient.findOneAndDelete({ _id: id, tenantId });

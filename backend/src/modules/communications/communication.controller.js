@@ -1,10 +1,20 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendMessage = exports.getConversationMessages = exports.getConversations = void 0;
+exports.simulateInboundMessage = exports.sendMessage = exports.getConversationMessages = exports.getConversations = void 0;
 const communication_model_1 = require("./communication.model");
+const patient_model_1 = require("../patients/patient.model");
+const tenant_model_1 = require("../tenants/tenant.model");
+const messaging_provider_1 = require("./providers/messaging.provider");
+const whatsappProvider = new messaging_provider_1.MetaWhatsAppProvider();
+const resolveTenantId = async (req) => {
+    if (req.user?.tenantId)
+        return req.user.tenantId;
+    const activeTenant = await tenant_model_1.Tenant.findOne({ status: "active" });
+    return activeTenant ? activeTenant._id.toString() : null;
+};
 const getConversations = async (req, res) => {
     try {
-        const tenantId = req.user?.tenantId;
+        const tenantId = await resolveTenantId(req);
         if (!tenantId) {
             return res.status(403).json({ error: "No tenant context" });
         }
@@ -22,7 +32,7 @@ const getConversations = async (req, res) => {
 exports.getConversations = getConversations;
 const getConversationMessages = async (req, res) => {
     try {
-        const tenantId = req.user?.tenantId;
+        const tenantId = await resolveTenantId(req);
         if (!tenantId) {
             return res.status(403).json({ error: "No tenant context" });
         }
@@ -43,12 +53,9 @@ const getConversationMessages = async (req, res) => {
     }
 };
 exports.getConversationMessages = getConversationMessages;
-const tenant_model_1 = require("../tenants/tenant.model");
-const messaging_provider_1 = require("./providers/messaging.provider");
-const whatsappProvider = new messaging_provider_1.MetaWhatsAppProvider();
 const sendMessage = async (req, res) => {
     try {
-        const tenantId = req.user?.tenantId;
+        const tenantId = await resolveTenantId(req);
         if (!tenantId) {
             return res.status(403).json({ error: "No tenant context" });
         }
@@ -104,4 +111,104 @@ const sendMessage = async (req, res) => {
     }
 };
 exports.sendMessage = sendMessage;
+const simulateInboundMessage = async (req, res) => {
+    try {
+        const tenantId = await resolveTenantId(req);
+        if (!tenantId) {
+            return res.status(403).json({ error: "No tenant context" });
+        }
+        const { conversationId, patientId, phone, content } = req.body;
+        if (!content || typeof content !== "string" || !content.trim()) {
+            return res.status(400).json({ error: "Message content is required" });
+        }
+        let conversation = null;
+        if (conversationId) {
+            conversation = await communication_model_1.Conversation.findOne({ _id: conversationId, tenantId });
+        }
+        if (!conversation && patientId) {
+            const patient = await patient_model_1.Patient.findOne({ _id: patientId, tenantId });
+            if (patient) {
+                conversation = await communication_model_1.Conversation.findOne({ tenantId, patientId: patient._id });
+                if (!conversation) {
+                    conversation = await communication_model_1.Conversation.create({
+                        tenantId,
+                        patientId: patient._id,
+                        contactWaId: patient.phone || `+216${Math.floor(10000000 + Math.random() * 90000000)}`,
+                        channel: "whatsapp",
+                        status: "active",
+                        lastMessageAt: new Date(),
+                    });
+                }
+            }
+        }
+        if (!conversation && phone) {
+            conversation = await communication_model_1.Conversation.findOne({ tenantId, contactWaId: phone });
+            if (!conversation) {
+                const patient = await patient_model_1.Patient.findOne({ tenantId, phone });
+                conversation = await communication_model_1.Conversation.create({
+                    tenantId,
+                    ...(patient ? { patientId: patient._id } : {}),
+                    contactWaId: phone,
+                    channel: "whatsapp",
+                    status: "active",
+                    lastMessageAt: new Date(),
+                });
+            }
+        }
+        if (!conversation) {
+            // Fallback to first available patient for this tenant
+            const fallbackPatient = await patient_model_1.Patient.findOne({ tenantId });
+            if (fallbackPatient) {
+                conversation = await communication_model_1.Conversation.create({
+                    tenantId,
+                    patientId: fallbackPatient._id,
+                    contactWaId: fallbackPatient.phone,
+                    channel: "whatsapp",
+                    status: "active",
+                    lastMessageAt: new Date(),
+                });
+            }
+            else {
+                return res.status(400).json({ error: "No patient or conversation found to simulate message." });
+            }
+        }
+        const wamid = `sim-in-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        // 1. Persist inbound message from patient
+        const inboundMessage = await communication_model_1.Message.create({
+            tenantId,
+            conversationId: conversation._id,
+            patientId: conversation.patientId,
+            direction: "inbound",
+            status: "received",
+            content: content.trim(),
+            providerMessageId: wamid,
+        });
+        conversation.lastMessageAt = new Date();
+        await conversation.save();
+        // 2. Trigger AI Auto-Booking Flow
+        const { aiAutoBookingService } = await import("../ai/ai.auto-booking.service");
+        try {
+            await aiAutoBookingService.processInboundMessage(tenantId.toString(), conversation._id.toString(), wamid);
+        }
+        catch (aiErr) {
+            console.error("[simulateInboundMessage] AI processing error:", aiErr.message);
+        }
+        // 3. Return updated conversation messages
+        const updatedMessages = await communication_model_1.Message.find({
+            tenantId,
+            conversationId: conversation._id,
+        }).sort({ createdAt: 1 }).lean();
+        return res.json({
+            success: true,
+            conversationId: conversation._id,
+            inboundMessage,
+            messages: updatedMessages,
+        });
+    }
+    catch (error) {
+        console.error("[simulateInboundMessage] Error:", error);
+        return res.status(500).json({ error: error.message || "Failed to simulate message" });
+    }
+};
+exports.simulateInboundMessage = simulateInboundMessage;
 //# sourceMappingURL=communication.controller.js.map

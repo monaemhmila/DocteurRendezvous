@@ -1,11 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader, SectionCard } from "@/components/shared/ui-kit";
-import { integrations } from "@/data/mock";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/settings/integrations")({
   component: IntegrationsSettings,
 });
+
+const integrations = [
+  { id: "whatsapp", name: "WhatsApp Cloud API", detail: "Configuration Meta gérée côté serveur.", status: "server_config" },
+  { id: "ai", name: "Fournisseur IA", detail: "Configuration via les variables d'environnement du backend.", status: "server_config" },
+] as const;
 
 function IntegrationsSettings() {
   return (
@@ -16,13 +20,11 @@ function IntegrationsSettings() {
             <SectionCard key={i.id} title={i.name} description={i.detail}>
                <div className="mt-4 flex items-center justify-between">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                     {i.status === "connected" ? "Connecté" : i.status === "not_connected" ? "Déconnecté" : "Bientôt"}
+                     {i.status === "server_config" ? "Configuration serveur" : "Non disponible"}
                   </span>
-                  {i.status === "connected" ? (
-                     <Button variant="outline" size="sm">Gérer</Button>
-                  ) : i.status === "not_connected" ? (
-                     <Button size="sm">Connecter</Button>
-                  ) : null}
+                  <Button variant="outline" size="sm" disabled>
+                    Géré côté serveur
+                  </Button>
                </div>
             </SectionCard>
          ))}

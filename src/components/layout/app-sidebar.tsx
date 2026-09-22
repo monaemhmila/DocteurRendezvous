@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   Activity,
@@ -17,9 +18,10 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import { useAppState } from "@/hooks/use-app-state";
 import { useAuth } from "@/contexts/auth-context";
-import { cn } from "@/lib/utils";
 import {
   Sidebar,
   SidebarContent,
@@ -34,60 +36,64 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-const groups: {
-  label: string;
-  items: { title: string; url: string; icon: React.ComponentType<{ className?: string }> }[];
-}[] = [
-  {
-    label: "Workspace",
-    items: [
-      { title: "Tableau de bord", url: "/", icon: LayoutDashboard },
-      { title: "Agenda", url: "/agenda", icon: CalendarDays },
-      { title: "Patients", url: "/patients", icon: Users },
-      { title: "Conversations", url: "/conversations", icon: MessagesSquare },
-      { title: "Récupération patients", url: "/recovery", icon: HeartPulse },
-    ],
-  },
-  {
-    label: "Automatisation",
-    items: [
-      { title: "Assistant IA", url: "/ai-assistant", icon: Sparkles },
-      { title: "Relances", url: "/follow-ups", icon: Repeat2 },
-      { title: "Liste d'attente", url: "/waitlist", icon: ListOrdered },
-      { title: "Absences", url: "/no-shows", icon: Inbox },
-    ],
-  },
-  {
-    label: "Insights",
-    items: [
-      { title: "Analytics", url: "/analytics", icon: BarChart3 },
-      { title: "Revenus récupérés", url: "/revenue", icon: Wallet },
-    ],
-  },
-  {
-    label: "Réglages",
-    items: [
-      { title: "Cabinet", url: "/settings/clinic", icon: Stethoscope },
-      { title: "Équipe", url: "/settings/team", icon: UserCog },
-      { title: "Paramètres IA", url: "/settings/ai", icon: Cog },
-      { title: "Communication", url: "/settings/communication", icon: Activity },
-      { title: "Intégrations", url: "/settings/integrations", icon: Plug },
-    ],
-  },
-];
-
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
-  const { aiGlobalActive } = useAppState();
   const { user } = useAuth();
+  const { t } = useAppState();
 
-  // Use auth user data if available, fallback to mock clinic name
+  const { data: tenant } = useQuery<any>({
+    queryKey: ["currentTenant"],
+    queryFn: () => api.get("/tenants/current"),
+  });
+
   const displayName = user ? `${user.firstName} ${user.lastName}` : "—";
   const displayInitials = user?.initials ?? "??";
   const displayRole = user?.role ?? "";
-  const tenantName = user?.tenantName ?? "Espace Pro";
+  const tenantName = tenant?.name || user?.tenantName || "Cabinet Médical";
+
+  const groups = useMemo(
+    () => [
+      {
+        label: t.nav.workspace,
+        items: [
+          { title: t.nav.dashboard, url: "/", icon: LayoutDashboard },
+          { title: t.nav.agenda, url: "/agenda", icon: CalendarDays },
+          { title: t.nav.patients, url: "/patients", icon: Users },
+          { title: t.nav.conversations, url: "/conversations", icon: MessagesSquare },
+          { title: t.nav.recovery, url: "/recovery", icon: HeartPulse },
+        ],
+      },
+      {
+        label: t.nav.automation,
+        items: [
+          { title: t.nav.aiAssistant, url: "/ai-assistant", icon: Sparkles },
+          { title: t.nav.followups, url: "/follow-ups", icon: Repeat2 },
+          { title: t.nav.waitlist, url: "/waitlist", icon: ListOrdered },
+          { title: t.nav.noShows, url: "/no-shows", icon: Inbox },
+        ],
+      },
+      {
+        label: t.nav.insights,
+        items: [
+          { title: t.nav.analytics, url: "/analytics", icon: BarChart3 },
+          { title: t.nav.revenue, url: "/revenue", icon: Wallet },
+        ],
+      },
+      {
+        label: t.nav.settings,
+        items: [
+          { title: t.nav.clinic, url: "/settings/clinic", icon: Stethoscope },
+          { title: t.nav.team, url: "/settings/team", icon: UserCog },
+          { title: t.nav.aiSettings, url: "/settings/ai", icon: Cog },
+          { title: t.nav.communication, url: "/settings/communication", icon: Activity },
+          { title: t.nav.integrations, url: "/settings/integrations", icon: Plug },
+        ],
+      },
+    ],
+    [t],
+  );
 
   const isActive = (url: string) =>
     url === "/" ? pathname === "/" : pathname.startsWith(url);
@@ -103,7 +109,7 @@ export function AppSidebar() {
             <span className="flex flex-col leading-none">
               <span className="text-sm font-semibold text-sidebar-foreground">Medical AI</span>
               <span className="mt-0.5 text-[11px] text-muted-foreground">
-                Récupération patients
+                {t.nav.patientRecovery}
               </span>
             </span>
           )}
@@ -147,14 +153,8 @@ export function AppSidebar() {
               <p className="truncate text-[13px] font-medium text-sidebar-foreground">
                 {tenantName}
               </p>
-              <p
-                className={cn(
-                  "mt-1 inline-flex items-center gap-1.5 text-[11px] font-medium",
-                  aiGlobalActive ? "text-accent" : "text-muted-foreground",
-                )}
-              >
-                <span className="size-1.5 rounded-full bg-current" />
-                {aiGlobalActive ? "IA active" : "IA en pause"}
+              <p className="mt-1 text-[11px] font-medium text-muted-foreground">
+                {t.nav.aiAssistant}
               </p>
             </div>
             <div className="flex items-center gap-2.5 rounded-lg bg-sidebar-accent px-2.5 py-2">

@@ -24,14 +24,26 @@ const login = async (req, res) => {
         if (!isMatch) {
             return res.status(401).json({ error: "Email ou mot de passe incorrect." });
         }
-        // Fetch tenant name if user belongs to a tenant
+        // Check tenant status if user belongs to a tenant
         let tenantName;
         if (user.tenantId) {
             const tenant = await tenant_model_1.Tenant.findById(user.tenantId);
-            tenantName = tenant?.name;
+            if (!tenant) {
+                return res.status(401).json({ error: "Cabinet introuvable ou supprimé." });
+            }
+            if (tenant.status === "suspended") {
+                return res.status(403).json({
+                    error: `Accès suspendu : Le compte de votre cabinet "${tenant.name}" a été suspendu (${tenant.suspensionReason || "retard de paiement"}). Veuillez contacter l'administrateur de la plateforme.`,
+                });
+            }
+            tenantName = tenant.name;
         }
         const initials = `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase();
-        const token = jsonwebtoken_1.default.sign({ id: user._id, tenantId: user.tenantId, role: user.role }, process.env.JWT_SECRET || "default_secret", { expiresIn: "1d" });
+        const token = jsonwebtoken_1.default.sign({
+            id: user._id.toString(),
+            tenantId: user.tenantId ? user.tenantId.toString() : "",
+            role: user.role,
+        }, process.env.JWT_SECRET, { expiresIn: "1d" });
         res.json({
             token,
             user: {
@@ -47,14 +59,19 @@ const login = async (req, res) => {
         });
     }
     catch (error) {
+        console.error("Login error:", error);
         if (error instanceof zod_1.z.ZodError) {
             return res.status(400).json({ error: "Données invalides." });
         }
-        res.status(500).json({ error: "Erreur interne du serveur." });
+        res.status(500).json({ error: error.message || "Erreur interne du serveur." });
     }
 };
 exports.login = login;
 const registerDemo = async (req, res) => {
+    // Disabled by default. Never expose predictable demo credentials in production.
+    if (process.env.ENABLE_DEMO_REGISTRATION !== "true") {
+        return res.status(404).json({ error: "Not Found" });
+    }
     // Utility endpoint to seed a tenant and user for testing
     try {
         const existingUser = await user_model_1.User.findOne({ email: "demo@dentalai.com" });

@@ -72,7 +72,7 @@ import { communicationService } from "../modules/communications/communication.se
 
 dotenv.config();
 
-const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/medical-ai-test";
+const MONGO_URI = process.env.MONGO_TEST_URI || "mongodb://localhost:27017/medical-ai-test";
 
 const BUSINESS_A = { start: "09:00", end: "12:00" };
 const AVAIL_DATE = "2026-12-07"; // flat business hours apply on any weekday
@@ -1147,6 +1147,13 @@ async function runPhase610Tests() {
     // T32 — regression 6.9: concurrent double-booking race still blocked at DB level
     console.log("▶ TEST 32 — regression 6.9 (race condition still blocked)");
     {
+      // P0 (Phase 6.15): clear any active upcoming appointments for both patients
+      // so the race test can proceed to the DB-level concurrency check.
+      await Appointment.deleteMany({
+        tenantId: tA,
+        patientId: { $in: [patientA._id, patientB._id] },
+        status: { $in: ["scheduled", "confirmed"] },
+      });
       const convRaceA = await Conversation.create({
         tenantId: tA, patientId: patientA._id, channel: "whatsapp", contactWaId: "+33610000221",
         pendingBookingContext: ctx10(RACE_DATE),

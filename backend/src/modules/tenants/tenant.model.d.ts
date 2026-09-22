@@ -1,12 +1,27 @@
 import mongoose, { Document } from "mongoose";
 export interface ITenant extends Document {
     name: string;
+    specialty?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    status: "active" | "suspended" | "trial";
+    suspensionReason?: string;
+    plan?: "starter" | "pro" | "enterprise";
     settings: {
         whatsappConfig?: {
+            phoneNumber?: string;
             phoneNumberId?: string;
             accessToken?: string;
+            verifyToken?: string;
         };
+        aiConfig?: any;
         businessHours?: any;
+        noShowPolicy?: {
+            enabled: boolean;
+            maxAllowed: number;
+            rejectionMessage?: string;
+        };
     };
     createdAt: Date;
     updatedAt: Date;

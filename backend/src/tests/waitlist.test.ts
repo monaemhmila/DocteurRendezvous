@@ -171,7 +171,7 @@ async function runWaitlistTests() {
     console.log("\n▶ TEST 5 — Candidate Accepts & Fulfills...");
     // Accept it
     await followupService.logAttempt({
-      waitlistEntryId: nextTask.waitlistEntryId?.toString(),
+      ...(nextTask.waitlistEntryId ? { waitlistEntryId: nextTask.waitlistEntryId.toString() } : {}),
       taskId: nextTask._id.toString(),
       outcome: "spoken_agreed"
     }, tenantAId);

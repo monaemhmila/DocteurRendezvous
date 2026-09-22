@@ -14,7 +14,8 @@ exports.patientService = {
         return patient.save();
     },
     updatePatient: async (id, data, tenantId) => {
-        return patient_model_1.Patient.findOneAndUpdate({ _id: id, tenantId }, { $set: data }, { new: true });
+        const { tenantId: _ignoredTenantId, createdAt: _ignoredCreatedAt, updatedAt: _ignoredUpdatedAt, ...safeData } = data;
+        return patient_model_1.Patient.findOneAndUpdate({ _id: id, tenantId }, { $set: safeData }, { returnDocument: 'after', runValidators: true });
     },
     deletePatient: async (id, tenantId) => {
         return patient_model_1.Patient.findOneAndDelete({ _id: id, tenantId });

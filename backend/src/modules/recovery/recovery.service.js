@@ -131,7 +131,8 @@ exports.recoveryService = {
         if (data.status && data.status !== opportunity.status) {
             validateTransition(opportunity.status, data.status);
         }
-        return recovery_model_1.Recovery.findOneAndUpdate({ _id: id, tenantId }, { $set: data }, { new: true });
+        const { tenantId: _ignoredTenantId, createdAt: _ignoredCreatedAt, updatedAt: _ignoredUpdatedAt, ...safeData } = data;
+        return recovery_model_1.Recovery.findOneAndUpdate({ _id: id, tenantId }, { $set: safeData }, { returnDocument: 'after', runValidators: true });
     },
     dismissOpportunity: async (id, tenantId) => {
         const opportunity = await recovery_model_1.Recovery.findOne({ _id: id, tenantId });

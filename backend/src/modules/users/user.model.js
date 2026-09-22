@@ -41,10 +41,28 @@ const UserSchema = new mongoose_1.Schema({
     passwordHash: { type: String, required: true },
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
+    phone: { type: String },
+    specialty: { type: String },
+    status: {
+        type: String,
+        enum: ["active", "inactive"],
+        default: "active",
+    },
     role: {
         type: String,
-        enum: ["super_admin", "clinic_owner", "receptionist", "dentist"],
+        enum: ["super_admin", "clinic_owner", "receptionist", "dentist", "assistant"],
         default: "receptionist",
+    },
+    permissions: {
+        type: mongoose_1.Schema.Types.Mixed,
+        default: {
+            appointments: true,
+            patients: true,
+            conversations: true,
+            aiConfig: false,
+            analytics: false,
+            settings: false,
+        },
     },
 }, { timestamps: true });
 // The email field already has `unique: true`, which automatically creates the index.

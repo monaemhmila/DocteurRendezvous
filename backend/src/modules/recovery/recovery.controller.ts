@@ -20,7 +20,7 @@ export const recoveryController = {
       const tenantId = req.user?.tenantId;
       if (!tenantId) return res.status(403).json({ error: "No tenant context" });
       const { id } = req.params;
-      const opportunity = await recoveryService.getOpportunityById(id, tenantId);
+      const opportunity = await recoveryService.getOpportunityById(id as string, tenantId);
       if (!opportunity) {
         return res.status(404).json({ error: "Opportunity not found" });
       }
@@ -46,7 +46,7 @@ export const recoveryController = {
       const tenantId = req.user?.tenantId;
       if (!tenantId) return res.status(403).json({ error: "No tenant context" });
       const { id } = req.params;
-      const opportunity = await recoveryService.updateOpportunity(id, req.body, tenantId);
+      const opportunity = await recoveryService.updateOpportunity(id as string, req.body, tenantId);
       if (!opportunity) {
         return res.status(404).json({ error: "Opportunity not found" });
       }
@@ -61,7 +61,7 @@ export const recoveryController = {
       const tenantId = req.user?.tenantId;
       if (!tenantId) return res.status(403).json({ error: "No tenant context" });
       const { id } = req.params;
-      const opportunity = await recoveryService.markContacted(id, tenantId);
+      const opportunity = await recoveryService.markContacted(id as string, tenantId);
       res.json(opportunity);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -73,7 +73,7 @@ export const recoveryController = {
       const tenantId = req.user?.tenantId;
       if (!tenantId) return res.status(403).json({ error: "No tenant context" });
       const { id } = req.params;
-      const opportunity = await recoveryService.markResponded(id, tenantId);
+      const opportunity = await recoveryService.markResponded(id as string, tenantId);
       res.json(opportunity);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -86,7 +86,7 @@ export const recoveryController = {
       if (!tenantId) return res.status(403).json({ error: "No tenant context" });
       const { id } = req.params;
       const { recoveryAppointmentId, bookedValue } = req.body;
-      const opportunity = await recoveryService.markBooked(id, recoveryAppointmentId, bookedValue || 0, tenantId);
+      const opportunity = await recoveryService.markBooked(id as string, recoveryAppointmentId, bookedValue || 0, tenantId);
       res.json(opportunity);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -99,7 +99,7 @@ export const recoveryController = {
       if (!tenantId) return res.status(403).json({ error: "No tenant context" });
       const { id } = req.params;
       const { recoveredValue } = req.body;
-      const opportunity = await recoveryService.markVisited(id, recoveredValue || 0, tenantId);
+      const opportunity = await recoveryService.markVisited(id as string, recoveredValue || 0, tenantId);
       res.json(opportunity);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -111,7 +111,7 @@ export const recoveryController = {
       const tenantId = req.user?.tenantId;
       if (!tenantId) return res.status(403).json({ error: "No tenant context" });
       const { id } = req.params;
-      const opportunity = await recoveryService.dismissOpportunity(id, tenantId);
+      const opportunity = await recoveryService.dismissOpportunity(id as string, tenantId);
       res.json(opportunity);
     } catch (error: any) {
       res.status(400).json({ error: error.message });

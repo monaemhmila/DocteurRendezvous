@@ -1,4 +1,5 @@
 import mongoose, { Document } from "mongoose";
+export declare function computeOccupiedSlots(startTime: string, endTime: string, stepMins?: number): string[];
 export interface IAppointment extends Document {
     tenantId: mongoose.Types.ObjectId;
     patientId: mongoose.Types.ObjectId;
@@ -7,10 +8,12 @@ export interface IAppointment extends Document {
     startTime: string;
     endTime: string;
     durationMin: number;
+    occupiedSlots: string[];
     treatment: string;
     notes?: string;
     cancellationReason?: string;
     source?: string;
+    reminderSentAt?: Date;
     status: "scheduled" | "confirmed" | "completed" | "cancelled" | "no_show";
     createdAt: Date;
     updatedAt: Date;
