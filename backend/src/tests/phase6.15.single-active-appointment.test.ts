@@ -17,7 +17,7 @@ import { appointmentService } from "../modules/appointments/appointment.service"
 import { AIService } from "../modules/ai/ai.service";
 import { AIAutoBookingService } from "../modules/ai/ai.auto-booking.service";
 import { IAIProvider, IChatMessage } from "../modules/ai/ai.provider.interface";
-import { IMessagingProvider, SendMessagePayload } from "../modules/communications/providers/messaging.provider";
+import { IMessagingProvider, SendMessageParams } from "../modules/communications/providers/messaging.provider";
 
 dotenv.config();
 
@@ -53,7 +53,7 @@ class ScriptableMockAIProvider implements IAIProvider {
 }
 
 class NoOpMessagingProvider implements IMessagingProvider {
-  async sendMessage(_payload: SendMessagePayload, _tenant: any): Promise<{ providerMessageId: string }> {
+  async sendMessage(_payload: SendMessageParams, _tenant: any): Promise<{ providerMessageId: string }> {
     return { providerMessageId: `noop-${Date.now()}` };
   }
 }

@@ -14,6 +14,57 @@ export const waitlistService = {
     return WaitlistEntry.find({ tenantId, status: "active" }).sort({ priority: -1, createdAt: 1 });
   },
 
+  async listEntriesPaginated(
+    tenantId: string,
+    status?: string,
+    patientId?: string,
+    skip: number = 0,
+    limit: number = 20
+  ) {
+    // Stable sort: priority (high→medium→low via natural string sort desc),
+    // then createdAt asc (longest wait first), then _id asc (tiebreak).
+    // NOTE: priority field stores strings "high"/"medium"/"low" — their
+    // natural sort order is: high > low > medium (alphabetical desc).
+    // We use a computed priority weight via aggregation to maintain the
+    // correct business ordering: high=3 > medium=2 > low=1.
+    const query: any = { tenantId };
+    if (status) query.status = status;
+    else query.status = "active"; // default to active entries only
+    if (patientId) query.patientId = new (require("mongoose").Types.ObjectId)(patientId);
+
+    const [data, total] = await Promise.all([
+      WaitlistEntry.aggregate([
+        { $match: query },
+        { $addFields: {
+          _priorityWeight: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$priority", "high"] }, then: 3 },
+                { case: { $eq: ["$priority", "medium"] }, then: 2 },
+                { case: { $eq: ["$priority", "low"] }, then: 1 },
+              ],
+              default: 0
+            }
+          }
+        }},
+        { $sort: { _priorityWeight: -1, createdAt: 1, _id: 1 } },
+        { $skip: skip },
+        { $limit: limit },
+        { $lookup: {
+          from: "patients",
+          localField: "patientId",
+          foreignField: "_id",
+          as: "_patient"
+        }},
+        { $addFields: { patientId: { $arrayElemAt: ["$_patient", 0] } } },
+        { $project: { _patient: 0, _priorityWeight: 0 } }
+      ]),
+      WaitlistEntry.countDocuments(query)
+    ]);
+
+    return { data, total };
+  },
+
   async cancelEntry(entryId: string, tenantId: string) {
     const entry = await WaitlistEntry.findOneAndUpdate(
       { _id: entryId, tenantId },
@@ -221,7 +272,67 @@ export const waitlistService = {
       await session.commitTransaction();
       session.endSession();
       return newAppointment;
-    } catch (error) {
+    } catch (error: any) {
+      if (
+        error.message.includes("Transaction numbers are only allowed on a replica set member") ||
+        error.message.includes("Standalone")
+      ) {
+        // Fallback for local standalone MongoDB
+        console.warn("MongoDB Standalone detected. Bypassing transaction for fulfillWaitlistEntry.");
+        
+        const entry = await WaitlistEntry.findOne({ _id: waitlistEntryId, tenantId });
+        if (!entry) throw new Error("WAITLIST_NOT_FOUND");
+  
+        if (entry.fulfilledByAppointmentId) {
+          const existingAppt = await Appointment.findOne({ _id: entry.fulfilledByAppointmentId, tenantId });
+          await FollowUpTask.findOneAndUpdate(
+            { _id: taskId, tenantId, status: { $in: ["pending", "in_progress"] } },
+            { $set: { status: "completed", completedAt: new Date() } }
+          );
+          return existingAppt;
+        }
+  
+        if (entry.status !== "active") throw new Error("WAITLIST_NOT_ACTIVE");
+  
+        const task = await FollowUpTask.findOne({ _id: taskId, tenantId, waitlistEntryId: entry._id });
+        if (!task) throw new Error("TASK_NOT_FOUND");
+        if (!["pending", "in_progress"].includes(task.status)) throw new Error("TASK_NOT_ACTIONABLE");
+        if (task.type !== "slot_fill_offer") throw new Error("TASK_INVALID_TYPE");
+        if (!task.sourceAppointmentId) throw new Error("TASK_MISSING_SOURCE");
+  
+        const sourceAppt = await Appointment.findOne({ _id: task.sourceAppointmentId, tenantId });
+        if (!sourceAppt) throw new Error("SOURCE_NOT_FOUND");
+  
+        const newAppointment = new Appointment({
+          tenantId,
+          patientId: entry.patientId,
+          doctorId: sourceAppt.doctorId,
+          date: sourceAppt.date,
+          startTime: sourceAppt.startTime,
+          endTime: sourceAppt.endTime,
+          durationMin: sourceAppt.durationMin,
+          treatment: entry.treatment,
+          status: "scheduled"
+        });
+  
+        try {
+          await newAppointment.save();
+        } catch (err: any) {
+          if (err.code === 11000) throw new Error("SLOT_UNAVAILABLE");
+          throw err;
+        }
+  
+        entry.status = "fulfilled";
+        entry.fulfilledByAppointmentId = newAppointment._id as mongoose.Types.ObjectId;
+        await entry.save();
+  
+        task.status = "completed";
+        task.completedAt = new Date();
+        await task.save();
+  
+        return newAppointment;
+      }
+      
       await session.abortTransaction();
       session.endSession();
       throw error;

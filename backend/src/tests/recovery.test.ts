@@ -155,7 +155,8 @@ async function runTests() {
     await recoveryService.markResponded(recB._id.toString(), tenantAId);
     await recoveryService.markBooked(recB._id.toString(), appt4._id.toString(), 200, tenantAId);
 
-    // Complete Appt 2
+    // Complete Appt 2 (must go through confirmed first)
+    await appointmentService.updateStatus(appt2._id.toString(), "confirmed", tenantAId);
     await appointmentService.updateStatus(appt2._id.toString(), "completed", tenantAId);
 
     // Check statuses
@@ -265,7 +266,8 @@ async function runTests() {
       throw new Error("TEST 6 FAILED: getStats did not reflect bookedValue before visit");
     }
 
-    // Now complete appt4
+    // Now complete appt4 (must go through confirmed first)
+    await appointmentService.updateStatus(appt4._id.toString(), "confirmed", tenantAId);
     await appointmentService.updateStatus(appt4._id.toString(), "completed", tenantAId);
 
     const statsAfterCompletion = await recoveryService.getStats(tenantAId);

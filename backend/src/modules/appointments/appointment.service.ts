@@ -220,12 +220,37 @@ export const appointmentService = {
     }
   },
 
-  getAppointments: async (tenantId: string, patientId?: string) => {
+  getAppointments: async (
+    tenantId: string, 
+    patientId?: string, 
+    status?: string, 
+    date?: string,
+    dateFrom?: string,
+    dateTo?: string,
+    skip: number = 0, 
+    limit: number = 20
+  ) => {
     const query: any = { tenantId };
     if (patientId) query.patientId = patientId;
-    return Appointment.find(query)
-      .populate("patientId", "firstName lastName phone")
-      .sort({ date: -1, startTime: -1 });
+    if (status) query.status = status;
+    if (date) query.date = date;
+    
+    if (dateFrom || dateTo) {
+      query.date = query.date || {};
+      if (dateFrom) query.date.$gte = dateFrom;
+      if (dateTo) query.date.$lte = dateTo;
+    }
+    
+    const [data, total] = await Promise.all([
+      Appointment.find(query)
+        .populate("patientId", "firstName lastName phone")
+        .sort({ date: -1, startTime: -1, _id: 1 })
+        .skip(skip)
+        .limit(limit),
+      Appointment.countDocuments(query)
+    ]);
+    
+    return { data, total };
   },
   getAppointmentById: async (id: string, tenantId: string) => {
     return Appointment.findOne({ _id: id, tenantId }).populate("patientId", "firstName lastName phone");
@@ -303,14 +328,36 @@ export const appointmentService = {
     }
   },
   updateAppointment: async (id: string, data: Partial<IAppointment>, tenantId: string) => {
-    const session = await mongoose.startSession();
+    let session: mongoose.ClientSession | undefined;
+    
     try {
+      session = await mongoose.startSession();
       session.startTransaction();
+      // Dummy query to trigger the standalone error
+      await Appointment.findOne({ _id: id }).select("_id").session(session);
+    } catch (err: any) {
+      if (err.message.includes("Transaction numbers are only allowed on a replica set member or mongos")) {
+        console.warn("MongoDB Standalone detected. Bypassing transaction for updateAppointment.");
+        if (session) {
+          await session.endSession();
+          session = undefined;
+        }
+      } else {
+        if (session) await session.endSession();
+        throw err;
+      }
+    }
 
-      const existing = await Appointment.findOne({ _id: id, tenantId }).session(session);
+    try {
+      const existing = session 
+        ? await Appointment.findOne({ _id: id, tenantId }).session(session)
+        : await Appointment.findOne({ _id: id, tenantId });
+        
       if (!existing) {
-        await session.abortTransaction();
-        session.endSession();
+        if (session) {
+          await session.abortTransaction();
+          session.endSession();
+        }
         return null;
       }
 
@@ -367,18 +414,29 @@ export const appointmentService = {
         await appointmentService.assertNoActiveUpcomingAppointment(tenantId, patientId, id);
       }
 
-      const updated = await Appointment.findOneAndUpdate(
-        { _id: id, tenantId },
-        { $set: safeData },
-        { returnDocument: 'after', runValidators: true, session }
-      );
+      let updated;
+      if (session) {
+        updated = await Appointment.findOneAndUpdate(
+          { _id: id, tenantId },
+          { $set: safeData },
+          { returnDocument: 'after', runValidators: true, session }
+        );
+        await session.commitTransaction();
+        session.endSession();
+      } else {
+        updated = await Appointment.findOneAndUpdate(
+          { _id: id, tenantId },
+          { $set: safeData },
+          { returnDocument: 'after', runValidators: true }
+        );
+      }
 
-      await session.commitTransaction();
-      session.endSession();
       return updated;
     } catch (err: any) {
-      await session.abortTransaction();
-      session.endSession();
+      if (session) {
+        await session.abortTransaction();
+        session.endSession();
+      }
       if (err.code === 11000) {
         throw new Error("SLOT_UNAVAILABLE");
       }
@@ -410,7 +468,48 @@ export const appointmentService = {
       }
       throw new Error("INVALID_APPOINTMENT_TRANSITION");
     }
-    
+
+    // If async mode is enabled and status is confirmed, create OutboxEvent
+    if (process.env.ASYNC_WEBHOOK_PROCESSING === "true" && nextStatus === "confirmed") {
+      const tenant = await Tenant.findById(tenantId).lean();
+      const patient = await Patient.findById(updated.patientId).lean();
+      
+      if (tenant && patient && patient.phone) {
+        const cleanPhone = patient.phone.replace(/[^0-9]/g, "");
+        const phoneNumberId = tenant.settings?.whatsappConfig?.phoneNumberId;
+        
+        if (phoneNumberId) {
+          const patientName = patient.firstName && patient.firstName.toLowerCase() !== "patient"
+            ? `${patient.firstName} ${patient.lastName || ""}`.trim()
+            : "Cher patient";
+          const clinicName = tenant.name || "notre cabinet dentaire";
+          const treatment = updated.treatment || "Consultation dentaire";
+          const isArabic = patient.language === "ar";
+
+          const confirmationText = isArabic
+            ? `عسلامة ${patientName} 👋\nتم تأكيد موعدك بنجاح: ${updated.date} من ${updated.startTime} إلى ${updated.endTime} (${treatment}) في ${clinicName}. نراكم قريباً!`
+            : `Bonjour ${patientName} 👋\nVotre rendez-vous a bien été confirmé : ${updated.date} de ${updated.startTime} à ${updated.endTime} (${treatment}) au ${clinicName}. À bientôt !`;
+
+          const { OutboxEvent } = await import("../jobs/outbox-event.model");
+          
+          await OutboxEvent.create([{
+            eventType: "appointment.confirmed",
+            aggregateType: "appointment",
+            aggregateId: updated._id.toString(),
+            tenantId: updated.tenantId,
+            phoneNumberId: phoneNumberId,
+            idempotencyKey: `appointment:${updated._id}:confirmed`,
+            payload: {
+              to: cleanPhone,
+              type: "text",
+              content: confirmationText
+            }
+          }]);
+        }
+      }
+    }
+
+    // Only handle async side-effects after commit
     await handleStatusChange(updated, tenantId);
     
     return updated;

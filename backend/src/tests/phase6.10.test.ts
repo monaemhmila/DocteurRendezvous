@@ -69,6 +69,17 @@ import { ConversationNotFoundError } from "../modules/ai/ai.errors";
 import { IAIProvider, IChatMessage } from "../modules/ai/ai.provider.interface";
 import { IMessagingProvider } from "../modules/communications/providers/messaging.provider";
 import { communicationService } from "../modules/communications/communication.service";
+import { handleWebhookEvent } from "../modules/communications/webhook.controller";
+
+// Simple mock for Express Response
+class MockResponse {
+  statusCode: number = 200;
+  body: any = null;
+  status(code: number) { this.statusCode = code; return this; }
+  send(body: any) { this.body = body; return this; }
+  json(body: any) { this.body = body; return this; }
+  sendStatus(code: number) { this.statusCode = code; return this; }
+}
 
 dotenv.config();
 
@@ -1091,8 +1102,8 @@ async function runPhase610Tests() {
       (aiAutoBookingService as any).aiService = fakeAI;
       (aiAutoBookingService as any).messagingProvider = singletonRecording;
 
-      await communicationService.handleWebhook(JSON.parse(JSON.stringify(payload)));
-      await communicationService.handleWebhook(JSON.parse(JSON.stringify(payload)));
+      await handleWebhookEvent({ body: JSON.parse(JSON.stringify(payload)) } as any, new MockResponse() as any);
+      await handleWebhookEvent({ body: JSON.parse(JSON.stringify(payload)) } as any, new MockResponse() as any);
 
       const inboundCount = await Message.countDocuments({ providerMessageId: wamid });
       expect(inboundCount === 1, "duplicate webhook → exactly 1 inbound message");
@@ -1174,9 +1185,9 @@ async function runPhase610Tests() {
       });
       const [resA, resB] = await Promise.allSettled([ra, rb]);
       const fulfilled = [resA, resB].filter((r) => r.status === "fulfilled").length;
-      const doubleBooked = [resA, resB].filter((r) => r.status === "rejected" && (r.reason as Error).message.includes("Double_Booking_Error")).length;
+      const doubleBooked = [resA, resB].filter((r) => r.status === "rejected" && (r.reason as Error).message.includes("SLOT_UNAVAILABLE")).length;
       expect(fulfilled === 1, `exactly 1 booking succeeds, got ${fulfilled}`);
-      expect(doubleBooked === 1, "exactly 1 Double_Booking_Error, got " + doubleBooked);
+      expect(doubleBooked === 1, "exactly 1 SLOT_UNAVAILABLE, got " + doubleBooked);
       const appts = await Appointment.countDocuments({ tenantId: tA, date: RACE_DATE, startTime: "10:00" });
       expect(appts === 1, "single appointment persisted for the contested slot");
       testDone(32);

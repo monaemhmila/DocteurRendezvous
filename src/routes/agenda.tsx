@@ -112,15 +112,46 @@ function AgendaPage() {
 
   const queryClient = useQueryClient();
 
+  const queryWindow = useMemo(() => {
+    const d = new Date(day);
+    const from = new Date(d);
+    const to = new Date(d);
+    
+    if (view === "day") {
+      from.setDate(d.getDate() - 1);
+      to.setDate(d.getDate() + 1);
+    } else if (view === "week") {
+      from.setDate(d.getDate() - 7);
+      to.setDate(d.getDate() + 7);
+    } else {
+      from.setDate(1);
+      from.setMonth(d.getMonth() - 1);
+      to.setDate(28);
+      to.setMonth(d.getMonth() + 1);
+    }
+    
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return {
+      dateFrom: `${from.getFullYear()}-${pad(from.getMonth() + 1)}-${pad(from.getDate())}`,
+      dateTo: `${to.getFullYear()}-${pad(to.getMonth() + 1)}-${pad(to.getDate())}`
+    };
+  }, [day, view]);
+
   // Queries
   const { data: serverAppointments = [], isLoading: isLoadingAppts, isError } = useQuery<BackendAppointment[]>({
-    queryKey: ["appointments"],
-    queryFn: () => api.get("/appointments"),
+    queryKey: ["appointments", queryWindow.dateFrom, queryWindow.dateTo],
+    queryFn: async () => {
+      const res = await api.get(`/appointments?dateFrom=${queryWindow.dateFrom}&dateTo=${queryWindow.dateTo}&limit=100`);
+      return Array.isArray(res) ? res : (res.data || []);
+    },
   });
 
   const { data: serverPatients = [] } = useQuery<any[]>({
     queryKey: ["patients"],
-    queryFn: () => api.get("/patients"),
+    queryFn: async () => {
+      const res = await api.get("/patients?limit=1000");
+      return Array.isArray(res) ? res : (res.data || []);
+    },
   });
 
   const { data: tenant } = useQuery<any>({

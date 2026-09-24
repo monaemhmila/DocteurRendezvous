@@ -356,7 +356,9 @@ export class AIService {
             : "";
 
           let systemUpdate = "";
-          if (slotsResult.status === "PAST" || slotsResult.isPastDate) {
+          if (slotsResult.error) {
+            systemUpdate = `[SYSTEM] Cannot fetch slots: ${slotsResult.error}`;
+          } else if (slotsResult.status === "PAST" || slotsResult.isPastDate) {
             systemUpdate = `[SYSTEM] La date demandée (${requestedDateFr}) est DÉJÀ PASSÉE. Informez le patient poliment que ce créneau/date est passé et proposez de vérifier les disponibilités à partir d'aujourd'hui ou du prochain jour ouvert.`;
           } else if (slotsResult.status === "CLOSED") {
             // SINGLE DECISION POINT: status comes only from slotsResult (Phase 6.14).
@@ -389,8 +391,6 @@ export class AIService {
             } else {
               systemUpdate = `[SYSTEM] Le planning est COMPLET le ${requestedDateFr} (${slotsResult.weekdayFr ?? requestedWeekdayFr}).${hoursDisplay} Aucun créneau disponible dans les prochains jours. Demandez au patient s'il souhaite être mis sur liste d'attente.`;
             }
-          } else if (slotsResult.error) {
-            systemUpdate = `[SYSTEM] Cannot fetch slots: ${slotsResult.error}`;
           }
 
           // Add the Pass 1 response and the System Update to messages

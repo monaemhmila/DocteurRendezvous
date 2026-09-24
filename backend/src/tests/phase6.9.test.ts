@@ -12,6 +12,7 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import { communicationService } from "../modules/communications/communication.service";
+import { handleWebhookEvent } from "../modules/communications/webhook.controller";
 import {
   AIAutoBookingService,
   buildBookingConfirmationMessage,
@@ -22,6 +23,16 @@ import { Tenant } from "../modules/tenants/tenant.model";
 import { User } from "../modules/users/user.model";
 import { Conversation, Message } from "../modules/communications/communication.model";
 import { Appointment } from "../modules/appointments/appointment.model";
+
+// Simple mock for Express Response
+class MockResponse {
+  statusCode: number = 200;
+  body: any = null;
+  status(code: number) { this.statusCode = code; return this; }
+  send(body: any) { this.body = body; return this; }
+  json(body: any) { this.body = body; return this; }
+  sendStatus(code: number) { this.statusCode = code; return this; }
+}
 import { availabilityService } from "../modules/appointments/availability.service";
 import { IMessagingProvider } from "../modules/communications/providers/messaging.provider";
 
@@ -152,9 +163,9 @@ async function runPhase69Tests() {
     };
 
     // Fire the same webhook 3 times (as Meta would when not ack'd)
-    await communicationService.handleWebhook(webhookPayload);
-    await communicationService.handleWebhook(webhookPayload);
-    await communicationService.handleWebhook(webhookPayload);
+    await handleWebhookEvent({ body: webhookPayload } as any, new MockResponse() as any);
+    await handleWebhookEvent({ body: webhookPayload } as any, new MockResponse() as any);
+    await handleWebhookEvent({ body: webhookPayload } as any, new MockResponse() as any);
 
     const inboundMessages = await Message.find({ tenantId, providerMessageId: waMessageId });
     if (inboundMessages.length !== 1) {
@@ -188,16 +199,16 @@ async function runPhase69Tests() {
     if (resB.status === "fulfilled") successCount++;
 
     if (resA.status === "rejected") {
-      if ((resA.reason as Error).message.includes("Double_Booking_Error")) doubleBookingCount++;
+      if ((resA.reason as Error).message.includes("SLOT_UNAVAILABLE")) doubleBookingCount++;
       else console.warn("A rejected with unexpected error:", (resA.reason as Error).message);
     }
     if (resB.status === "rejected") {
-      if ((resB.reason as Error).message.includes("Double_Booking_Error")) doubleBookingCount++;
+      if ((resB.reason as Error).message.includes("SLOT_UNAVAILABLE")) doubleBookingCount++;
       else console.warn("B rejected with unexpected error:", (resB.reason as Error).message);
     }
 
     if (successCount !== 1) throw new Error(`TEST 2 FAILED: Expected 1 success, got ${successCount}`);
-    if (doubleBookingCount !== 1) throw new Error(`TEST 3 FAILED: Expected 1 Double_Booking_Error, got ${doubleBookingCount}`);
+    if (doubleBookingCount !== 1) throw new Error(`TEST 3 FAILED: Expected 1 SLOT_UNAVAILABLE, got ${doubleBookingCount}`);
 
     const sameSlotAppts = await Appointment.find({ tenantId, date: "2026-10-20", startTime: "10:00" });
     if (sameSlotAppts.length !== 1) {

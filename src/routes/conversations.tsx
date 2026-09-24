@@ -18,6 +18,7 @@ import {
   AlertCircle,
   ExternalLink,
   ChevronRight,
+  ChevronLeft,
   Phone,
   Clock,
   ArrowRight,
@@ -49,6 +50,12 @@ interface BackendConversation {
   status: "active" | "archived";
   needsHuman?: boolean;
   lastMessageAt: string;
+  lastMessage?: {
+    content: string;
+    direction: "inbound" | "outbound";
+    createdAt: string;
+    status: string;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -109,37 +116,64 @@ function ConversationsPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const queryClient = useQueryClient();
+  const [convsPage, setConvsPage] = useState(1);
+  const convsLimit = 50;
 
   // ── Queries ───────────────────────────────────────────────
-  const { data: serverConversations = [], isLoading: isLoadingConvs, isError: isErrorConvs } = useQuery<BackendConversation[]>({
-    queryKey: ["conversations"],
-    queryFn: () => api.get("/communications/conversations"),
+  const { data: convsResponse, isLoading: isLoadingConvs, isError: isErrorConvs } = useQuery<{ data: BackendConversation[], meta: any }>({
+    queryKey: ["conversations", convsPage, convsLimit],
+    queryFn: async () => {
+      const res = await api.get(`/communications/conversations?page=${convsPage}&limit=${convsLimit}`);
+      return res as { data: BackendConversation[], meta: any };
+    },
     refetchInterval: 3000,
   });
 
-  const { data: serverMessages = [], isLoading: isLoadingMsgs } = useQuery<BackendMessage[]>({
-    queryKey: ["messages", activeId],
-    queryFn: () => api.get(`/communications/conversations/${activeId}/messages`),
+  const serverConversations: BackendConversation[] = convsResponse?.data || [];
+  const convsMeta = convsResponse?.meta;
+
+  const [msgPage, setMsgPage] = useState(1);
+  const msgLimit = 50;
+
+  const { data: msgResponse, isLoading: isLoadingMsgs } = useQuery<{ data: BackendMessage[], meta: any }>({
+    queryKey: ["messages", activeId, msgPage],
+    queryFn: async () => {
+      const res = await api.get(`/communications/conversations/${activeId}/messages?page=${msgPage}&limit=${msgLimit}`);
+      return res as { data: BackendMessage[], meta: any };
+    },
     enabled: !!activeId,
     refetchInterval: 2000,
   });
 
+  const serverMessages = useMemo(() => {
+    return [...(msgResponse?.data || [])].reverse();
+  }, [msgResponse]);
+  const msgMeta = msgResponse?.meta;
+
+  // Reset message pagination when active conversation changes
+  useEffect(() => {
+    setMsgPage(1);
+  }, [activeId]);
+
   const { data: patients = [] } = useQuery<IPatient[]>({
     queryKey: ["patients"],
-    queryFn: () => api.get("/patients"),
+    queryFn: async () => {
+      const res = await api.get("/patients?limit=100");
+      return Array.isArray(res) ? res : (res.data || []);
+    },
   });
 
   // Auto select first conversation if none selected
   useEffect(() => {
     if (!activeId && serverConversations.length > 0) {
-      setActiveId(serverConversations[0]._id);
+      setActiveId(serverConversations[0]?._id || null);
     }
   }, [serverConversations, activeId]);
 
   // Set default sim patient when conversations or patients load
   useEffect(() => {
     if (!simPatientId && patients.length > 0) {
-      setSimPatientId(patients[0]._id);
+      setSimPatientId(patients[0]?._id || "");
     }
   }, [patients, simPatientId]);
 
@@ -288,7 +322,7 @@ function ConversationsPage() {
 
             <div className="flex gap-1 overflow-x-auto pb-0.5">
               {[
-                { id: "all", label: `Toutes (${serverConversations.length})` },
+                { id: "all", label: `Toutes (${convsMeta?.total ?? serverConversations.length})` },
                 { id: "ai", label: "IA Active" },
                 { id: "human", label: "Prise en main" },
               ].map((f) => (
@@ -366,6 +400,34 @@ function ConversationsPage() {
               )}
             </div>
           </ScrollArea>
+
+          {convsMeta && convsMeta.totalPages > 1 && (
+            <div className="flex justify-between items-center px-3 py-2 border-t border-border bg-card/40 shrink-0">
+              <span className="text-[10px] text-muted-foreground">
+                {convsMeta.page}/{convsMeta.totalPages}
+              </span>
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-[10px]"
+                  disabled={convsMeta.page <= 1}
+                  onClick={() => setConvsPage(p => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="size-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-[10px]"
+                  disabled={convsMeta.page >= convsMeta.totalPages}
+                  onClick={() => setConvsPage(p => p + 1)}
+                >
+                  <ChevronRight className="size-3" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 2. Main Clinic Chat View */}
@@ -428,6 +490,20 @@ function ConversationsPage() {
               {/* Chat Message History */}
               <ScrollArea className="flex-1 p-5">
                 <div className="space-y-4 max-w-3xl mx-auto pb-6">
+                  {msgMeta && msgMeta.totalPages > 1 && (
+                    <div className="flex justify-center pb-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="text-[10px] h-7"
+                        disabled={msgPage >= msgMeta.totalPages}
+                        onClick={() => setMsgPage(p => p + 1)}
+                      >
+                        Charger les messages précédents
+                      </Button>
+                    </div>
+                  )}
+
                   {isLoadingMsgs ? (
                     <div className="text-center text-xs text-muted-foreground py-10 animate-pulse">
                       Chargement des messages...

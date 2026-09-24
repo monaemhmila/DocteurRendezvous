@@ -77,11 +77,11 @@ async function runPhase4Tests() {
     const req3: any = { user: { tenantId: tenantA }, query: {} };
     const res3 = createMockRes();
     await waitlistController.getEntries(req3, res3);
-    if (res3.statusCode !== 200 || res3.body.length !== 1 || res3.body[0].tenantId !== tenantA) { console.error("TEST 3/4 FAILED", res3.body, res3.statusCode); failed = true; }
+    if (res3.statusCode !== 200 || !res3.body.data || res3.body.data.length !== 1 || res3.body.data[0].tenantId !== tenantA) { console.error("TEST 3/4 FAILED", res3.body, res3.statusCode); failed = true; }
     else console.log("✅ TEST 3 & 4 PASSED: GET /waitlist returns active tenant-isolated entries");
 
     // Test 5 & 6: DELETE /waitlist/:id
-    const entryId = res3.body[0]._id;
+    const entryId = res3.body.data?.[0]?._id;
     const req5: any = { user: { tenantId: tenantB }, params: { id: entryId } };
     const res5 = createMockRes();
     await waitlistController.cancelEntry(req5, res5); // Tenant B deletes Tenant A's entry

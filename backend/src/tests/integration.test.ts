@@ -434,7 +434,8 @@ async function runIntegrationTests() {
     }
     await recoveryService.markBooked(recoveryD._id.toString(), anotherAppt._id.toString(), 80, tenantAId);
 
-    // Mark recoveryAppt (linked to recoveryB) as completed
+    // Mark recoveryAppt (linked to recoveryB) as confirmed then completed
+    await appointmentService.updateStatus(recoveryAppt._id.toString(), "confirmed", tenantAId);
     await appointmentService.updateStatus(recoveryAppt._id.toString(), "completed", tenantAId);
 
     const recoveryBFinal = await Recovery.findById(recoveryB._id);
@@ -456,6 +457,7 @@ async function runIntegrationTests() {
 
     // recoveryC is dismissed, recoveryD is booked, recoveryB is visited
     // Complete unrelatedAppt — should NOT affect any existing recovery
+    await appointmentService.updateStatus(unrelatedAppt._id.toString(), "confirmed", tenantAId);
     await appointmentService.updateStatus(unrelatedAppt._id.toString(), "completed", tenantAId);
 
     const recoveryCCheck = await Recovery.findById(recoveryC._id);
@@ -518,16 +520,22 @@ async function runIntegrationTests() {
     console.log("\n▶ TEST 13 — Cross-tenant appointment association rejected (processAppointmentCompletion)...");
 
     // Attempt to mark Tenant B's appointment as completed via Tenant A's context
-    const crossTenantUpdate = await appointmentService.updateStatus(
-      apptTenantB._id.toString(),
-      "completed",
-      tenantAId // wrong tenant
-    );
-    // The update itself should be rejected (null return means not found in that tenant)
-    if (crossTenantUpdate !== null) {
-      throw new Error("TEST 13 FAILED: Tenant A was able to update Tenant B's appointment!");
+    try {
+      const crossTenantUpdate = await appointmentService.updateStatus(
+        apptTenantB._id.toString(),
+        "completed",
+        tenantAId // wrong tenant
+      );
+      if (crossTenantUpdate !== null) {
+        throw new Error("TEST 13 FAILED: Tenant A was able to update Tenant B's appointment!");
+      }
+    } catch (err: any) {
+      if (err.message === "Appointment not found") {
+        console.log("✅ TEST 13 PASSED: Cross-tenant appointment status update rejected.");
+      } else {
+        throw err;
+      }
     }
-    console.log("✅ TEST 13 PASSED: Cross-tenant appointment status update rejected.");
 
     // ================================================================
     // TEST 14 — FollowUpTask terminal-state protection remains intact

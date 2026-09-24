@@ -1,6 +1,9 @@
 import crypto from "node:crypto";
 import { Request, Response } from "express";
 import { communicationService } from "./communication.service";
+import { WebhookEvent } from "./webhook-event.model";
+import { Tenant } from "../tenants/tenant.model";
+import { Job } from "../jobs/job.model";
 
 interface RawBodyRequest extends Request {
   rawBody?: Buffer;
@@ -63,25 +66,139 @@ export const handleWebhookEvent = async (req: RawBodyRequest, res: Response) => 
   }
 
   const payload = req.body;
-  console.log("[Webhook] Incoming Webhook Event:", JSON.stringify(payload, null, 2));
+  if (!res.headersSent) {
+    res.status(200).send("EVENT_RECEIVED");
+  }
 
   if (
     !payload ||
     payload.object !== "whatsapp_business_account" ||
     !Array.isArray(payload.entry)
   ) {
-    console.warn("[Webhook] Non-WhatsApp or invalid payload format:", payload);
-    return res.status(400).json({ error: "Invalid webhook payload" });
+    console.warn("[Webhook] Non-WhatsApp or invalid payload format");
+    return;
   }
 
   try {
-    await communicationService.handleWebhook(payload);
+    for (const entry of payload.entry) {
+      if (!Array.isArray(entry.changes)) continue;
+      
+      for (const change of entry.changes) {
+        if (change.field !== "messages") continue;
+        
+        const value = change.value;
+        const phoneNumberId = value.metadata?.phone_number_id;
+        
+        if (!phoneNumberId) {
+          console.warn("[Webhook] Missing phone_number_id. Ignoring.");
+          continue;
+        }
+
+        // Strict Tenant Resolution
+        const tenant = await Tenant.findOne({ 
+          "settings.whatsappConfig.phoneNumberId": phoneNumberId,
+          status: "active" 
+        });
+
+        if (!tenant) {
+          console.warn(`[Webhook] No active tenant found for phone_number_id: ${phoneNumberId}. Ignoring.`);
+          continue;
+        }
+
+        const tenantId = tenant._id;
+
+        // Process Messages
+        if (value.messages && Array.isArray(value.messages)) {
+          for (const msg of value.messages) {
+            const providerMessageId = msg.id;
+            
+            let event;
+            try {
+              event = new WebhookEvent({
+                provider: "meta",
+                phoneNumberId,
+                eventType: "message",
+                providerMessageId,
+                tenantId,
+                payload: msg
+              });
+              await event.save();
+            } catch (err: any) {
+              if (err.code === 11000) {
+                console.log(`[Webhook] Duplicate message event ignored (wamid: ${providerMessageId})`);
+                continue;
+              }
+              throw err;
+            }
+
+            // Process business logic ONLY if insertion succeeded
+            if (process.env.ASYNC_WEBHOOK_PROCESSING === "true") {
+              try {
+                await Job.create({
+                  type: "webhook_event",
+                  tenantId,
+                  webhookEventId: event._id,
+                });
+              } catch (jobErr: any) {
+                if (jobErr.code === 11000) {
+                  console.log(`[Webhook] Duplicate Job ignored (wamid: ${providerMessageId})`);
+                } else {
+                  throw jobErr;
+                }
+              }
+            } else {
+              await communicationService.handleIncomingMessage(tenantId.toString(), msg, value);
+            }
+          }
+        }
+
+        // Process Statuses
+        if (value.statuses && Array.isArray(value.statuses)) {
+          for (const status of value.statuses) {
+            const providerMessageId = status.id;
+            
+            let event;
+            try {
+              event = new WebhookEvent({
+                provider: "meta",
+                phoneNumberId,
+                eventType: "status",
+                providerMessageId,
+                tenantId,
+                payload: status
+              });
+              await event.save();
+            } catch (err: any) {
+              if (err.code === 11000) {
+                console.log(`[Webhook] Duplicate status event ignored (wamid: ${providerMessageId})`);
+                continue;
+              }
+              throw err;
+            }
+
+            // Process business logic ONLY if insertion succeeded
+            if (process.env.ASYNC_WEBHOOK_PROCESSING === "true") {
+              try {
+                await Job.create({
+                  type: "webhook_event",
+                  tenantId,
+                  webhookEventId: event._id,
+                });
+              } catch (jobErr: any) {
+                if (jobErr.code === 11000) {
+                  console.log(`[Webhook] Duplicate Job ignored (wamid: ${providerMessageId})`);
+                } else {
+                  throw jobErr;
+                }
+              }
+            } else {
+              await communicationService.handleMessageStatus(tenantId.toString(), status);
+            }
+          }
+        }
+      }
+    }
   } catch (error) {
     console.error("[Webhook] Error processing event:", error);
-  }
-
-  // Meta requires a 200 OK response to acknowledge receipt.
-  if (!res.headersSent) {
-    res.status(200).send("EVENT_RECEIVED");
   }
 };

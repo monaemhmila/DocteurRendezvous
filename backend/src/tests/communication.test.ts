@@ -51,7 +51,10 @@ async function runTests() {
     await Message.deleteMany({ providerMessageId: { $in: testWamids } });
     await Conversation.deleteMany({ contactWaId: "+21699000111" });
 
-
+    // Clean WebhookEvent collection to prevent idempotency blocks from previous aborted runs
+    const { WebhookEvent } = await import("../modules/communications/webhook-event.model");
+    await WebhookEvent.deleteMany({ providerMessageId: { $in: testWamids } });
+    await WebhookEvent.deleteMany({ tenantId: { $in: allTestTenantIds } });    
     // Setup Test Data
     await Tenant.create([
       {
@@ -108,7 +111,7 @@ async function runTests() {
     
     let webhookError: any = null;
     try {
-      await communicationService.handleWebhook(payloadInbound);
+      await handleWebhookEvent({ body: payloadInbound } as any, new MockResponse() as any);
     } catch (err) {
       webhookError = err;
       console.error('Webhook error:', err);
@@ -184,11 +187,11 @@ async function runTests() {
     // TEST 7 & 8 — Cross-tenant conversation & message access
     // -------------------------------------------------------------
     console.log("\n▶ Running TEST 7 & 8 — Cross-tenant access check...");
-    const reqAuthB = { user: { tenantId: tenantBId }, params: { id: conv1._id.toString() } };
+    const reqAuthB = { user: { tenantId: tenantBId }, query: {}, params: { id: conv1._id.toString() } };
     const resAuthB = new MockResponse();
     
     await getConversations(reqAuthB as any, resAuthB as any);
-    if (resAuthB.body.length !== 0) throw new Error("Tenant B should not see Tenant A conversations");
+    if (!resAuthB.body.data || resAuthB.body.data.length !== 0) throw new Error("Tenant B should not see Tenant A conversations");
 
     const resAuthB2 = new MockResponse();
     await getConversationMessages(reqAuthB as any, resAuthB2 as any);
@@ -199,7 +202,7 @@ async function runTests() {
     // TEST 9 — Absence of tenantId frontend
     // -------------------------------------------------------------
     console.log("\n▶ Running TEST 9 — Absence of tenantId frontend check...");
-    const reqNoAuth = { user: null, params: { id: conv1._id.toString() } };
+    const reqNoAuth = { user: null, query: {}, params: { id: conv1._id.toString() } };
     const resNoAuth = new MockResponse();
     await getConversations(reqNoAuth as any, resNoAuth as any);
     if (resNoAuth.statusCode !== 403) throw new Error("Missing auth should return 403");
@@ -209,7 +212,7 @@ async function runTests() {
     // TEST 10 — accessToken jamais retourné
     // -------------------------------------------------------------
     console.log("\n▶ Running TEST 10 — accessToken never returned...");
-    const reqAuthA = { user: { tenantId: tenantAId } };
+    const reqAuthA = { user: { tenantId: tenantAId }, query: {} };
     const resAuthA = new MockResponse();
     await getConversations(reqAuthA as any, resAuthA as any);
     const jsonStr = JSON.stringify(resAuthA.body);

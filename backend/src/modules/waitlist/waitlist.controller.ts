@@ -5,6 +5,7 @@ import { WaitlistEntry } from "./waitlist.model";
 import { FollowUpTask } from "../followups/followup.model";
 import { Appointment } from "../appointments/appointment.model";
 import mongoose from "mongoose";
+import { parsePagination, buildPaginationMeta } from "../../shared/utils/pagination";
 
 export const waitlistController = {
   getEntries: async (req: AuthRequest, res: Response) => {
@@ -12,17 +13,19 @@ export const waitlistController = {
       const tenantId = req.user?.tenantId;
       if (!tenantId) return res.status(403).json({ error: "No tenant context" });
       
-      const { patientId } = req.query;
-      const query: any = { tenantId, status: "active" };
-      if (patientId) {
-        query.patientId = patientId;
-      }
+      const { patientId, status, page, limit } = req.query;
+      const pagination = parsePagination(page, limit);
 
-      const entries = await WaitlistEntry.find(query)
-        .sort({ priority: -1, createdAt: 1 })
-        .populate("patientId", "firstName lastName phone");
-      
-      res.json(entries);
+      const { data, total } = await waitlistService.listEntriesPaginated(
+        tenantId,
+        status as string | undefined,
+        patientId as string | undefined,
+        pagination.skip,
+        pagination.limit
+      );
+
+      const meta = buildPaginationMeta(total, pagination.page, pagination.limit);
+      res.json({ data, meta });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

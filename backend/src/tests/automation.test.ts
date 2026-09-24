@@ -153,11 +153,18 @@ async function runAutomationTests() {
     // Tenant B attempts to update Tenant A's appointment
     // -------------------------------------------------------------
     console.log("\n▶ Running TEST 7 — Cross-Tenant Appointment Status Isolation...");
-    const updatedCross = await appointmentService.updateStatus(apptCancel._id.toString(), "cancelled", tenantBId);
-    if (updatedCross !== null) {
-      throw new Error("TEST 7 FAILED: Tenant B was able to update Tenant A's appointment!");
+    try {
+      const updatedCross = await appointmentService.updateStatus(apptCancel._id.toString(), "cancelled", tenantBId);
+      if (updatedCross) {
+        throw new Error("TEST 7 FAILED: Tenant B was able to update Tenant A's appointment!");
+      }
+    } catch (error: any) {
+      if (error.message === "Appointment not found") {
+        console.log("✅ TEST 7 PASSED: Cross-tenant appointment update rejected.");
+      } else {
+        throw error;
+      }
     }
-    console.log("✅ TEST 7 PASSED: Cross-tenant appointment update rejected.");
 
     // -------------------------------------------------------------
     // TEST 8 — Association Consistency

@@ -105,7 +105,7 @@ async function runPhase611Tests() {
 
   // -- A: Confirmed appointment protection --
   try {
-    const appt = await Appointment.create({ tenantId: tId, patientId: patient._id, doctorId: doc._id,
+    const appt = await Appointment.create({ tenantId: tId, patientId: patient._id, doctorId: doc._id.toString(),
       date: FUTURE_DATE_1, startTime: "09:00", endTime: "09:30", durationMin: 30,
       treatment: "Consultation", status: "confirmed", source: "manual" });
     const conv = await Conversation.create({ tenantId: tId, patientId: patient._id,
@@ -141,7 +141,7 @@ async function runPhase611Tests() {
 
   // -- C: DB wins over wrong patient claim --
   try {
-    const appt = await Appointment.create({ tenantId: tId, patientId: patient._id, doctorId: doc._id,
+    const appt = await Appointment.create({ tenantId: tId, patientId: patient._id, doctorId: doc._id.toString(),
       date: FUTURE_DATE_2, startTime: "10:00", endTime: "10:30", durationMin: 30,
       treatment: "DÃƒÂ©tartrage", status: "scheduled", source: "manual" });
     const conv = await Conversation.create({ tenantId: tId, patientId: patient._id,
@@ -162,7 +162,7 @@ async function runPhase611Tests() {
 
   // -- D: Explicit reschedule Ã¢â‚¬â€ no premature mutation --
   try {
-    const appt = await Appointment.create({ tenantId: tId, patientId: patient._id, doctorId: doc._id,
+    const appt = await Appointment.create({ tenantId: tId, patientId: patient._id, doctorId: doc._id.toString(),
       date: FUTURE_DATE_1, startTime: "09:00", endTime: "09:30", durationMin: 30,
       treatment: "Consultation", status: "scheduled", source: "manual" });
     const conv = await Conversation.create({ tenantId: tId, patientId: patient._id,
@@ -184,7 +184,7 @@ async function runPhase611Tests() {
 
   // -- E: Explicit change confirmation ? DB updated --
   try {
-    const appt = await Appointment.create({ tenantId: tId, patientId: patient._id, doctorId: doc._id,
+    const appt = await Appointment.create({ tenantId: tId, patientId: patient._id, doctorId: doc._id.toString(),
       date: FUTURE_DATE_1, startTime: "09:00", endTime: "09:30", durationMin: 30,
       treatment: "Consultation", status: "scheduled", source: "manual" });
     const conv = await Conversation.create({ tenantId: tId, patientId: patient._id,
@@ -209,7 +209,7 @@ async function runPhase611Tests() {
 
   // -- F: Availability question ? no mutation --
   try {
-    const appt = await Appointment.create({ tenantId: tId, patientId: patient._id, doctorId: doc._id,
+    const appt = await Appointment.create({ tenantId: tId, patientId: patient._id, doctorId: doc._id.toString(),
       date: FUTURE_DATE_1, startTime: "09:00", endTime: "09:30", durationMin: 30,
       treatment: "Consultation", status: "confirmed", source: "manual" });
     const conv = await Conversation.create({ tenantId: tId, patientId: patient._id,
@@ -231,7 +231,7 @@ async function runPhase611Tests() {
 
   // -- G: Ambiguous request with existing appointment ? clarification, no booking --
   try {
-    await Appointment.create({ tenantId: tId, patientId: patient._id, doctorId: doc._id,
+    await Appointment.create({ tenantId: tId, patientId: patient._id, doctorId: doc._id.toString(),
       date: FUTURE_DATE_1, startTime: "09:00", endTime: "09:30", durationMin: 30,
       treatment: "Consultation", status: "confirmed", source: "manual" });
     const conv = await Conversation.create({ tenantId: tId, patientId: patient._id,
@@ -310,7 +310,7 @@ async function runPhase611Tests() {
 
   // -- P4: Reschedule to past date ? rejected --
   try {
-    const appt = await Appointment.create({ tenantId: tId, patientId: patient._id, doctorId: doc._id,
+    const appt = await Appointment.create({ tenantId: tId, patientId: patient._id, doctorId: doc._id.toString(),
       date: FUTURE_DATE_1, startTime: "09:00", endTime: "09:30", durationMin: 30,
       treatment: "Consultation", status: "scheduled", source: "manual" });
     let err = "";
@@ -352,7 +352,7 @@ async function runPhase611Tests() {
 
   // -- P6: Confirmed appointment unchanged even when patient claims wrong date --
   try {
-    const appt = await Appointment.create({ tenantId: tId, patientId: patient._id, doctorId: doc._id,
+    const appt = await Appointment.create({ tenantId: tId, patientId: patient._id, doctorId: doc._id.toString(),
       date: FUTURE_DATE_2, startTime: "10:00", endTime: "10:30", durationMin: 30,
       treatment: "Consultation", status: "confirmed", source: "manual" });
     const conv = await Conversation.create({ tenantId: tId, patientId: patient._id,

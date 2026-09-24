@@ -10,7 +10,15 @@
     "seed-db": "tsx src/scripts/seed-database.ts",
     "test": "tsx src/tests/recovery.test.ts",
     "test:phase2:concurrency": "tsx src/tests/concurrency.p0.test.ts",
-    "test:all": "tsx src/tests/ai.test.ts && tsx src/tests/automation.test.ts && tsx src/tests/communication.test.ts && tsx src/tests/detection.test.ts && tsx src/tests/followup.test.ts && tsx src/tests/integration.test.ts && tsx src/tests/phase4.test.ts && tsx src/tests/phase6.9.test.ts && tsx src/tests/phase6.10.test.ts && tsx src/tests/recovery.test.ts && tsx src/tests/waitlist.test.ts && tsx src/tests/concurrency.p0.test.ts"
+    "test:phase3.1:idempotency": "tsx src/tests/phase3.1.idempotency.test.ts",
+    "test:phase3.1:webhook": "tsx src/tests/phase3.1.webhook.test.ts",
+    "test:phase3.2:worker": "tsx src/tests/phase3.2.worker.test.ts",
+    "test:phase3.3:outbox": "tsx src/tests/phase3.3.outbox.test.ts",
+    "test:phase3.4:pagination": "tsx src/tests/phase3.4.pagination.test.ts",
+    "test:phase3.4:appointments": "tsx src/tests/phase3.4.pagination-appointments.test.ts",
+    "test:phase3.4:conversations": "tsx src/tests/phase3.4.pagination-conversations.test.ts",
+    "test:phase3.4:messages": "tsx src/tests/phase3.4.pagination-messages.test.ts",
+    "test:all": "tsx src/tests/ai.test.ts && tsx src/tests/automation.test.ts && tsx src/tests/communication.test.ts && tsx src/tests/detection.test.ts && tsx src/tests/followup.test.ts && tsx src/tests/integration.test.ts && tsx src/tests/phase4.test.ts && tsx src/tests/phase6.9.test.ts && tsx src/tests/phase6.10.test.ts && tsx src/tests/recovery.test.ts && tsx src/tests/waitlist.test.ts && tsx src/tests/concurrency.p0.test.ts && tsx src/tests/phase3.1.idempotency.test.ts && tsx src/tests/phase3.1.webhook.test.ts && tsx src/tests/phase3.2.worker.test.ts && tsx src/tests/phase3.3.outbox.test.ts && tsx src/tests/phase3.4.pagination.test.ts && tsx src/tests/phase3.4.pagination-appointments.test.ts && tsx src/tests/phase3.4.pagination-waitlist.test.ts && tsx src/tests/phase3.4.pagination-conversations.test.ts && tsx src/tests/phase3.4.pagination-messages.test.ts"
   },
   "keywords": [],
   "author": "",

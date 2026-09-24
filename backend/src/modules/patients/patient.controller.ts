@@ -1,21 +1,24 @@
 import { Response } from "express";
 import { AuthRequest } from "../../shared/middleware/requireAuth";
 import { patientService } from "./patient.service";
+import { parsePagination } from "../../shared/utils/pagination";
 
 export const getPatients = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(403).json({ error: "No tenant context" });
 
-    let patients;
+    const pagination = parsePagination(req.query.page, req.query.limit);
+
+    let result;
     const { search } = req.query;
     if (search && typeof search === "string") {
-      patients = await patientService.searchPatients(tenantId, search);
+      result = await patientService.searchPatients(tenantId, search, pagination);
     } else {
-      patients = await patientService.getPatients(tenantId);
+      result = await patientService.getPatients(tenantId, pagination);
     }
 
-    const formatted = patients.map((p) => ({
+    const formatted = result.data.map((p: any) => ({
       _id: p._id.toString(),
       id: p._id.toString(),
       firstName: p.firstName,
@@ -37,7 +40,10 @@ export const getPatients = async (req: AuthRequest, res: Response) => {
       },
     }));
 
-    res.json(formatted);
+    res.json({
+      data: formatted,
+      meta: result.meta
+    });
   } catch (error) {
     console.error("getPatients error:", error);
     res.status(500).json({ error: "Failed to fetch patients" });

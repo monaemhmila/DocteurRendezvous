@@ -37,6 +37,8 @@ import {
   Stethoscope,
   ArrowRight,
   Send,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -68,6 +70,8 @@ function WaitlistPage() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [waitlistPage, setWaitlistPage] = useState(1);
+  const waitlistLimit = 50; // reasonable page size for waitlist
 
   // Data Queries
   const { data: allTasks = [], isLoading: isLoadingTasks } = useQuery<IFollowUpTask[]>({
@@ -75,14 +79,23 @@ function WaitlistPage() {
     queryFn: () => api.get("/follow-ups?type=slot_fill_offer"),
   });
 
-  const { data: waitlist = [], isLoading: isLoadingWaitlist } = useQuery<IWaitlistEntry[]>({
-    queryKey: ["waitlist"],
-    queryFn: () => api.get("/waitlist"),
+  const { data: waitlistResponse, isLoading: isLoadingWaitlist } = useQuery<{ data: IWaitlistEntry[], meta: any }>({
+    queryKey: ["waitlist", waitlistPage, waitlistLimit],
+    queryFn: async () => {
+      const res = await api.get(`/waitlist?page=${waitlistPage}&limit=${waitlistLimit}`);
+      return res as { data: IWaitlistEntry[], meta: any };
+    },
   });
+
+  const waitlist: IWaitlistEntry[] = waitlistResponse?.data || [];
+  const waitlistMeta = waitlistResponse?.meta;
 
   const { data: appointments = [] } = useQuery<any[]>({
     queryKey: ["appointments"],
-    queryFn: () => api.get("/appointments"),
+    queryFn: async () => {
+      const res = await api.get("/appointments?limit=100");
+      return Array.isArray(res) ? res : (res.data || []);
+    },
   });
 
   // Client-side filtering for pending/in_progress offers
@@ -124,7 +137,7 @@ function WaitlistPage() {
     onError: (err: any) => toast.error(err.message || "Impossible de simuler"),
   });
 
-  // Filtered waitlist
+  // Filtered waitlist (client-side filter on the current page)
   const filteredWaitlist = waitlist.filter((entry) => {
     const p = entry.patientId as IPatient;
     const name = p ? `${p.firstName} ${p.lastName}`.toLowerCase() : "";
@@ -195,7 +208,7 @@ function WaitlistPage() {
             </span>
             <User className="size-4 text-primary" />
           </div>
-          <p className="mt-2 text-2xl font-bold text-foreground">{waitlist.length}</p>
+          <p className="mt-2 text-2xl font-bold text-foreground">{waitlistMeta?.total ?? waitlist.length}</p>
           <p className="text-xs text-muted-foreground">Demandes actives</p>
         </div>
 
@@ -406,6 +419,32 @@ function WaitlistPage() {
               })
             )}
           </div>
+
+          {waitlistMeta && waitlistMeta.totalPages > 1 && (
+            <div className="flex justify-between items-center py-4 border-t border-border mt-4">
+              <span className="text-sm text-muted-foreground">
+                Page {waitlistMeta.page} sur {waitlistMeta.totalPages} — {waitlistMeta.total} patient{waitlistMeta.total > 1 ? "s" : ""}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={waitlistMeta.page <= 1}
+                  onClick={() => setWaitlistPage(p => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="size-4 mr-1" /> Précédent
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={waitlistMeta.page >= waitlistMeta.totalPages}
+                  onClick={() => setWaitlistPage(p => p + 1)}
+                >
+                  Suivant <ChevronRight className="size-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
         </SectionCard>
       </div>
     </div>
@@ -721,7 +760,10 @@ function AddWaitlistDialog() {
 
   const { data: patients = [] } = useQuery<IPatient[]>({
     queryKey: ["patients"],
-    queryFn: () => api.get("/patients"),
+    queryFn: async () => {
+      const res = await api.get("/patients?limit=100");
+      return Array.isArray(res) ? res : (res.data || []);
+    },
   });
 
   const mutation = useMutation({

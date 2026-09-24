@@ -3,13 +3,26 @@ import { AuthRequest } from "../../shared/middleware/requireAuth";
 import { appointmentService } from "./appointment.service";
 import { availabilityService } from "./availability.service";
 
+import { parsePagination, buildPaginationMeta } from "../../shared/utils/pagination";
+
 export const getAppointments = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenantId;
     if (!tenantId) return res.status(403).json({ error: "No tenant context" });
 
-    const { patientId } = req.query;
-    const appointments = await appointmentService.getAppointments(tenantId, patientId as string);
+    const { patientId, status, date, dateFrom, dateTo, page, limit } = req.query;
+    const pagination = parsePagination(page, limit);
+
+    const { data: appointments, total } = await appointmentService.getAppointments(
+      tenantId, 
+      patientId as string | undefined,
+      status as string | undefined,
+      date as string | undefined,
+      dateFrom as string | undefined,
+      dateTo as string | undefined,
+      pagination.skip,
+      pagination.limit
+    );
 
     const formatted = appointments.map((a: any) => ({
       _id: a._id.toString(),
@@ -28,7 +41,10 @@ export const getAppointments = async (req: AuthRequest, res: Response) => {
       status: a.status
     }));
 
-    res.json(formatted);
+    res.json({
+      data: formatted,
+      meta: buildPaginationMeta(total, pagination.page, pagination.limit)
+    });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch appointments" });
   }

@@ -70,7 +70,10 @@ function PatientsPage() {
 
   const { data: patients = [], isLoading, isError } = useQuery<BackendPatient[]>({
     queryKey: ["patients"],
-    queryFn: () => api.get("/patients"),
+    queryFn: async () => {
+      const res = await api.get("/patients?limit=1000");
+      return Array.isArray(res) ? res : (res.data || []);
+    },
   });
 
   const createPatient = useMutation({

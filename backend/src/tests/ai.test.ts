@@ -771,10 +771,15 @@ async function runTests() {
       // Ensure business hours are NOT set
       await Tenant.findByIdAndUpdate(tenantAId, { $set: { "settings.businessHours": {} } });
       
+      // Use a dynamically generated future date to prevent "PAST" status error
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 10);
+      const futureDateIso = futureDate.toISOString().split('T')[0];
+      
       mockProvider.response = JSON.stringify({ 
         reply: "", 
         intent: "appointment_availability", 
-        scheduling: { date: "2026-09-15", durationMin: 30 },
+        scheduling: { date: futureDateIso, durationMin: 30 },
         action: null 
       });
       mockProvider.secondResponse = JSON.stringify({
@@ -787,7 +792,11 @@ async function runTests() {
       
       // Check that the system update message for missing hours was appended
       const sysMsg = mockProvider.lastMessages.find(m => m.role === "system" && m.content.includes("Cannot fetch slots: business_hours_not_configured"));
-      if (!sysMsg) throw new Error("System update for missing business hours not injected");
+      if (!sysMsg) {
+        console.log("=== DEBUG LAST MESSAGES ===");
+        console.dir(mockProvider.lastMessages, { depth: null });
+        throw new Error("System update for missing business hours not injected");
+      }
       
       console.log("✅ TEST 31 PASSED");
       passed++;
@@ -801,10 +810,16 @@ async function runTests() {
       // Delete any doctor
       await mongoose.model("User").deleteMany({ tenantId: tenantAId });
 
+      // Use a dynamically generated future date (Must be a Tuesday)
+      const futureDate = new Date();
+      const daysUntilTuesday = (2 - futureDate.getDay() + 7) % 7 || 7;
+      futureDate.setDate(futureDate.getDate() + daysUntilTuesday);
+      const futureDateIso = futureDate.toISOString().split('T')[0];
+
       mockProvider.response = JSON.stringify({ 
         reply: "", 
         intent: "appointment_availability", 
-        scheduling: { date: "2026-09-15", durationMin: 30 },
+        scheduling: { date: futureDateIso, durationMin: 30 },
         action: null 
       });
       mockProvider.secondResponse = JSON.stringify({
@@ -815,7 +830,11 @@ async function runTests() {
       const { suggestion } = await aiService.getSuggestion(tenantAId.toString(), convWithPatient._id.toString());
       
       const sysMsg = mockProvider.lastMessages.find(m => m.role === "system" && m.content.includes("Cannot fetch slots: no_doctor_configured"));
-      if (!sysMsg) throw new Error("System update for missing doctor not injected");
+      if (!sysMsg) {
+        console.log("=== DEBUG LAST MESSAGES ===");
+        console.dir(mockProvider.lastMessages, { depth: null });
+        throw new Error("System update for missing doctor not injected");
+      }
       
       console.log("✅ TEST 32 PASSED");
       passed++;
@@ -837,11 +856,16 @@ async function runTests() {
       });
 
       // Existing appointment 09:30 - 10:00 (which blocks 09:30-10:00)
+      const futureTue = new Date();
+      const daysUntilTue = (2 - futureTue.getDay() + 7) % 7 || 7;
+      futureTue.setDate(futureTue.getDate() + daysUntilTue);
+      const futureTueIso = futureTue.toISOString().split('T')[0];
+
       await Appointment.create({
         tenantId: tenantAId,
         patientId: patientA._id,
         doctorId: doc._id.toString(),
-        date: "2026-09-15", // Tuesday
+        date: futureTueIso, // Tuesday
         startTime: "09:30",
         endTime: "10:00",
         durationMin: 30,
@@ -852,7 +876,7 @@ async function runTests() {
       mockProvider.response = JSON.stringify({ 
         reply: "", 
         intent: "appointment_availability", 
-        scheduling: { date: "2026-09-15", durationMin: 30 },
+        scheduling: { date: futureTueIso, durationMin: 30 },
         action: null 
       });
       mockProvider.secondResponse = JSON.stringify({
@@ -862,9 +886,13 @@ async function runTests() {
 
       await aiService.getSuggestion(tenantAId.toString(), convWithPatient._id.toString());
       
-      // AI should have received system prompt with slots 09:00-09:30 and 10:00-10:30, and 10:30-11:00.
-      const sysMsg = mockProvider.lastMessages.find(m => m.role === "system" && m.content.includes("Available slots for 2026-09-15: 09:00-09:30, 10:00-10:30, 10:30-11:00"));
-      if (!sysMsg) throw new Error("Correct available slots were not injected into AI context");
+      // AI should have received system prompt with slots 09h00, 10h00, 10h30
+      const sysMsg = mockProvider.lastMessages.find(m => m.role === "system" && m.content.includes("09h00, 10h00, 10h30"));
+      if (!sysMsg) {
+        console.log("=== DEBUG LAST MESSAGES ===");
+        console.dir(mockProvider.lastMessages, { depth: null });
+        throw new Error("Correct available slots were not injected into AI context");
+      }
       
       console.log("✅ TEST 33-35 PASSED");
       passed += 3; // Counting as 3 tests as requested in the batch
@@ -874,6 +902,11 @@ async function runTests() {
     {
       mockProvider.reset();
       
+      const futureTue = new Date();
+      const daysUntilTue = (2 - futureTue.getDay() + 7) % 7 || 7;
+      futureTue.setDate(futureTue.getDate() + daysUntilTue);
+      const futureTueIso = futureTue.toISOString().split('T')[0];
+
       // Tenant B setup
       await Tenant.findByIdAndUpdate(tenantBId, { $set: { "settings.businessHours": { "tuesday": [{ start: "09:00", end: "10:00" }] } } });
       const docB = await mongoose.model("User").create({
@@ -890,7 +923,7 @@ async function runTests() {
         tenantId: tenantBId,
         patientId: new mongoose.Types.ObjectId(),
         doctorId: docB._id.toString(),
-        date: "2026-09-15",
+        date: futureTueIso,
         startTime: "09:00",
         endTime: "10:00",
         durationMin: 60,
@@ -902,7 +935,7 @@ async function runTests() {
       mockProvider.response = JSON.stringify({ 
         reply: "", 
         intent: "appointment_availability", 
-        scheduling: { date: "2026-09-15", durationMin: 30 },
+        scheduling: { date: futureTueIso, durationMin: 30 },
         action: null 
       });
       mockProvider.secondResponse = JSON.stringify({
@@ -912,9 +945,9 @@ async function runTests() {
 
       await aiService.getSuggestion(tenantAId.toString(), convWithPatient._id.toString());
       
-      // Tenant A's slots should include 09:00-09:30 (since Tenant B's appointment doesn't affect Tenant A)
-      const sysMsg = mockProvider.lastMessages.find(m => m.role === "system" && m.content.includes("Available slots for 2026-09-15"));
-      if (!sysMsg || !sysMsg.content.includes("09:00-09:30")) {
+      // Tenant A's slots should include 09:00 (since Tenant B's appointment doesn't affect Tenant A)
+      const sysMsg = mockProvider.lastMessages.find(m => m.role === "system" && m.content.includes("09h00"));
+      if (!sysMsg) {
          throw new Error("Cross-tenant bleed! Tenant B's appointment blocked Tenant A's availability.");
       }
       
@@ -929,10 +962,15 @@ async function runTests() {
       const msgCountBefore = await Message.countDocuments();
       const aptCountBefore = await Appointment.countDocuments();
 
+      const futureTue = new Date();
+      const daysUntilTue = (2 - futureTue.getDay() + 7) % 7 || 7;
+      futureTue.setDate(futureTue.getDate() + daysUntilTue);
+      const futureTueIso = futureTue.toISOString().split('T')[0];
+
       mockProvider.response = JSON.stringify({ 
         reply: "", 
         intent: "appointment_availability", 
-        scheduling: { date: "2026-09-15", durationMin: 30 },
+        scheduling: { date: futureTueIso, durationMin: 30 },
         action: null 
       });
       mockProvider.secondResponse = JSON.stringify({
@@ -976,7 +1014,7 @@ async function runTests() {
       const bookingDate = bookingRef.toISOString().split("T")[0];
       // Isolation: no leftover may exist on the dynamic date, and the strict 6.8/6.9 rule
       // requires exactly one doctor — remove any dentist left by earlier tests, create exactly one.
-      await Appointment.deleteMany({ tenantId: tenantAId, date: bookingDate });
+      await Appointment.deleteMany({ tenantId: tenantAId });
       await mongoose.model("User").deleteMany({ tenantId: tenantAId });
       const uniqueEmail = `docA_booking_${Date.now()}@dentalai.com`;
       const doc = await mongoose.model("User").create({

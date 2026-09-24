@@ -28,7 +28,7 @@ const allowedOrigins = corsOriginEnv
 
 app.use(
   cors({
-    origin: (origin, callback) => {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       if (!origin || allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -40,7 +40,7 @@ app.use(
 );
 app.use(
   express.json({
-    verify: (req: Request, _res, buf) => {
+    verify: (req: Request, _res: express.Response, buf: Buffer) => {
       (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
     },
   })
@@ -60,12 +60,12 @@ app.use("/api/v1/communications", communicationRoutes);
 app.use("/api/v1/ai", aiRoutes);
 
 // Health check
-app.get("/health", (req, res) => {
+app.get("/health", (req: Request, res: express.Response) => {
   res.status(200).json({ status: "ok", timestamp: new Date() });
 });
 
 // 404 Handler
-app.use((req, res) => {
+app.use((req: Request, res: express.Response) => {
   res.status(404).json({ error: "Not Found" });
 });
 

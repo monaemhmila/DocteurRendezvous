@@ -4,6 +4,7 @@ import { Conversation, Message } from "./communication.model";
 import { Patient } from "../patients/patient.model";
 import { Tenant } from "../tenants/tenant.model";
 import { MetaWhatsAppProvider } from "./providers/messaging.provider";
+import { parsePagination, buildPaginationMeta } from "../../shared/utils/pagination";
 
 const whatsappProvider = new MetaWhatsAppProvider();
 
@@ -18,12 +19,61 @@ export const getConversations = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: "No tenant context" });
     }
 
-    const conversations = await Conversation.find({ tenantId })
-      .populate("patientId", "firstName lastName phone")
-      .sort({ lastMessageAt: -1 })
-      .lean();
+    const { page, limit } = req.query;
+    const pagination = parsePagination(page, limit);
 
-    return res.json(conversations);
+    // Stable sort: lastMessageAt DESC (most recent first), _id DESC (tiebreak)
+    // Uses a single aggregation to avoid N+1 queries.
+    // We do NOT load message history here — only the last message summary.
+    const tenantObjectId = new (require("mongoose").Types.ObjectId)(tenantId);
+
+    const [data, total] = await Promise.all([
+      Conversation.aggregate([
+        { $match: { tenantId: tenantObjectId } },
+        { $sort: { lastMessageAt: -1, _id: -1 } },
+        { $skip: pagination.skip },
+        { $limit: pagination.limit },
+        // Join patient info (only needed fields)
+        {
+          $lookup: {
+            from: "patients",
+            localField: "patientId",
+            foreignField: "_id",
+            as: "_patient",
+            pipeline: [{ $project: { firstName: 1, lastName: 1, phone: 1 } }]
+          }
+        },
+        { $addFields: { patientId: { $arrayElemAt: ["$_patient", 0] } } },
+        // Join last message only (no full history loaded)
+        {
+          $lookup: {
+            from: "messages",
+            let: { convId: "$_id", tid: "$tenantId" },
+            pipeline: [
+              { $match: { $expr: { $and: [{ $eq: ["$conversationId", "$$convId"] }, { $eq: ["$tenantId", "$$tid"] }] } } },
+              { $sort: { createdAt: -1 } },
+              { $limit: 1 },
+              { $project: { content: 1, direction: 1, createdAt: 1, status: 1 } }
+            ],
+            as: "_lastMessage"
+          }
+        },
+        { $addFields: { lastMessage: { $arrayElemAt: ["$_lastMessage", 0] } } },
+        // Strip internal fields; keep only what the frontend needs
+        {
+          $project: {
+            _patient: 0,
+            _lastMessage: 0,
+            pendingBookingContext: 0,
+            pendingBookingIntent: 0
+          }
+        }
+      ]),
+      Conversation.countDocuments({ tenantId: tenantObjectId })
+    ]);
+
+    const meta = buildPaginationMeta(total, pagination.page, pagination.limit);
+    return res.json({ data, meta });
   } catch (error) {
     console.error("[getConversations] Error:", error);
     return res.status(500).json({ error: "Internal server error" });
@@ -45,11 +95,20 @@ export const getConversationMessages = async (req: AuthRequest, res: Response) =
       return res.status(404).json({ error: "Conversation not found" });
     }
 
-    const messages = await Message.find({ tenantId, conversationId: id })
-      .sort({ createdAt: 1 })
-      .lean();
+    const { page, limit } = req.query;
+    const pagination = parsePagination(page, limit);
 
-    return res.json(messages);
+    const [data, total] = await Promise.all([
+      Message.find({ tenantId, conversationId: id })
+        .sort({ createdAt: -1, _id: -1 }) // Stable sort for pagination
+        .skip(pagination.skip)
+        .limit(pagination.limit)
+        .lean(),
+      Message.countDocuments({ tenantId, conversationId: id })
+    ]);
+
+    const meta = buildPaginationMeta(total, pagination.page, pagination.limit);
+    return res.json({ data, meta });
   } catch (error) {
     console.error("[getConversationMessages] Error:", error);
     return res.status(500).json({ error: "Internal server error" });

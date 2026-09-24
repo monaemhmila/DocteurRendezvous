@@ -51,13 +51,19 @@ function Dashboard() {
   });
 
   const { data: appointmentsData = [], isLoading: isLoadingAppts } = useQuery<IAppointment[]>({
-    queryKey: ["appointments"],
-    queryFn: () => api.get("/appointments"),
+    queryKey: ["appointments", "today", todayStr],
+    queryFn: async () => {
+      const res = await api.get(`/appointments?date=${todayStr}&limit=100`);
+      return Array.isArray(res) ? res : (res.data || []);
+    },
   });
 
   const { data: patientsData = [], isLoading: isLoadingPatients } = useQuery<IPatient[]>({
     queryKey: ["patients"],
-    queryFn: () => api.get("/patients"),
+    queryFn: async () => {
+      const res = await api.get("/patients?limit=100");
+      return Array.isArray(res) ? res : (res.data || []);
+    },
   });
 
   const isLoading = isLoadingStats || isLoadingAppts || isLoadingPatients;

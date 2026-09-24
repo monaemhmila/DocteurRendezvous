@@ -135,10 +135,19 @@ function PatientProfilePage() {
     queryFn: () => api.get(`/patients/${id}`),
   });
 
-  const { data: appointments = [], isLoading: isLoadingAppointments } = useQuery<IAppointment[]>({
-    queryKey: ["appointments", "patient", id],
-    queryFn: () => api.get(`/appointments?patientId=${id}`),
+  const [appointmentsPage, setAppointmentsPage] = useState(1);
+  const [appointmentsLimit, setAppointmentsLimit] = useState(20);
+
+  const { data: appointmentsResponse, isLoading: isLoadingAppointments } = useQuery<{ data: IAppointment[], meta: any }>({
+    queryKey: ["appointments", "patient", id, appointmentsPage, appointmentsLimit],
+    queryFn: async () => {
+      const res = await api.get(`/appointments?patientId=${id}&page=${appointmentsPage}&limit=${appointmentsLimit}`);
+      return res as { data: IAppointment[], meta: any };
+    },
   });
+
+  const appointments = appointmentsResponse?.data || [];
+  const appointmentsMeta = appointmentsResponse?.meta;
 
   const { data: opportunities = [], isLoading: isLoadingRecovery } = useQuery<IRecovery[]>({
     queryKey: ["recovery", "patient", id],
@@ -258,7 +267,7 @@ function PatientProfilePage() {
   const totalVisits = appointments.filter((a) => a.status === "completed").length || p.metrics?.totalVisits || 0;
   const noShows = appointments.filter((a) => a.status === "no_show").length || p.metrics?.noShowCount || 0;
   const cancelledCount = appointments.filter((a) => a.status === "cancelled").length;
-  const totalBookedAppointments = appointments.length;
+  const totalBookedAppointments = appointmentsMeta?.total || 0;
   
   const attendanceRate = totalBookedAppointments > 0
     ? Math.round(((totalVisits + appointments.filter((a) => a.status === "scheduled" || a.status === "confirmed").length) / totalBookedAppointments) * 100)
@@ -461,7 +470,7 @@ function PatientProfilePage() {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="bg-transparent border-b border-border w-full justify-start rounded-none p-0 h-auto gap-6 overflow-x-auto">
               <TabsTrigger value="appointments" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
-                <Calendar className="size-4 mr-2" /> Historique ({appointments.length})
+                <Calendar className="size-4 mr-2" /> Historique ({appointmentsMeta?.total || 0})
               </TabsTrigger>
               <TabsTrigger value="medical" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
                 <HeartPulse className="size-4 mr-2" /> Dossier & Notes
@@ -483,7 +492,7 @@ function PatientProfilePage() {
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1 bg-muted p-0.5 rounded-lg text-[11px]">
                   {[
-                    { id: "all", label: `Tous (${appointments.length})` },
+                    { id: "all", label: `Tous (${appointmentsMeta?.total || 0})` },
                     { id: "upcoming", label: `À venir (${upcomingAppointments.length})` },
                     { id: "completed", label: `Effectués (${pastAppointments.length})` },
                     { id: "cancelled", label: `Annulés / Absents (${cancelledCount + noShows})` },
@@ -660,6 +669,32 @@ function PatientProfilePage() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {appointmentsMeta && appointmentsMeta.totalPages > 1 && (
+              <div className="flex justify-between items-center py-4 border-t border-border mt-4">
+                <span className="text-sm text-muted-foreground">
+                  Page {appointmentsMeta.page} sur {appointmentsMeta.totalPages}
+                </span>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    disabled={appointmentsMeta.page <= 1}
+                    onClick={() => setAppointmentsPage(p => Math.max(1, p - 1))}
+                  >
+                    <ChevronLeft className="size-4 mr-1" /> Précédent
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    disabled={appointmentsMeta.page >= appointmentsMeta.totalPages}
+                    onClick={() => setAppointmentsPage(p => p + 1)}
+                  >
+                    Suivant <ChevronRight className="size-4 ml-1" />
+                  </Button>
+                </div>
               </div>
             )}
           </SectionCard>

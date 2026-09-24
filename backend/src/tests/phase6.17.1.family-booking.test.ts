@@ -26,7 +26,7 @@ import { Conversation, Message } from "../modules/communications/communication.m
 import { AIAutoBookingService } from "../modules/ai/ai.auto-booking.service";
 import { AIService } from "../modules/ai/ai.service";
 import { IAIProvider, IChatMessage } from "../modules/ai/ai.provider.interface";
-import { IMessagingProvider, SendMessagePayload } from "../modules/communications/providers/messaging.provider";
+import { IMessagingProvider, SendMessageParams } from "../modules/communications/providers/messaging.provider";
 
 dotenv.config();
 
@@ -46,7 +46,7 @@ class MockAIProvider implements IAIProvider {
 }
 
 class NoOpMessaging implements IMessagingProvider {
-  async sendMessage(_p: SendMessagePayload, _t: any): Promise<{ providerMessageId: string }> {
+  async sendMessage(_p: SendMessageParams, _t: any): Promise<{ providerMessageId: string }> {
     return { providerMessageId: `noop-${Date.now()}` };
   }
 }

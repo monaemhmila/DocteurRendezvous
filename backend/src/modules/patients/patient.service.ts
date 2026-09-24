@@ -1,8 +1,21 @@
 import { Patient, IPatient } from "./patient.model";
+import { PaginationParams, PaginatedResult, buildPaginationMeta } from "../../shared/utils/pagination";
 
 export const patientService = {
-  getPatients: async (tenantId: string) => {
-    return Patient.find({ tenantId }).sort({ lastName: 1, firstName: 1 });
+  getPatients: async (tenantId: string, pagination: PaginationParams): Promise<PaginatedResult<any>> => {
+    const filter = { tenantId };
+    const [data, total] = await Promise.all([
+      Patient.find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(pagination.skip)
+        .limit(pagination.limit)
+        .lean(),
+      Patient.countDocuments(filter)
+    ]);
+    return {
+      data,
+      meta: buildPaginationMeta(total, pagination.page, pagination.limit)
+    };
   },
   getPatientById: async (id: string, tenantId: string) => {
     return Patient.findOne({ _id: id, tenantId });
@@ -23,12 +36,26 @@ export const patientService = {
   deletePatient: async (id: string, tenantId: string) => {
     return Patient.findOneAndDelete({ _id: id, tenantId });
   },
-  searchPatients: async (tenantId: string, query: string) => {
+  searchPatients: async (tenantId: string, query: string, pagination: PaginationParams): Promise<PaginatedResult<any>> => {
     const escaped = query.slice(0, 100).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const regex = new RegExp(escaped, "i");
-    return Patient.find({
+    const filter = {
       tenantId,
       $or: [{ firstName: regex }, { lastName: regex }, { phone: regex }, { email: regex }],
-    }).sort({ lastName: 1, firstName: 1 });
+    };
+
+    const [data, total] = await Promise.all([
+      Patient.find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(pagination.skip)
+        .limit(pagination.limit)
+        .lean(),
+      Patient.countDocuments(filter)
+    ]);
+
+    return {
+      data,
+      meta: buildPaginationMeta(total, pagination.page, pagination.limit)
+    };
   }
 };

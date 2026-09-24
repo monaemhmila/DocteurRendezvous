@@ -181,16 +181,11 @@ async function runWaitlistTests() {
       throw new Error("TEST 5 FAILED: Task should remain actionable after spoken_agreed");
     }
 
-    // Fulfill it
-    const newAppt = await waitlistService.fulfillWaitlistEntry(
-      nextTask.waitlistEntryId!.toString(),
-      tenantAId,
-      sourceAppt.doctorId,
-      sourceAppt.date,
-      sourceAppt.startTime,
-      sourceAppt.endTime,
-      nextTask._id.toString()
-    );
+    const newAppt = await waitlistService.fulfillWaitlistEntry({
+      waitlistEntryId: nextTask.waitlistEntryId!.toString(),
+      taskId: nextTask._id.toString(),
+      tenantId: tenantAId
+    });
 
     const fulfilledEntry = await WaitlistEntry.findById(nextTask.waitlistEntryId);
     const completedTask = await FollowUpTask.findById(nextTask._id);
