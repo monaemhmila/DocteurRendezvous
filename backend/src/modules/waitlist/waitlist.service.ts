@@ -145,43 +145,86 @@ export const waitlistService = {
     }
   },
 
-  async fulfillWaitlistEntry(waitlistEntryId: string, tenantId: string, doctorId: string, date: string, startTime: string, endTime: string, taskId: string) {
-    const entry = await WaitlistEntry.findOne({ _id: waitlistEntryId, tenantId, status: "active" });
-    if (!entry) throw new Error("WaitlistEntry not found or not active");
-
-    const task = await FollowUpTask.findOne({ _id: taskId, tenantId, waitlistEntryId: entry._id, status: { $in: ["pending", "in_progress"] } });
-    if (!task) throw new Error("Active FollowUpTask for this WaitlistEntry not found");
-
-    // Try to book the appointment
+  async fulfillWaitlistEntry({ waitlistEntryId, taskId, tenantId }: { waitlistEntryId: string, taskId: string, tenantId: string }) {
+    const session = await mongoose.startSession();
     try {
-      const appointment = new Appointment({
+      session.startTransaction();
+
+      // 1. WaitlistEntry existence and ownership
+      const entry = await WaitlistEntry.findOne({ _id: waitlistEntryId, tenantId }).session(session);
+      if (!entry) throw new Error("WAITLIST_NOT_FOUND");
+
+      // Idempotency check
+      if (entry.fulfilledByAppointmentId) {
+        const existingAppt = await Appointment.findOne({ _id: entry.fulfilledByAppointmentId, tenantId }).session(session);
+        await FollowUpTask.findOneAndUpdate(
+          { _id: taskId, tenantId, status: { $in: ["pending", "in_progress"] } },
+          { $set: { status: "completed", completedAt: new Date() } }
+        ).session(session);
+        await session.commitTransaction();
+        session.endSession();
+        return existingAppt;
+      }
+
+      if (entry.status !== "active") {
+        throw new Error("WAITLIST_NOT_ACTIVE");
+      }
+
+      // 3. FollowUpTask validation
+      const task = await FollowUpTask.findOne({ 
+        _id: taskId, 
+        tenantId, 
+        waitlistEntryId: entry._id 
+      }).session(session);
+      
+      if (!task) throw new Error("TASK_NOT_FOUND");
+      if (!["pending", "in_progress"].includes(task.status)) throw new Error("TASK_NOT_ACTIONABLE");
+      if (task.type !== "slot_fill_offer") throw new Error("TASK_INVALID_TYPE");
+      if (!task.sourceAppointmentId) throw new Error("TASK_MISSING_SOURCE");
+
+      // 5. Source appointment exists
+      const sourceAppt = await Appointment.findOne({ _id: task.sourceAppointmentId, tenantId }).session(session);
+      if (!sourceAppt) throw new Error("SOURCE_NOT_FOUND");
+
+      // Write 1: Create Appointment
+      const newAppointment = new Appointment({
         tenantId,
         patientId: entry.patientId,
-        doctorId,
-        date,
-        startTime,
-        endTime,
+        doctorId: sourceAppt.doctorId,
+        date: sourceAppt.date,
+        startTime: sourceAppt.startTime,
+        endTime: sourceAppt.endTime,
+        durationMin: sourceAppt.durationMin,
         treatment: entry.treatment,
         status: "scheduled"
       });
-      await appointment.save();
 
-      // Successfully booked!
+      try {
+        await newAppointment.save({ session });
+      } catch (err: any) {
+        if (err.code === 11000) {
+          throw new Error("SLOT_UNAVAILABLE");
+        }
+        throw err;
+      }
+
+      // Write 2: Update WaitlistEntry
       entry.status = "fulfilled";
-      entry.fulfilledByAppointmentId = appointment._id as mongoose.Types.ObjectId;
-      await entry.save();
+      entry.fulfilledByAppointmentId = newAppointment._id as mongoose.Types.ObjectId;
+      await entry.save({ session });
 
+      // Write 3: Update FollowUpTask
       task.status = "completed";
       task.completedAt = new Date();
-      await task.save();
+      await task.save({ session });
 
-      return appointment;
-    } catch (err: any) {
-      if (err.code === 11000) {
-        // Someone else booked this exact slot!
-        throw new Error("409 Conflict: Slot is already booked.");
-      }
-      throw err;
+      await session.commitTransaction();
+      session.endSession();
+      return newAppointment;
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
     }
   }
 };

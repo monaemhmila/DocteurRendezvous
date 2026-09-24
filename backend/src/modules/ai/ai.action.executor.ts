@@ -339,8 +339,8 @@ async function handleAppointmentBooking(
     if (err.message?.startsWith("Past_Date_Error")) {
       throw new ActionTransitionError("Le créneau demandé est dans le passé et ne peut pas être réservé.");
     }
-    if (err.message === "Double_Booking_Error") {
-      throw new ActionTransitionError("Le créneau n'est plus disponible (Double_Booking_Error).");
+    if (err.message === "SLOT_UNAVAILABLE") {
+      throw new ActionTransitionError("Le créneau n'est plus disponible (SLOT_UNAVAILABLE).");
     }
     throw new ActionTransitionError(err.message);
   }
@@ -419,8 +419,8 @@ async function handleAppointmentReschedule(
     if (err.message?.startsWith("Past_Date_Error")) {
       throw new ActionTransitionError("Le créneau demandé est dans le passé et ne peut pas être réservé.");
     }
-    if (err.message === "Double_Booking_Error") {
-      throw new ActionTransitionError("Le créneau n'est plus disponible (Double_Booking_Error).");
+    if (err.message === "SLOT_UNAVAILABLE") {
+      throw new ActionTransitionError("Le créneau n'est plus disponible (SLOT_UNAVAILABLE).");
     }
     throw new ActionTransitionError(err.message);
   }

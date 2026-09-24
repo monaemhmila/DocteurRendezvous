@@ -1,24 +1,30 @@
 import mongoose, { Document, Schema } from "mongoose";
 
 export function computeOccupiedSlots(startTime: string, endTime: string, stepMins = 5): string[] {
-  if (!startTime || !endTime) return [];
+  if (!startTime || !endTime) throw new Error("startTime and endTime are required");
+  
+  const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+  if (!timeRegex.test(startTime) || !timeRegex.test(endTime)) {
+    throw new Error("Invalid time format, must be HH:MM");
+  }
+
   const [startH, startM] = startTime.split(":").map(Number);
   const [endH, endM] = endTime.split(":").map(Number);
-  if (isNaN(startH!) || isNaN(startM!) || isNaN(endH!) || isNaN(endM!)) {
-    return [startTime];
-  }
+  
   const startTotal = startH! * 60 + startM!;
   const endTotal = endH! * 60 + endM!;
+
   if (endTotal <= startTotal) {
-    return [startTime];
+    throw new Error("endTime must be after startTime");
   }
+
   const slots: string[] = [];
   for (let m = startTotal; m < endTotal; m += stepMins) {
     const h = Math.floor(m / 60).toString().padStart(2, "0");
     const min = (m % 60).toString().padStart(2, "0");
     slots.push(`${h}:${min}`);
   }
-  return slots.length > 0 ? slots : [startTime];
+  return slots;
 }
 
 export interface IAppointment extends Document {

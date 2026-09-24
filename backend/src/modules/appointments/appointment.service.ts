@@ -12,6 +12,23 @@ import { Conversation, Message } from "../communications/communication.model";
 import { MetaWhatsAppProvider } from "../communications/providers/messaging.provider";
 import { nowInTimezone, toIsoDate, DEFAULT_TIMEZONE } from "../ai/temporal.utils";
 
+function assertAppointmentTransition(currentStatus: string, nextStatus: string): void {
+  if (currentStatus === nextStatus) return;
+
+  const transitions: Record<string, string[]> = {
+    scheduled: ["confirmed", "cancelled", "no_show"],
+    confirmed: ["completed", "cancelled", "no_show"],
+    completed: [],
+    cancelled: [],
+    no_show: [],
+  };
+
+  const allowed = transitions[currentStatus] || [];
+  if (!allowed.includes(nextStatus)) {
+    throw new Error("INVALID_APPOINTMENT_TRANSITION");
+  }
+}
+
 let reminderWorkerTimer: NodeJS.Timeout | null = null;
 let isReminderRunning = false;
 
@@ -249,7 +266,7 @@ export const appointmentService = {
         endTime: appointmentData.endTime,
       });
       if (!isAvailable) {
-        throw new Error("Double_Booking_Error");
+        throw new Error("SLOT_UNAVAILABLE");
       }
     }
 
@@ -262,7 +279,7 @@ export const appointmentService = {
     } catch (err: any) {
       // Catch MongoDB Duplicate Key Error (11000)
       if (err.code === 11000) {
-        throw new Error("Double_Booking_Error");
+        throw new Error("SLOT_UNAVAILABLE");
       }
       throw err;
     }
@@ -333,7 +350,7 @@ export const appointmentService = {
       });
 
       if (!isAvailable) {
-        throw new Error("Double_Booking_Error");
+        throw new Error("SLOT_UNAVAILABLE");
       }
 
       safeData.occupiedSlots = computeOccupiedSlots(String(nextStartTime), String(nextEndTime));
@@ -353,7 +370,7 @@ export const appointmentService = {
       );
     } catch (err: any) {
       if (err.code === 11000) {
-        throw new Error("Double_Booking_Error");
+        throw new Error("SLOT_UNAVAILABLE");
       }
       throw err;
     }
@@ -361,14 +378,26 @@ export const appointmentService = {
   deleteAppointment: async (id: string, tenantId: string) => {
     return Appointment.findOneAndDelete({ _id: id, tenantId });
   },
-  updateStatus: async (id: string, status: string, tenantId: string) => {
-    const updated = await Appointment.findOneAndUpdate({ _id: id, tenantId }, { $set: { status } }, { returnDocument: 'after' });
+  updateStatus: async (id: string, nextStatus: string, tenantId: string) => {
+    const existing = await Appointment.findOne({ _id: id, tenantId });
+    if (!existing) throw new Error("Appointment not found");
+
+    const currentStatus = existing.status;
+    assertAppointmentTransition(currentStatus, nextStatus);
+
+    if (currentStatus === nextStatus) return existing;
+
+    const updated = await Appointment.findOneAndUpdate(
+      { _id: id, tenantId, status: currentStatus },
+      { $set: { status: nextStatus } },
+      { returnDocument: 'after' }
+    );
     
     if (updated) {
       await handleStatusChange(updated, tenantId);
     }
     
-    return updated;
+    return updated || existing;
   }
 };
 

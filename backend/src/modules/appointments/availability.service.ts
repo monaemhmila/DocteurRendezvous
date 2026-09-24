@@ -181,38 +181,44 @@ export const availabilityService = {
   }) => {
     const { tenantId, doctorId, date, startTime, endTime } = params;
 
-    // Fetch tenant timezone
-    const tenant = await Tenant.findById(tenantId).lean();
-    const tenantTimezone = (tenant as any)?.timezone || DEFAULT_TIMEZONE;
+    // 1. Resolve schedule and check if the clinic is open
+    const schedule = await resolveDaySchedule(tenantId, date);
+    if ("earlyReturn" in schedule) return false;
+    const { dayBH, isPast } = schedule;
 
-    // Strict temporal validation: cannot book in the past (using tenant timezone)
-    const tzNow = nowInTimezone(tenantTimezone);
-    const todayIso = toIsoDate(tenantTimezone, tzNow.date);
-    const currentMins = tzNow.hours * 60 + tzNow.minutes;
+    if (isPast) return false;
 
-    if (date < todayIso) {
-      return false; // Cannot book dates in the past
+    // 2. Validate time format and bounds
+    const startMins = parseTime(startTime);
+    const endMins = parseTime(endTime);
+    if (isNaN(startMins) || isNaN(endMins) || startMins >= endMins) return false;
+
+    // 3. Ensure the slot is strictly within business hours and not during a break
+    let isWithinBlock = false;
+    for (const block of dayBH.blocks) {
+      const blockStart = parseTime(block.start);
+      const blockEnd = parseTime(block.end);
+      if (startMins >= blockStart && endMins <= blockEnd) {
+        isWithinBlock = true;
+        break;
+      }
     }
+    
+    if (!isWithinBlock) return false;
 
-    if (date === todayIso && parseTime(startTime) < currentMins) {
-      return false; // Cannot book past time slots today (strict: slot must start strictly after now)
-    }
-
-    // A very simple availability check: find any overlapping appointments
-    // Overlap condition: existing.startTime < new.endTime AND existing.endTime > new.startTime
-    // In our system, time is represented as "HH:MM", which is comparable as strings
+    // 4. Check for overlapping appointments
     const overlapping = await Appointment.findOne({
       tenantId,
       doctorId,
       date,
-      status: { $nin: ["cancelled", "no_show"] }, // cancelled or no show don't take up time
+      status: { $nin: ["cancelled", "no_show"] },
       $and: [
         { startTime: { $lt: endTime } },
         { endTime: { $gt: startTime } },
       ],
     });
 
-    return !overlapping; // If no overlapping appointment is found, it's available
+    return !overlapping;
   },
 
   getAvailableSlots: async (params: {

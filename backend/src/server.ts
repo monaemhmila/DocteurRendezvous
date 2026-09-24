@@ -104,6 +104,8 @@ const startServer = async () => {
   await connectDB();
   await ensureSuperAdmin();
   const { reminderService } = await import("./modules/appointments/appointment.service");
+  const { Appointment } = await import("./modules/appointments/appointment.model");
+  await Appointment.syncIndexes();
   reminderService.startBackgroundWorker();
 
   app.listen(port, () => {

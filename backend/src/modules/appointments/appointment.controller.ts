@@ -44,8 +44,8 @@ export const createAppointment = async (req: AuthRequest, res: Response) => {
     const saved = await appointmentService.createAppointment(req.body, tenantId);
     res.status(201).json({ id: saved._id, ...saved.toObject() });
   } catch (error: any) {
-    if (error.message === "Double_Booking_Error") {
-      return res.status(409).json({ error: "Time slot is not available" });
+    if (error.message === "SLOT_UNAVAILABLE") {
+      return res.status(409).json({ error: "SLOT_UNAVAILABLE" });
     }
     res.status(500).json({ error: "Failed to create appointment" });
   }
@@ -60,8 +60,8 @@ export const updateAppointment = async (req: AuthRequest, res: Response) => {
     if (!updated) return res.status(404).json({ error: "Appointment not found" });
     res.json({ id: updated._id, ...updated.toObject() });
   } catch (error: any) {
-    if (error.message === "Double_Booking_Error") {
-      return res.status(409).json({ error: "Time slot is not available" });
+    if (error.message === "SLOT_UNAVAILABLE") {
+      return res.status(409).json({ error: "SLOT_UNAVAILABLE" });
     }
     res.status(500).json({ error: "Failed to update appointment" });
   }
@@ -130,7 +130,10 @@ export const updateAppointmentStatus = async (req: AuthRequest, res: Response) =
     const updated = await appointmentService.updateStatus(id as string, status, tenantId);
     if (!updated) return res.status(404).json({ error: "Appointment not found" });
     res.json({ id: updated._id, ...updated.toObject() });
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === "INVALID_APPOINTMENT_TRANSITION") {
+      return res.status(409).json({ error: "Transition de statut invalide" });
+    }
     res.status(500).json({ error: "Failed to update appointment status" });
   }
 };

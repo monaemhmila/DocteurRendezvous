@@ -103,106 +103,18 @@ export const waitlistController = {
 
       if (!taskId) return res.status(400).json({ error: "taskId is required" });
 
-      // 1. WaitlistEntry existence and ownership
-      const entry = await WaitlistEntry.findOne({ _id: waitlistEntryId, tenantId });
-      if (!entry) return res.status(404).json({ error: "WaitlistEntry not found" });
-
-      // Idempotency check: if already fulfilled, return existing appointment and ensure task is completed
-      if (entry.fulfilledByAppointmentId) {
-        const existingAppt = await Appointment.findOne({ _id: entry.fulfilledByAppointmentId, tenantId });
-        
-        // ensure task is completed
-        await FollowUpTask.findOneAndUpdate(
-          { _id: taskId, tenantId, status: { $in: ["pending", "in_progress"] } },
-          { $set: { status: "completed", completedAt: new Date() } }
-        );
-        
-        return res.status(201).json(existingAppt);
-      }
-
-      // 2. WaitlistEntry status
-      if (entry.status !== "active") {
-        return res.status(400).json({ error: "Waitlist entry is not active" });
-      }
-
-      // 3. FollowUpTask validation
-      const task = await FollowUpTask.findOne({ 
-        _id: taskId, 
-        tenantId, 
-        waitlistEntryId: entry._id 
-      });
-      if (!task) return res.status(400).json({ error: "Task not found for this waitlist entry" });
-      if (!["pending", "in_progress"].includes(task.status)) return res.status(400).json({ error: "Task is not actionable" });
-      if (task.type !== "slot_fill_offer") return res.status(400).json({ error: "Task is not a slot_fill_offer" });
-
-      // 4. Task has sourceAppointmentId
-      if (!task.sourceAppointmentId) {
-        return res.status(400).json({ error: "Task is missing sourceAppointmentId" });
-      }
-
-      // 5. Source appointment exists and belongs to tenant
-      const sourceAppt = await Appointment.findOne({ _id: task.sourceAppointmentId, tenantId });
-      if (!sourceAppt) return res.status(404).json({ error: "Source appointment not found" });
-
-      // 6. Booking slot derived exactly from source appointment
-      // Write 1: Create Appointment
-      let newAppointment;
       try {
-        newAppointment = new Appointment({
-          tenantId,
-          patientId: entry.patientId,
-          doctorId: sourceAppt.doctorId,
-          date: sourceAppt.date,
-          startTime: sourceAppt.startTime,
-          endTime: sourceAppt.endTime,
-          durationMin: sourceAppt.durationMin,
-          treatment: entry.treatment,
-          status: "scheduled"
-        });
-        await newAppointment.save();
-      } catch (err: any) {
-        if (err.code === 11000) {
-          return res.status(409).json({ error: "Ce créneau vient d'être réservé par quelqu'un d'autre." });
+        const appointment = await waitlistService.fulfillWaitlistEntry({ waitlistEntryId, taskId, tenantId });
+        return res.status(201).json(appointment);
+      } catch (error: any) {
+        if (error.message === "SLOT_UNAVAILABLE" || error.message === "WAITLIST_CONFLICT") {
+          return res.status(409).json({ error: "Ce créneau n'est plus disponible." });
         }
-        throw err;
-      }
-
-      // Write 2: Update WaitlistEntry (Conditional update)
-      const updatedEntry = await WaitlistEntry.findOneAndUpdate(
-        { _id: entry._id, status: "active" },
-        { 
-          $set: { 
-            status: "fulfilled", 
-            fulfilledByAppointmentId: newAppointment._id 
-          } 
-        },
-        { returnDocument: 'after' }
-      );
-
-      if (!updatedEntry) {
-        // Edge case: it was fulfilled by someone else in the millisecond between read and write
-        // The appointment is created but might be orphaned or considered a separate booking.
-        // It's a valid booking. We return 500 to signal partial failure.
-        return res.status(500).json({ error: "Partial failure: Appointment created but WaitlistEntry could not be updated." });
-      }
-
-      // Write 3: Update FollowUpTask
-      const updatedTask = await FollowUpTask.findOneAndUpdate(
-        { _id: task._id, status: { $in: ["pending", "in_progress"] } },
-        { 
-          $set: { 
-            status: "completed", 
-            completedAt: new Date() 
-          } 
+        if (error.message.includes("WAITLIST_NOT_FOUND") || error.message.includes("SOURCE_NOT_FOUND") || error.message.includes("TASK_NOT_FOUND")) {
+          return res.status(404).json({ error: "Resource not found" });
         }
-      );
-
-      if (!updatedTask) {
-         // Task update failed (perhaps someone else completed it), but appointment is valid and waitlist is fulfilled.
-         return res.status(500).json({ error: "Partial failure: Waitlist fulfilled but FollowUpTask could not be completed." });
+        return res.status(400).json({ error: error.message });
       }
-
-      return res.status(201).json(newAppointment);
 
     } catch (error: any) {
       res.status(500).json({ error: error.message });
