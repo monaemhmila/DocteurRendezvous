@@ -9,14 +9,14 @@
  */
 
 import { Router } from "express";
-import { requireAuth } from "../../shared/middleware/requireAuth";
+import { requireAuth, requireRole } from "../../shared/middleware/requireAuth";
 import { getAISuggestion, executeAIActionHandler } from "./ai.controller";
 
 const router = Router();
 
 router.use(requireAuth as any);
 
-router.post("/conversations/:conversationId/suggestion", getAISuggestion as any);
-router.post("/conversations/:conversationId/actions/execute", executeAIActionHandler as any);
+router.post("/conversations/:conversationId/suggestion", requireRole("clinic_owner", "dentist", "receptionist") as any, getAISuggestion as any);
+router.post("/conversations/:conversationId/actions/execute", requireRole("clinic_owner", "dentist", "receptionist") as any, executeAIActionHandler as any);
 
 export default router;

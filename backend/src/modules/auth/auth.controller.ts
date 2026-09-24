@@ -66,7 +66,7 @@ export const login = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("Login error:", error);
-    if (error instanceof z.ZodError) {
+    if (error?.name === "ZodError" || error instanceof z.ZodError) {
       return res.status(400).json({ error: "Données invalides." });
     }
     res.status(500).json({ error: error.message || "Erreur interne du serveur." });

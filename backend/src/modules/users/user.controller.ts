@@ -6,11 +6,7 @@ import { User } from "./user.model";
 import { Tenant } from "../tenants/tenant.model";
 
 async function resolveTenantId(req: AuthRequest): Promise<string | null> {
-  let tenantId = req.user?.tenantId;
-  if (tenantId) return tenantId;
-
-  const activeTenant = await Tenant.findOne({ status: "active" });
-  return activeTenant ? activeTenant._id.toString() : null;
+  return req.user?.tenantId || null;
 }
 
 const defaultPermissionsByRole = {
@@ -164,10 +160,10 @@ export const createTeamMember = async (req: AuthRequest, res: Response) => {
     res.status(201).json({
       message: "Membre de l'équipe ajouté avec succès",
       user: userObj,
-      temporaryPassword: data.password ? undefined : rawPassword,
+      passwordResetRequired: true,
     });
   } catch (error: any) {
-    if (error instanceof z.ZodError) {
+    if (error?.name === "ZodError" || error instanceof z.ZodError) {
       return res.status(400).json({ error: error.issues[0]?.message || "Données invalides" });
     }
     console.error("createTeamMember error:", error);
@@ -219,7 +215,7 @@ export const updateTeamMember = async (req: AuthRequest, res: Response) => {
 
     res.json({ message: "Membre mis à jour avec succès", user: userObj });
   } catch (error: any) {
-    if (error instanceof z.ZodError) {
+    if (error?.name === "ZodError" || error instanceof z.ZodError) {
       return res.status(400).json({ error: error.issues[0]?.message || "Données invalides" });
     }
     console.error("updateTeamMember error:", error);
@@ -282,7 +278,7 @@ export const resetTeamMemberPassword = async (req: AuthRequest, res: Response) =
 
     res.json({
       message: "Mot de passe réinitialisé avec succès",
-      newPassword,
+      passwordResetRequired: true,
     });
   } catch (error) {
     console.error("resetTeamMemberPassword error:", error);

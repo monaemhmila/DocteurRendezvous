@@ -24,7 +24,8 @@ export const patientService = {
     return Patient.findOneAndDelete({ _id: id, tenantId });
   },
   searchPatients: async (tenantId: string, query: string) => {
-    const regex = new RegExp(query, "i");
+    const escaped = query.slice(0, 100).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(escaped, "i");
     return Patient.find({
       tenantId,
       $or: [{ firstName: regex }, { lastName: regex }, { phone: regex }, { email: regex }],

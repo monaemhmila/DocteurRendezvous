@@ -7,6 +7,26 @@ import { Appointment } from "../appointments/appointment.model";
 import { z } from "zod";
 import { AuthRequest } from "../../shared/middleware/requireAuth";
 
+function toTenantPublicDTO(tenant: any) {
+  const obj = tenant.toObject ? tenant.toObject() : { ...tenant };
+  
+  const whatsappConfigured = !!(obj.settings?.whatsappConfig?.accessToken && obj.settings?.whatsappConfig?.phoneNumberId);
+  const aiConfigured = !!(obj.settings?.aiConfig?.apiKey);
+  
+  if (obj.settings?.whatsappConfig) {
+    delete obj.settings.whatsappConfig.accessToken;
+    delete obj.settings.whatsappConfig.verifyToken;
+  }
+  if (obj.settings?.aiConfig) {
+    delete obj.settings.aiConfig.apiKey;
+  }
+  
+  return {
+    ...obj,
+    whatsappConfigured,
+    aiConfigured
+  };
+}
 const createTenantSchema = z.object({
   clinicName: z.string().min(2, "Le nom du cabinet doit contenir au moins 2 caractères"),
   ownerName: z.string().min(2, "Le nom du médecin est requis"),
@@ -75,17 +95,17 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
 
     res.status(201).json({
       message: "Cabinet créé avec succès",
-      tenant,
+      tenant: toTenantPublicDTO(tenant),
       owner: {
         id: user._id,
         email: user.email,
         name: `${user.firstName} ${user.lastName}`,
         role: user.role,
       },
-      generatedPassword: rawPassword,
+      passwordResetRequired: true,
     });
   } catch (error: any) {
-    if (error instanceof z.ZodError) {
+    if (error?.name === "ZodError" || error instanceof z.ZodError) {
       return res.status(400).json({ error: error.issues[0]?.message || "Données invalides" });
     }
     console.error("createTenant error:", error);
@@ -112,7 +132,7 @@ export const getTenants = async (req: AuthRequest, res: Response) => {
         ]);
 
         return {
-          ...t.toObject(),
+          ...toTenantPublicDTO(t),
           owner: owner
             ? {
                 name: `${owner.firstName} ${owner.lastName}`,
@@ -176,9 +196,9 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    res.json({ message: "Cabinet mis à jour avec succès", tenant });
+    res.json({ message: "Cabinet mis à jour avec succès", tenant: toTenantPublicDTO(tenant) });
   } catch (error: any) {
-    if (error instanceof z.ZodError) {
+    if (error?.name === "ZodError" || error instanceof z.ZodError) {
       return res.status(400).json({ error: error.issues[0]?.message || "Données invalides" });
     }
     console.error("updateTenant error:", error);
@@ -212,7 +232,7 @@ export const updateTenantStatus = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: "Cabinet introuvable" });
     }
 
-    res.json({ message: `Statut du cabinet mis à jour: ${status}`, tenant });
+    res.json({ message: `Statut du cabinet mis à jour: ${status}`, tenant: toTenantPublicDTO(tenant) });
   } catch (error) {
     console.error("updateTenantStatus error:", error);
     res.status(500).json({ error: "Erreur interne du serveur" });
@@ -244,7 +264,7 @@ export const resetTenantPassword = async (req: AuthRequest, res: Response) => {
     res.json({
       message: "Mot de passe réinitialisé avec succès",
       email: owner.email,
-      newPassword: passwordToSet,
+      passwordResetRequired: true,
     });
   } catch (error) {
     console.error("resetTenantPassword error:", error);
@@ -276,19 +296,17 @@ export const deleteTenant = async (req: AuthRequest, res: Response) => {
 
 export const getCurrentTenant = async (req: AuthRequest, res: Response) => {
   try {
-    let tenantId = req.user?.tenantId;
-    let tenant = null;
-
-    if (tenantId) {
-      tenant = await Tenant.findById(tenantId);
-    }
-    if (!tenant) {
-      tenant = await Tenant.findOne({ status: "active" });
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(403).json({ error: "Contexte de cabinet manquant (NO_TENANT_CONTEXT)" });
     }
 
-    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    const tenant = await Tenant.findById(tenantId);
+    if (!tenant || tenant.status !== "active") {
+      return res.status(403).json({ error: "Cabinet introuvable ou inactif (TENANT_NOT_AVAILABLE)" });
+    }
 
-    res.json(tenant);
+    res.json(toTenantPublicDTO(tenant));
   } catch (error) {
     res.status(500).json({ error: "Internal server error" });
   }
@@ -296,17 +314,15 @@ export const getCurrentTenant = async (req: AuthRequest, res: Response) => {
 
 export const updateCurrentTenant = async (req: AuthRequest, res: Response) => {
   try {
-    let tenantId = req.user?.tenantId;
-    let tenant = null;
-
-    if (tenantId) {
-      tenant = await Tenant.findById(tenantId);
-    }
-    if (!tenant) {
-      tenant = await Tenant.findOne({ status: "active" });
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(403).json({ error: "Contexte de cabinet manquant (NO_TENANT_CONTEXT)" });
     }
 
-    if (!tenant) return res.status(404).json({ error: "Tenant introuvable" });
+    const tenant = await Tenant.findById(tenantId);
+    if (!tenant || tenant.status !== "active") {
+      return res.status(403).json({ error: "Cabinet introuvable ou inactif (TENANT_NOT_AVAILABLE)" });
+    }
 
     const { name, specialty, email, phone, address, settings } = req.body;
 
@@ -317,6 +333,15 @@ export const updateCurrentTenant = async (req: AuthRequest, res: Response) => {
     if (address !== undefined) tenant.address = address.trim();
 
     if (settings && typeof settings === "object") {
+      // Prevent overwriting secrets directly
+      if (settings.whatsappConfig) {
+        delete settings.whatsappConfig.accessToken;
+        delete settings.whatsappConfig.verifyToken;
+      }
+      if (settings.aiConfig) {
+        delete settings.aiConfig.apiKey;
+      }
+
       tenant.settings = {
         ...(tenant.settings || {}),
         ...settings,
@@ -326,7 +351,7 @@ export const updateCurrentTenant = async (req: AuthRequest, res: Response) => {
 
     await tenant.save();
 
-    res.json({ message: "Informations du cabinet mises à jour avec succès", tenant });
+    res.json({ message: "Informations du cabinet mises à jour avec succès", tenant: toTenantPublicDTO(tenant) });
   } catch (error: any) {
     console.error("updateCurrentTenant error:", error);
     res.status(500).json({ error: error.message || "Erreur interne" });
@@ -335,21 +360,28 @@ export const updateCurrentTenant = async (req: AuthRequest, res: Response) => {
 
 export const updateTenantSettings = async (req: AuthRequest, res: Response) => {
   try {
-    let tenantId = req.user?.tenantId;
-    let tenant = null;
-
-    if (tenantId) {
-      tenant = await Tenant.findById(tenantId);
-    }
-    if (!tenant) {
-      tenant = await Tenant.findOne({ status: "active" });
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(403).json({ error: "Contexte de cabinet manquant (NO_TENANT_CONTEXT)" });
     }
 
-    if (!tenant) return res.status(404).json({ error: "Tenant introuvable" });
+    const tenant = await Tenant.findById(tenantId);
+    if (!tenant || tenant.status !== "active") {
+      return res.status(403).json({ error: "Cabinet introuvable ou inactif (TENANT_NOT_AVAILABLE)" });
+    }
 
     const incomingSettings = req.body.settings || req.body;
     if (!incomingSettings || typeof incomingSettings !== "object") {
       return res.status(400).json({ error: "Paramètres invalides" });
+    }
+
+    // Prevent overwriting secrets directly
+    if (incomingSettings.whatsappConfig) {
+      delete incomingSettings.whatsappConfig.accessToken;
+      delete incomingSettings.whatsappConfig.verifyToken;
+    }
+    if (incomingSettings.aiConfig) {
+      delete incomingSettings.aiConfig.apiKey;
     }
 
     tenant.settings = {
@@ -359,7 +391,8 @@ export const updateTenantSettings = async (req: AuthRequest, res: Response) => {
     tenant.markModified("settings");
     await tenant.save();
 
-    res.json({ message: "Paramètres mis à jour avec succès", settings: tenant.settings });
+    const publicTenant = toTenantPublicDTO(tenant);
+    res.json({ message: "Paramètres mis à jour avec succès", settings: publicTenant.settings });
   } catch (error: any) {
     console.error("updateTenantSettings error:", error);
     res.status(500).json({ error: error.message || "Erreur interne" });
@@ -368,14 +401,33 @@ export const updateTenantSettings = async (req: AuthRequest, res: Response) => {
 
 export const testAIKey = async (req: AuthRequest, res: Response) => {
   try {
-    const { apiKey, providerUrl, model } = req.body;
+    const { apiKey, provider, model } = req.body;
 
     if (!apiKey || typeof apiKey !== "string") {
       return res.status(400).json({ error: "Clé API manquante" });
     }
 
-    const targetUrl = (providerUrl || "https://api.openai.com/v1").replace(/\/+$/, "") + "/chat/completions";
+    const ALLOWED_AI_PROVIDERS: Record<string, string> = {
+      openai: "https://api.openai.com/v1",
+      groq: "https://api.groq.com/openai/v1",
+      mistral: "https://api.mistral.ai/v1",
+    };
+
+    const targetProvider = typeof provider === "string" ? provider : "";
+    const baseUrl = ALLOWED_AI_PROVIDERS[targetProvider];
+
+    if (!baseUrl) {
+      return res.status(400).json({
+        error: "Unsupported AI provider",
+        code: "INVALID_PROVIDER",
+      });
+    }
+
+    const targetUrl = baseUrl + "/chat/completions";
     const targetModel = model || "gpt-4o-mini";
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
 
     const startTime = Date.now();
     const response = await fetch(targetUrl, {
@@ -389,7 +441,10 @@ export const testAIKey = async (req: AuthRequest, res: Response) => {
         messages: [{ role: "user", content: "Ping! Réponds juste 'OK'" }],
         max_tokens: 10,
       }),
+      signal: controller.signal as any,
     });
+    
+    clearTimeout(timeout);
 
     const latencyMs = Date.now() - startTime;
 
@@ -398,7 +453,7 @@ export const testAIKey = async (req: AuthRequest, res: Response) => {
       const msg = errorData?.error?.message || `HTTP ${response.status}`;
       return res.status(400).json({
         success: false,
-        error: `Erreur API (${response.status}): ${msg}`,
+        error: "Impossible de valider la clé avec ce provider",
       });
     }
 
@@ -412,9 +467,15 @@ export const testAIKey = async (req: AuthRequest, res: Response) => {
       reply: reply.trim(),
     });
   } catch (error: any) {
+    if (error.name === "AbortError") {
+      return res.status(400).json({
+        success: false,
+        error: "Timeout lors de la connexion au provider",
+      });
+    }
     return res.status(500).json({
       success: false,
-      error: error.message || "Impossible de contacter l'API",
+      error: "Impossible de contacter l'API",
     });
   }
 };

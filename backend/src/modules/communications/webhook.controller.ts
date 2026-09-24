@@ -9,8 +9,14 @@ interface RawBodyRequest extends Request {
 function isValidMetaSignature(req: RawBodyRequest): boolean {
   const appSecret = process.env.META_APP_SECRET?.trim();
 
-  // If META_APP_SECRET is not set in .env, permit incoming webhook in dev/sandbox mode
-  if (!appSecret) return true;
+  // Fail closed by default. Only permit unsigned webhooks if explicitly enabled for dev/sandbox.
+  if (!appSecret) {
+    if (process.env.WEBHOOK_ALLOW_UNSIGNED_DEV?.trim() === "true") {
+      console.warn("[Webhook] Warning: Accepting unsigned webhook due to WEBHOOK_ALLOW_UNSIGNED_DEV=true");
+      return true;
+    }
+    return false;
+  }
 
   if (!req.rawBody) return false;
 

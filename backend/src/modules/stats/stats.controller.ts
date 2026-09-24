@@ -4,6 +4,7 @@ import { Patient } from "../patients/patient.model";
 import { Appointment } from "../appointments/appointment.model";
 import { FollowUpTask } from "../followups/followup.model";
 import { WaitlistEntry } from "../waitlist/waitlist.model";
+import { Conversation } from "../communications/communication.model";
 
 export const getDashboardStats = async (req: AuthRequest, res: Response) => {
   try {
@@ -21,11 +22,19 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
       status: 'at_risk'
     });
 
-    const allPatients = await Patient.find({ tenantId });
-    const recoveredValue = allPatients.reduce((sum, p) => sum + (p.metrics?.revenue || 0), 0);
+    const [revenueResult] = await Patient.aggregate([
+      { $match: { tenantId } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $ifNull: ["$metrics.revenue", 0] } },
+        },
+      },
+    ]);
+    const recoveredValue = revenueResult?.total ?? 0;
 
-    const activeConversationsCount = 0;
-    const needsHumanCount = 0;
+    const activeConversationsCount = await Conversation.countDocuments({ tenantId, status: "active" });
+    const needsHumanCount = await Conversation.countDocuments({ tenantId, needsHuman: true });
 
     // Phase 4.1.4 Additions
     const noShowsToday = await Appointment.countDocuments({ tenantId, date: today, status: 'no_show' });

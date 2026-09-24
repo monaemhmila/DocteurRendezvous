@@ -11,7 +11,7 @@ import {
   updateTenantSettings,
   testAIKey,
 } from "./tenant.controller";
-import { requireAuth } from "../../shared/middleware/requireAuth";
+import { requireAuth, requireRole } from "../../shared/middleware/requireAuth";
 
 const router = Router();
 
@@ -19,9 +19,9 @@ const router = Router();
 router.use(requireAuth as any);
 
 router.get("/current", getCurrentTenant as any);
-router.put("/current", updateCurrentTenant as any);
-router.put("/settings", updateTenantSettings as any);
-router.post("/test-ai-key", testAIKey as any);
+router.put("/current", requireRole("clinic_owner") as any, updateCurrentTenant as any);
+router.put("/settings", requireRole("clinic_owner") as any, updateTenantSettings as any);
+router.post("/test-ai-key", requireRole("clinic_owner") as any, testAIKey as any);
 
 // Routes reserved for super_admin
 router.post("/", createTenant as any);

@@ -50,13 +50,8 @@ export class CommunicationService {
           }
         }
 
-        // 3. Fallback to active tenant if only 1 exists or as safe default
         if (!tenant) {
-          tenant = await Tenant.findOne({ status: "active" });
-        }
-
-        if (!tenant) {
-          console.warn(`[Webhook] No active clinic tenant found in database for incoming WhatsApp event.`);
+          console.warn(`[Webhook] No clinic tenant found for incoming WhatsApp event (phone_number_id: ${phoneNumberId}). Ignoring.`);
           continue;
         }
 
