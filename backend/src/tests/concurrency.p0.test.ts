@@ -15,8 +15,49 @@ async function runP0ConcurrencyTests() {
   await mongoose.connect(MONGO_URI);
   await Appointment.syncIndexes();
 
-  const tenantA = new mongoose.Types.ObjectId().toString();
-  const tenantB = new mongoose.Types.ObjectId().toString();
+  const tenantA_id = new mongoose.Types.ObjectId().toString();
+  const tenantB_id = new mongoose.Types.ObjectId().toString();
+
+  const { Tenant } = await import("../modules/tenants/tenant.model");
+  
+  await Tenant.create({
+    _id: tenantA_id,
+    name: "Test Clinic A",
+    status: "active",
+    timezone: "Africa/Tunis",
+    settings: {
+      businessHours: {
+        monday: [{ start: "08:00", end: "18:00" }],
+        tuesday: [{ start: "08:00", end: "18:00" }],
+        wednesday: [{ start: "08:00", end: "18:00" }],
+        thursday: [{ start: "08:00", end: "18:00" }],
+        friday: [{ start: "08:00", end: "18:00" }],
+        saturday: [{ start: "08:00", end: "18:00" }],
+        sunday: []
+      }
+    }
+  });
+
+  await Tenant.create({
+    _id: tenantB_id,
+    name: "Test Clinic B",
+    status: "active",
+    timezone: "Africa/Tunis",
+    settings: {
+      businessHours: {
+        monday: [{ start: "08:00", end: "18:00" }],
+        tuesday: [{ start: "08:00", end: "18:00" }],
+        wednesday: [{ start: "08:00", end: "18:00" }],
+        thursday: [{ start: "08:00", end: "18:00" }],
+        friday: [{ start: "08:00", end: "18:00" }],
+        saturday: [{ start: "08:00", end: "18:00" }],
+        sunday: []
+      }
+    }
+  });
+
+  const tenantA = tenantA_id;
+  const tenantB = tenantB_id;
 
   // Setup Doctor A (Tenant A), Doctor B (Tenant A), Doctor C (Tenant B)
   const docA = await User.create({
@@ -117,7 +158,7 @@ async function runP0ConcurrencyTests() {
       );
     } catch (err: any) {
       errorThrown = true;
-      assert(err.message === "Double_Booking_Error", `Erreur attendue Double_Booking_Error, reçu ${err.message}`);
+      assert(err.message === "SLOT_UNAVAILABLE", `Erreur attendue SLOT_UNAVAILABLE, reçu ${err.message}`);
     }
     assert(errorThrown, "Le deuxième rendez-vous chevauchant 09:30->10:30 a été rejeté");
     console.log("✅ TEST 1 PASSED: Chevauchement simple 09:30->10:30 correctement rejeté.");
@@ -161,7 +202,7 @@ async function runP0ConcurrencyTests() {
       );
     } catch (err: any) {
       errorThrown = true;
-      assert(err.message === "Double_Booking_Error", `Erreur attendue Double_Booking_Error, reçu ${err.message}`);
+      assert(err.message === "SLOT_UNAVAILABLE", `Erreur attendue SLOT_UNAVAILABLE, reçu ${err.message}`);
     }
     assert(errorThrown, "Deuxième réservation à la même heure de début refusée");
     console.log("✅ TEST 2 PASSED: Même heure de début correctement rejetée.");
@@ -205,7 +246,7 @@ async function runP0ConcurrencyTests() {
       );
     } catch (err: any) {
       errorThrown = true;
-      assert(err.message === "Double_Booking_Error", `Erreur attendue Double_Booking_Error, reçu ${err.message}`);
+      assert(err.message === "SLOT_UNAVAILABLE", `Erreur attendue SLOT_UNAVAILABLE, reçu ${err.message}`);
     }
     assert(errorThrown, "Rendez-vous interne 10:00->10:30 rejeté");
     console.log("✅ TEST 3 PASSED: Chevauchement interne correctement rejeté.");
@@ -249,7 +290,7 @@ async function runP0ConcurrencyTests() {
       );
     } catch (err: any) {
       errorThrown = true;
-      assert(err.message === "Double_Booking_Error", `Erreur attendue Double_Booking_Error, reçu ${err.message}`);
+      assert(err.message === "SLOT_UNAVAILABLE", `Erreur attendue SLOT_UNAVAILABLE, reçu ${err.message}`);
     }
     assert(errorThrown, "Rendez-vous chevauchant inverse 09:30->10:30 rejeté");
     console.log("✅ TEST 4 PASSED: Chevauchement inverse correctement rejeté.");
@@ -570,7 +611,7 @@ async function runP0ConcurrencyTests() {
       );
     } catch (err: any) {
       errorThrown = true;
-      assert(err.message === "Double_Booking_Error", `Erreur attendue Double_Booking_Error, reçu ${err.message}`);
+      assert(err.message === "SLOT_UNAVAILABLE", `Erreur attendue SLOT_UNAVAILABLE, reçu ${err.message}`);
     }
 
     assert(errorThrown, "La modification vers un créneau chevauchant a été rejetée");

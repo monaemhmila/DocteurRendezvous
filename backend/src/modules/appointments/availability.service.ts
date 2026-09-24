@@ -178,8 +178,9 @@ export const availabilityService = {
     date: string;
     startTime: string;
     endTime: string;
+    session?: any;
   }) => {
-    const { tenantId, doctorId, date, startTime, endTime } = params;
+    const { tenantId, doctorId, date, startTime, endTime, session } = params;
 
     // 1. Resolve schedule and check if the clinic is open
     const schedule = await resolveDaySchedule(tenantId, date);
@@ -207,7 +208,7 @@ export const availabilityService = {
     if (!isWithinBlock) return false;
 
     // 4. Check for overlapping appointments
-    const overlapping = await Appointment.findOne({
+    let query = Appointment.findOne({
       tenantId,
       doctorId,
       date,
@@ -217,6 +218,12 @@ export const availabilityService = {
         { endTime: { $gt: startTime } },
       ],
     });
+    
+    if (session) {
+      query = query.session(session);
+    }
+    
+    const overlapping = await query;
 
     return !overlapping;
   },

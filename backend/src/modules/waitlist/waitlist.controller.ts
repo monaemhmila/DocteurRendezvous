@@ -97,14 +97,14 @@ export const waitlistController = {
       const tenantId = req.user?.tenantId;
       if (!tenantId) return res.status(403).json({ error: "No tenant context" });
 
-      const { id: waitlistEntryId } = req.params;
+      const waitlistEntryId = req.params.id as string;
       if (!waitlistEntryId) return res.status(400).json({ error: "waitlistEntryId is required" });
-      const { taskId } = req.body;
+      const taskId = req.body.taskId as string;
 
       if (!taskId) return res.status(400).json({ error: "taskId is required" });
 
       try {
-        const appointment = await waitlistService.fulfillWaitlistEntry({ waitlistEntryId, taskId, tenantId });
+        const appointment = await waitlistService.fulfillWaitlistEntry({ waitlistEntryId, taskId, tenantId: tenantId as string });
         return res.status(201).json(appointment);
       } catch (error: any) {
         if (error.message === "SLOT_UNAVAILABLE" || error.message === "WAITLIST_CONFLICT") {

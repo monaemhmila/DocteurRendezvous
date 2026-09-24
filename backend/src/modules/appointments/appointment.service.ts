@@ -155,6 +155,45 @@ export const reminderService = {
   }
 };
 
+export async function validateBookableSlot(
+  tenantId: string,
+  date: string,
+  startTime: string,
+  endTime: string,
+  doctorId: string,
+  session?: any
+): Promise<void> {
+  const tenant = await Tenant.findById(tenantId).lean();
+  const tenantTimezone = (tenant as any)?.timezone || DEFAULT_TIMEZONE;
+  const tzNow = nowInTimezone(tenantTimezone);
+  const todayIso = toIsoDate(tenantTimezone, tzNow.date);
+
+  if (date < todayIso) {
+    throw new Error("Past_Date_Error: Cannot create or reschedule an appointment to a date in the past.");
+  }
+  if (date === todayIso) {
+    const [rh, rm] = startTime.split(":").map(Number);
+    const requestedMins = rh * 60 + rm;
+    const currentMins = tzNow.hours * 60 + tzNow.minutes;
+    if (requestedMins <= currentMins) {
+      throw new Error("Past_Date_Error: Cannot create or reschedule to a time that has already passed today.");
+    }
+  }
+
+  const isAvailable = await availabilityService.checkAvailability({
+    tenantId,
+    doctorId,
+    date,
+    startTime,
+    endTime,
+    session,
+  });
+
+  if (!isAvailable) {
+    throw new Error("SLOT_UNAVAILABLE");
+  }
+}
+
 export const appointmentService = {
   assertNoActiveUpcomingAppointment: async (tenantId: string, patientId: string, excludeAppointmentId?: string) => {
     const activeAppts = await Appointment.find({
@@ -196,25 +235,7 @@ export const appointmentService = {
       throw new Error("Patient is required");
     }
 
-    // P0 — Reject past appointments (backend enforcement, independent of AI)
-    if (data.date && data.startTime) {
-      const tenant = await Tenant.findById(tenantId).lean();
-      const tenantTimezone = (tenant as any)?.timezone || DEFAULT_TIMEZONE;
-      const tzNow = nowInTimezone(tenantTimezone);
-      const todayIso = toIsoDate(tenantTimezone, tzNow.date);
-
-      if (data.date < todayIso) {
-        throw new Error("Past_Date_Error: Cannot create an appointment in the past.");
-      }
-      if (data.date === todayIso) {
-        const [rh, rm] = data.startTime.split(":").map(Number);
-        const requestedMins = rh * 60 + rm;
-        const currentMins = tzNow.hours * 60 + tzNow.minutes;
-        if (requestedMins <= currentMins) {
-          throw new Error("Past_Date_Error: Cannot create an appointment at a time that has already passed today.");
-        }
-      }
-    }
+    // P0 — Reject past appointments (now handled by validateBookableSlot later after doctorId resolution)
 
     // Cross-tenant reference protection: both patient and doctor must belong to
     // the authenticated tenant. The frontend never supplies tenantId.
@@ -256,18 +277,15 @@ export const appointmentService = {
       appointmentData.occupiedSlots = computeOccupiedSlots(appointmentData.startTime, appointmentData.endTime);
     }
 
-    // Check availability first to prevent double-booking
+    // Validate slot logic (past date + availability)
     if (appointmentData.date && appointmentData.startTime && appointmentData.endTime && appointmentData.doctorId) {
-      const isAvailable = await availabilityService.checkAvailability({
+      await validateBookableSlot(
         tenantId,
-        doctorId: appointmentData.doctorId,
-        date: appointmentData.date,
-        startTime: appointmentData.startTime,
-        endTime: appointmentData.endTime,
-      });
-      if (!isAvailable) {
-        throw new Error("SLOT_UNAVAILABLE");
-      }
+        appointmentData.date,
+        appointmentData.startTime,
+        appointmentData.endTime,
+        appointmentData.doctorId
+      );
     }
 
     // P0 — Patient Single Active Upcoming Appointment Rule
@@ -285,90 +303,82 @@ export const appointmentService = {
     }
   },
   updateAppointment: async (id: string, data: Partial<IAppointment>, tenantId: string) => {
-    const existing = await Appointment.findOne({ _id: id, tenantId });
-    if (!existing) return null;
-
-    const {
-      tenantId: _ignoredTenantId,
-      createdAt: _ignoredCreatedAt,
-      updatedAt: _ignoredUpdatedAt,
-      status: _ignoredStatus,
-      ...safeData
-    } = data as any;
-
-    const nextDate = safeData.date ?? existing.date;
-    const nextStartTime = safeData.startTime ?? existing.startTime;
-
-    // P0 — Reject past appointments on reschedule (backend enforcement)
-    if (safeData.date || safeData.startTime) {
-      const tenant = await Tenant.findById(tenantId).lean();
-      const tenantTimezone = (tenant as any)?.timezone || DEFAULT_TIMEZONE;
-      const tzNow = nowInTimezone(tenantTimezone);
-      const todayIso = toIsoDate(tenantTimezone, tzNow.date);
-
-      if (nextDate < todayIso) {
-        throw new Error("Past_Date_Error: Cannot reschedule an appointment to a date in the past.");
-      }
-      if (nextDate === todayIso) {
-        const [rh, rm] = nextStartTime.split(":").map(Number);
-        const requestedMins = rh * 60 + rm;
-        const currentMins = tzNow.hours * 60 + tzNow.minutes;
-        if (requestedMins <= currentMins) {
-          throw new Error("Past_Date_Error: Cannot reschedule to a time that has already passed today.");
-        }
-      }
-    }
-    const nextEndTime = safeData.endTime ?? existing.endTime;
-    const nextDoctorId = safeData.doctorId ?? existing.doctorId;
-
-    if (safeData.patientId) {
-      const patient = await Patient.findOne({ _id: safeData.patientId, tenantId }).select("_id").lean();
-      if (!patient) throw new Error("Patient not found or does not belong to authenticated tenant");
-    }
-
-    if (safeData.doctorId) {
-      const doctor = await User.findOne({
-        _id: safeData.doctorId,
-        tenantId,
-        role: { $in: ["clinic_owner", "dentist"] },
-      }).select("_id").lean();
-      if (!doctor) throw new Error("Doctor not found or does not belong to authenticated tenant");
-    }
-
-    if (
-      nextDate !== existing.date ||
-      nextStartTime !== existing.startTime ||
-      nextEndTime !== existing.endTime ||
-      String(nextDoctorId) !== String(existing.doctorId)
-    ) {
-      const isAvailable = await availabilityService.checkAvailability({
-        tenantId,
-        doctorId: String(nextDoctorId),
-        date: String(nextDate),
-        startTime: String(nextStartTime),
-        endTime: String(nextEndTime),
-      });
-
-      if (!isAvailable) {
-        throw new Error("SLOT_UNAVAILABLE");
-      }
-
-      safeData.occupiedSlots = computeOccupiedSlots(String(nextStartTime), String(nextEndTime));
-    }
-
-    // P0 — Patient Single Active Upcoming Appointment Rule (Reschedule mode)
-    if (safeData.patientId || safeData.date || safeData.startTime || safeData.endTime) {
-      const patientId = safeData.patientId ? String(safeData.patientId) : String(existing.patientId);
-      await appointmentService.assertNoActiveUpcomingAppointment(tenantId, patientId, id);
-    }
-
+    const session = await mongoose.startSession();
     try {
-      return await Appointment.findOneAndUpdate(
+      session.startTransaction();
+
+      const existing = await Appointment.findOne({ _id: id, tenantId }).session(session);
+      if (!existing) {
+        await session.abortTransaction();
+        session.endSession();
+        return null;
+      }
+
+      const {
+        tenantId: _ignoredTenantId,
+        createdAt: _ignoredCreatedAt,
+        updatedAt: _ignoredUpdatedAt,
+        status: _ignoredStatus,
+        ...safeData
+      } = data as any;
+
+      const nextDate = safeData.date ?? existing.date;
+      const nextStartTime = safeData.startTime ?? existing.startTime;
+
+      // P0 — Reject past appointments on reschedule (now handled by validateBookableSlot)
+      const nextEndTime = safeData.endTime ?? existing.endTime;
+      const nextDoctorId = safeData.doctorId ?? existing.doctorId;
+
+      if (safeData.patientId) {
+        const patient = await Patient.findOne({ _id: safeData.patientId, tenantId }).select("_id").lean();
+        if (!patient) throw new Error("Patient not found or does not belong to authenticated tenant");
+      }
+
+      if (safeData.doctorId) {
+        const doctor = await User.findOne({
+          _id: safeData.doctorId,
+          tenantId,
+          role: { $in: ["clinic_owner", "dentist"] },
+        }).select("_id").lean();
+        if (!doctor) throw new Error("Doctor not found or does not belong to authenticated tenant");
+      }
+
+      if (
+        nextDate !== existing.date ||
+        nextStartTime !== existing.startTime ||
+        nextEndTime !== existing.endTime ||
+        String(nextDoctorId) !== String(existing.doctorId)
+      ) {
+        await validateBookableSlot(
+          tenantId,
+          String(nextDate),
+          String(nextStartTime),
+          String(nextEndTime),
+          String(nextDoctorId),
+          session
+        );
+
+        safeData.occupiedSlots = computeOccupiedSlots(String(nextStartTime), String(nextEndTime));
+      }
+
+      // P0 — Patient Single Active Upcoming Appointment Rule (Reschedule mode)
+      if (safeData.patientId || safeData.date || safeData.startTime || safeData.endTime) {
+        const patientId = safeData.patientId ? String(safeData.patientId) : String(existing.patientId);
+        await appointmentService.assertNoActiveUpcomingAppointment(tenantId, patientId, id);
+      }
+
+      const updated = await Appointment.findOneAndUpdate(
         { _id: id, tenantId },
         { $set: safeData },
-        { returnDocument: 'after', runValidators: true }
+        { returnDocument: 'after', runValidators: true, session }
       );
+
+      await session.commitTransaction();
+      session.endSession();
+      return updated;
     } catch (err: any) {
+      await session.abortTransaction();
+      session.endSession();
       if (err.code === 11000) {
         throw new Error("SLOT_UNAVAILABLE");
       }
@@ -393,11 +403,17 @@ export const appointmentService = {
       { returnDocument: 'after' }
     );
     
-    if (updated) {
-      await handleStatusChange(updated, tenantId);
+    if (!updated) {
+      const latest = await Appointment.findOne({ _id: id, tenantId });
+      if (latest?.status === nextStatus) {
+        return latest;
+      }
+      throw new Error("INVALID_APPOINTMENT_TRANSITION");
     }
     
-    return updated || existing;
+    await handleStatusChange(updated, tenantId);
+    
+    return updated;
   }
 };
 
