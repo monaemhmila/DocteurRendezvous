@@ -165,14 +165,19 @@ export class AIService {
     const rawBH = tenantDoc?.settings?.businessHours;
     let relevantDaysHours: string | undefined;
     if (rawBH) {
-      const todayBH = getBusinessHoursForDate(temporalCtx.currentDate, rawBH);
-      const tomorrowBH = getBusinessHoursForDate(temporalCtx.tomorrow, rawBH);
-      const dayAfterBH = getBusinessHoursForDate(temporalCtx.dayAfterTomorrow, rawBH);
-      relevantDaysHours = [
-        `${formatDateFr(temporalCtx.currentDate)} (aujourd'hui): ${formatBusinessHoursBlocks(todayBH)}`,
-        `${formatDateFr(temporalCtx.tomorrow)} (demain): ${formatBusinessHoursBlocks(tomorrowBH)}`,
-        `${formatDateFr(temporalCtx.dayAfterTomorrow)} (après-demain): ${formatBusinessHoursBlocks(dayAfterBH)}`,
-      ].join("\n");
+      const days = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(temporalCtx.currentDate + "T12:00:00Z");
+        d.setUTCDate(d.getUTCDate() + i);
+        const iso = d.toISOString().slice(0, 10);
+        const bh = getBusinessHoursForDate(iso, rawBH);
+        let label = "";
+        if (i === 0) label = " (aujourd'hui)";
+        if (i === 1) label = " (demain)";
+        if (i === 2) label = " (après-demain)";
+        days.push(`- ${formatDateFr(iso)}${label}: ${formatBusinessHoursBlocks(bh)}`);
+      }
+      relevantDaysHours = days.join("\n");
     }
 
     // Initialize aiContext with all clinic and practitioner settings
@@ -218,24 +223,63 @@ export class AIService {
         aiContext.isNewPatient = isPlaceholder;
         aiContext.patientNoShowCount = patient.metrics?.noShowCount || 0;
 
-        // Fetch Next Appointment
+        // Fetch Next Appointments for the conversation patient themselves
         const now = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-        const appointment = await Appointment.findOne({
+        const appointments = await Appointment.find({
           tenantId: tenantIdObj,
           patientId: patientIdObj,
           date: { $gte: now },
           status: { $in: ["scheduled", "confirmed"] }
         }).sort({ date: 1, startTime: 1 }).lean();
 
-        if (appointment) {
-          aiContext.appointment = {
-            id: appointment._id.toString(),
-            date: appointment.date,
-            startTime: appointment.startTime,
-            endTime: appointment.endTime,
-            treatment: appointment.treatment,
-            status: appointment.status,
-          };
+        if (appointments.length > 0) {
+          aiContext.appointments = appointments.map(appt => ({
+            id: appt._id.toString(),
+            date: appt.date,
+            startTime: appt.startTime,
+            endTime: appt.endTime,
+            treatment: appt.treatment,
+            status: appt.status,
+          }));
+        }
+
+        // ── Fetch family appointments (other patients linked to the same phone) ───
+        const convoPhone = (conversation as any).contactWaId;
+        if (convoPhone) {
+          // Find all patients that share this phone number in this tenant
+          const familyPatients = await Patient.find({
+            tenantId: tenantIdObj,
+            phone: convoPhone,
+            _id: { $ne: patientIdObj }, // exclude the main patient
+          }).select("_id firstName lastName").lean();
+
+          if (familyPatients.length > 0) {
+            const familyPatientIds = familyPatients.map(p => p._id);
+            const familyAppts = await Appointment.find({
+              tenantId: tenantIdObj,
+              patientId: { $in: familyPatientIds },
+              date: { $gte: now },
+              status: { $in: ["scheduled", "confirmed"] },
+            }).sort({ date: 1, startTime: 1 }).lean();
+
+            if (familyAppts.length > 0) {
+              const patientMap = new Map(familyPatients.map(p => [p._id.toString(), p]));
+              aiContext.familyAppointments = familyAppts.map(fa => {
+                const fp = patientMap.get(fa.patientId.toString());
+                const name = fp ? `${(fp as any).firstName} ${(fp as any).lastName}`.trim() : "Membre de la famille";
+                return {
+                  appointmentId: fa._id.toString(),
+                  patientId: fa.patientId.toString(),
+                  patientName: name,
+                  date: fa.date,
+                  startTime: fa.startTime,
+                  endTime: fa.endTime,
+                  treatment: fa.treatment,
+                  status: fa.status,
+                };
+              });
+            }
+          }
         }
 
         // Fetch Active Recovery
@@ -278,6 +322,17 @@ export class AIService {
       aiContext.pendingBookingContext = {
         date: conversation.pendingBookingContext.date,
         proposedSlots: conversation.pendingBookingContext.proposedSlots,
+      };
+    }
+
+    if (conversation.pendingBookingIntent) {
+      aiContext.pendingBookingIntent = {
+        date: conversation.pendingBookingIntent.date,
+        startTime: conversation.pendingBookingIntent.startTime,
+        durationMin: conversation.pendingBookingIntent.durationMin,
+        treatment: conversation.pendingBookingIntent.treatment,
+        targetPatientInfo: conversation.pendingBookingIntent.targetPatientInfo,
+        awaitingTargetConfirmation: conversation.pendingBookingIntent.awaitingTargetConfirmation,
       };
     }
 
@@ -421,16 +476,13 @@ export class AIService {
         needsHumanEscalation = parsed.needsHumanEscalation === true;
         if (
           parsed.action &&
-          typeof parsed.action.type === "string" &&
-          typeof parsed.action.targetId === "string" &&
-          typeof parsed.action.reason === "string" &&
-          typeof parsed.action.confidence === "number"
+          typeof parsed.action.type === "string"
         ) {
           action = {
             type: parsed.action.type,
-            targetId: parsed.action.targetId,
-            reason: parsed.action.reason,
-            confidence: parsed.action.confidence,
+            targetId: typeof parsed.action.targetId === "string" ? parsed.action.targetId : "self",
+            reason: typeof parsed.action.reason === "string" ? parsed.action.reason : "",
+            confidence: typeof parsed.action.confidence === "number" ? parsed.action.confidence : 1,
           };
           if (parsed.action.booking && typeof parsed.action.booking.date === "string") {
             action.booking = {

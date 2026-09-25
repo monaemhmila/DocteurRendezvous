@@ -31,14 +31,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# Environment files and secrets
-.env
-.env.*
-!.env.example
-!.env.test.example
-
 # Local backend secrets
 backend/.env
-backend/.env.*
-!backend/.env.example
-!backend/.env.test.example
+.env

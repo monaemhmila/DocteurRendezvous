@@ -154,10 +154,15 @@ function PatientProfilePage() {
     queryFn: () => api.get(`/recovery?patientId=${id}`),
   });
 
-  const { data: waitlist = [], isLoading: isLoadingWaitlist } = useQuery<IWaitlistEntry[]>({
+  const { data: waitlistResponse, isLoading: isLoadingWaitlist } = useQuery<{ data: IWaitlistEntry[], meta: any }>({
     queryKey: ["waitlist", "patient", id],
-    queryFn: () => api.get(`/waitlist?patientId=${id}`),
+    queryFn: async () => {
+      const res = await api.get(`/waitlist?patientId=${id}&limit=100`);
+      return (res.data ? res : { data: res, meta: {} }) as { data: IWaitlistEntry[], meta: any };
+    },
   });
+
+  const waitlist = waitlistResponse?.data || [];
 
   // Mutations
   const updatePatientMutation = useMutation({

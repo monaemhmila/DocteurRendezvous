@@ -370,21 +370,55 @@ async function handleAppointmentReschedule(
 
   // 1. Find the target appointment
   let appointment;
+  
+  // Is targetId an appointment ID?
   if (targetId && targetId !== "self" && mongoose.Types.ObjectId.isValid(targetId)) {
-    appointment = await Appointment.findOne({ _id: targetId, tenantId, patientId: conversationPatientId });
+    appointment = await Appointment.findOne({ _id: targetId, tenantId });
   }
 
-  // If not found by targetId, resolve the active upcoming appointment for this patient
+  // If not found, targetId might be a patient ID (from resolveTargetPatient)
+  let searchPatientId = conversationPatientId;
+  if (!appointment && targetId && targetId !== "self" && mongoose.Types.ObjectId.isValid(targetId)) {
+    const { Patient } = await import("../patients/patient.model");
+    const targetPatient = await Patient.findOne({ _id: targetId, tenantId }).lean();
+    if (targetPatient) {
+      searchPatientId = targetId;
+    }
+  }
+
+  // If still not found by appointment ID, resolve the active upcoming appointment for the appropriate patient
   if (!appointment) {
     appointment = await Appointment.findOne({
       tenantId,
-      patientId: conversationPatientId,
+      patientId: searchPatientId,
       status: { $in: ["scheduled", "confirmed"] }
     }).sort({ date: 1, startTime: 1 });
   }
 
   if (!appointment) {
     throw new ActionTargetNotFoundError();
+  }
+
+  // 1b. Security Check: Cross-patient protection
+  // Verify that the appointment's patientId is either the conversation patient
+  // OR a patient sharing the same phone number (family member).
+  const { Patient: SecPatientModel } = await import("../patients/patient.model");
+  const conversationPatient = await SecPatientModel.findOne({ _id: conversationPatientId, tenantId }).lean();
+  
+  if (!conversationPatient) {
+    throw new ActionTransitionError("Security error: conversation patient not found.");
+  }
+
+  const apptPatientIdStr = appointment.patientId.toString();
+  if (apptPatientIdStr !== conversationPatientId) {
+    const phone = (conversationPatient as any).phone;
+    if (!phone) {
+      throw new ActionTransitionError("Security error: unauthorized cross-patient reschedule attempt.");
+    }
+    const apptPatient = await SecPatientModel.findOne({ _id: apptPatientIdStr, tenantId }).lean();
+    if (!apptPatient || (apptPatient as any).phone !== phone) {
+      throw new ActionTransitionError("Security error: appointment belongs to an unauthorized patient.");
+    }
   }
 
   // 2. Compute endTime

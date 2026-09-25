@@ -195,12 +195,18 @@ export async function validateBookableSlot(
 }
 
 export const appointmentService = {
-  assertNoActiveUpcomingAppointment: async (tenantId: string, patientId: string, excludeAppointmentId?: string) => {
-    const activeAppts = await Appointment.find({
-      tenantId: new mongoose.Types.ObjectId(tenantId) as any,
-      patientId: new mongoose.Types.ObjectId(patientId) as any,
+  assertNoActiveUpcomingAppointment: async (tenantId: string, patientId: string, excludeAppointmentId?: string, targetDate?: string) => {
+    const query: any = {
+      tenantId: new mongoose.Types.ObjectId(tenantId),
+      patientId: new mongoose.Types.ObjectId(patientId),
       status: { $in: ["scheduled", "confirmed", "pending", "pending_confirmation"] }
-    } as any).lean();
+    };
+
+    if (targetDate) {
+      query.date = targetDate;
+    }
+
+    const activeAppts = await Appointment.find(query).lean();
 
     const now = new Date();
     const tnFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Tunis", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
@@ -313,8 +319,8 @@ export const appointmentService = {
       );
     }
 
-    // P0 — Patient Single Active Upcoming Appointment Rule
-    await appointmentService.assertNoActiveUpcomingAppointment(tenantId, data.patientId.toString());
+    // P0 — Patient Single Active Upcoming Appointment Rule (1 per day)
+    await appointmentService.assertNoActiveUpcomingAppointment(tenantId, data.patientId.toString(), undefined, data.date);
 
     const appointment = new Appointment({ ...appointmentData, tenantId });
     try {
@@ -408,10 +414,10 @@ export const appointmentService = {
         safeData.occupiedSlots = computeOccupiedSlots(String(nextStartTime), String(nextEndTime));
       }
 
-      // P0 — Patient Single Active Upcoming Appointment Rule (Reschedule mode)
+      // P0 — Patient Single Active Upcoming Appointment Rule (Reschedule mode, 1 per day)
       if (safeData.patientId || safeData.date || safeData.startTime || safeData.endTime) {
         const patientId = safeData.patientId ? String(safeData.patientId) : String(existing.patientId);
-        await appointmentService.assertNoActiveUpcomingAppointment(tenantId, patientId, id);
+        await appointmentService.assertNoActiveUpcomingAppointment(tenantId, patientId, id, String(nextDate));
       }
 
       let updated;

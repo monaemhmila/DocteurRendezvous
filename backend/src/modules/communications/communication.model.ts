@@ -10,6 +10,14 @@ export interface IPendingBookingContext {
   durationMin: number;                                     // duration used when generating slots
   proposedSlots: Array<{ startTime: string; endTime: string }>; // slots sent to the patient
   proposedAt: Date;                                        // when the proposal was sent
+  /** "booking" = new appointment, "reschedule" = modifying an existing one */
+  mode?: "booking" | "reschedule";
+  /** appointmentId (or patientId) of the appointment being rescheduled */
+  targetAppointmentId?: string;
+  /** patientId of the patient whose appointment is being rescheduled */
+  targetPatientId?: string;
+  /** Phase 6.17.1: target family member info if booking for a relative */
+  targetPatientInfo?: { firstName: string; lastName: string };
 }
 
 export interface IConversation extends Document {
@@ -65,6 +73,13 @@ const ConversationSchema = new Schema<IConversation>(
       durationMin: { type: Number },
       proposedSlots: [{ startTime: String, endTime: String }],
       proposedAt: { type: Date },
+      mode: { type: String },
+      targetAppointmentId: { type: String },
+      targetPatientId: { type: String },
+      targetPatientInfo: {
+        firstName: { type: String },
+        lastName: { type: String },
+      }
     },
     // Temporarily holds booking intent while asking for patient name (Phase 6.16/6.17)
     // Extended in Phase 6.17.1: targetPatientInfo + awaitingTargetConfirmation for family bookings

@@ -60,14 +60,14 @@ export interface IAIContext {
   lastName?: string;
   language?: string;
   isNewPatient?: boolean;
-  appointment?: {
+  appointments?: Array<{
     id: string;
     date: string;
     startTime: string;
     endTime: string;
     treatment: string;
     status: string;
-  };
+  }>;
   recovery?: {
     id: string;
     type: string;
@@ -81,6 +81,14 @@ export interface IAIContext {
   pendingBookingContext?: {
     date: string;
     proposedSlots: Array<{ startTime: string; endTime: string }>;
+  };
+  pendingBookingIntent?: {
+    date: string;
+    startTime: string;
+    durationMin: number;
+    treatment: string;
+    targetPatientInfo?: { firstName: string; lastName: string };
+    awaitingTargetConfirmation?: boolean;
   };
   businessHours?: string;
   patientNoShowCount?: number;
@@ -104,6 +112,17 @@ export interface IAIContext {
     timezone: string;
   };
   relevantDaysHours?: string;
+  /** Appointments for family members linked to the same phone number */
+  familyAppointments?: Array<{
+    appointmentId: string;
+    patientId: string;
+    patientName: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    treatment: string;
+    status: string;
+  }>;
 }
 
 /**
@@ -217,7 +236,21 @@ ${knownName
   if (context) {
     businessSection = `\n━━━ BUSINESS CONTEXT ━━━
 Only data explicitly listed below is known. NEVER invent anything else.
-- Upcoming Appointment ${context.appointment ? `(id:${context.appointment.id}): ${context.appointment.date} from ${context.appointment.startTime} to ${context.appointment.endTime} (${context.appointment.treatment}) — Status: ${context.appointment.status}` : ": none on record"}`;
+- Upcoming Appointments (Patient principal) :`;
+    if (context.appointments && context.appointments.length > 0) {
+      for (const appt of context.appointments) {
+        businessSection += `\n  • (id:${appt.id}): ${appt.date} from ${appt.startTime} to ${appt.endTime} (${appt.treatment}) — Status: ${appt.status}`;
+      }
+      if (context.appointments.length > 1) {
+        businessSection += `\n  → ⚠️ ATTENTION : Le patient a plusieurs rendez-vous. S'il demande une modification ("je veux décaler mon rendez-vous" ou "je veux modifier mon RDV"), TU DOIS OBLIGATOIREMENT LUI DEMANDER LEQUEL il souhaite modifier avant de proposer des créneaux (ex: "Vous avez un RDV le X et un autre le Y, lequel souhaitez-vous modifier ?"). NE MODIFIE PAS PAR DÉFAUT LE PREMIER.`;
+      }
+    } else {
+      businessSection += " none on record";
+    }
+
+    if (context.relevantDaysHours) {
+      businessSection += `\n\n- Calendrier des prochains jours :\n${context.relevantDaysHours}`;
+    }
 
     if (context.recovery) {
       businessSection += `\n- Active Recovery (id:${context.recovery.id}): Type: ${context.recovery.type}, Status: ${context.recovery.status}`;
@@ -227,20 +260,48 @@ Only data explicitly listed below is known. NEVER invent anything else.
       businessSection += `\n- Active Follow-up: Type: ${context.followUp.type}, Status: ${context.followUp.status}${context.followUp.scheduledFor ? `, Scheduled for: ${context.followUp.scheduledFor.toISOString().split("T")[0]}` : ""}`;
     }
 
-    if (context.pendingBookingContext && !context.appointment) {
+    if (context.pendingBookingIntent && context.pendingBookingIntent.awaitingTargetConfirmation) {
+      businessSection += `\n- PENDING BOOKING (Awaiting Target Patient Confirmation): The patient is currently confirming who the appointment is for.`;
+      businessSection += `\n  - Proposed Appointment: ${context.pendingBookingIntent.date} at ${context.pendingBookingIntent.startTime}`;
+      if (context.pendingBookingIntent.targetPatientInfo) {
+        businessSection += `\n  - Target Candidate: ${context.pendingBookingIntent.targetPatientInfo.firstName} ${context.pendingBookingIntent.targetPatientInfo.lastName}`;
+      }
+      businessSection += `\n  → If the patient confirms who the appointment is for, MUST output action "book_appointment" with the confirmed slot.`;
+      businessSection += `\n  → If they confirm for themselves, use targetId="self". If they confirm for the family member, pass targetId="self" but INCLUDE the family member's name in "patientInfo" in the JSON root.`;
+    }
+
+    if (context.familyAppointments && context.familyAppointments.length > 0) {
+      businessSection += `\n\n- Rendez-vous des membres de la famille (modifiables) :`;
+      for (const fa of context.familyAppointments) {
+        businessSection += `\n  • ${fa.patientName}: le ${fa.date} de ${fa.startTime} à ${fa.endTime} (${fa.treatment}) — Statut: ${fa.status} [appointmentId:${fa.appointmentId}] [patientId:${fa.patientId}]`;
+      }
+      businessSection += `\n  → Pour MODIFIER le rendez-vous d'un membre de la famille, output action "reschedule_appointment" avec targetId = l'appointmentId du membre concerné (ex: "6ab58c0a...").`;
+      businessSection += `\n  → NE JAMAIS utiliser targetId="self" pour modifier le rendez-vous d'un autre patient.`;
+    }
+
+    const hasOwnAppointments = context.appointments && context.appointments.length > 0;
+    if (context.pendingBookingContext && !hasOwnAppointments) {
       // No existing appointment → these are slots for a NEW booking
       const slotsStr = context.pendingBookingContext.proposedSlots
         .map((s) => `${s.startTime}-${s.endTime}`)
         .join(", ");
       businessSection += `\n- Proposed Slots (AWAITING patient confirmation for NEW booking): ${context.pendingBookingContext.date} at ${slotsStr}`;
       businessSection += `\n  → If the patient confirms one of these slots, output action "book_appointment" with the confirmed slot.`;
-    } else if (context.pendingBookingContext && context.appointment) {
-      // Existing appointment + pending slots → these are for a CHANGE/RESCHEDULE
+    } else if (context.pendingBookingContext && hasOwnAppointments) {
+      // Existing appointment + pending slots → could be a CHANGE or an ADDITIONAL booking
       const slotsStr = context.pendingBookingContext.proposedSlots
         .map((s) => `${s.startTime}-${s.endTime}`)
         .join(", ");
-      businessSection += `\n- Proposed Change Slots (AWAITING explicit reschedule confirmation): ${context.pendingBookingContext.date} at ${slotsStr}`;
-      businessSection += `\n  → These are proposed slots for MOVING the existing appointment. Output "reschedule_appointment" ONLY if the patient EXPLICITLY confirms they want to move their existing appointment to one of these slots. A simple question or ambiguous message does NOT qualify.`;
+      businessSection += `\n- Proposed Slots (AWAITING patient confirmation): ${context.pendingBookingContext.date} at ${slotsStr}`;
+      businessSection += `\n  → If the patient confirms they want to MOVE their existing appointment, output "reschedule_appointment" avec targetId = l'ID du rendez-vous choisi.`;
+      businessSection += `\n  → If the patient confirms they want an ADDITIONAL appointment (e.g. for a family member or another service), output "book_appointment".`;
+    } else if (context.pendingBookingContext && !hasOwnAppointments && context.familyAppointments && context.familyAppointments.length > 0) {
+      // No own appointment but pending slots — likely a family member reschedule
+      const slotsStr = context.pendingBookingContext.proposedSlots
+        .map((s) => `${s.startTime}-${s.endTime}`)
+        .join(", ");
+      businessSection += `\n- Proposed Slots (AWAITING patient confirmation — famille): ${context.pendingBookingContext.date} at ${slotsStr}`;
+      businessSection += `\n  → Si le patient confirme un créneau pour modifier le rendez-vous d'un membre de la famille, output "reschedule_appointment" avec le targetId = l'appointmentId du membre concerné.`;
     }
 
     if (context.businessHours) {
@@ -253,6 +314,10 @@ Only data explicitly listed below is known. NEVER invent anything else.
 Your role is exclusively administrative front-desk support on WhatsApp.
 CURRENT DATE: ${todayIso} (${todayName})
 CURRENT TIME: ${currentTime}
+${clinicIdentitySection}
+${customSection}
+${patientSection}
+${businessSection}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 P0 — PAST DATE & TIME REJECTION (ABSOLUTE RULE)
@@ -264,24 +329,25 @@ P0 — PAST DATE & TIME REJECTION (ABSOLUTE RULE)
   Ne jamais répondre simplement "Bonjour ! Comment puis-je vous aider ?" sans mentionner le cabinet et la spécialité.
 
 BEFORE CLASSIFYING ANY SLOT AS PAST, APPLY THIS CHECK:
-  requestedTime < ${currentTime}  → PAST (refuse)
-  requestedTime >= ${currentTime} → FUTURE (verify real availability)
+  requestedDate < ${todayIso} → PAST (refuse)
+  requestedDate === ${todayIso} AND requestedTime < ${currentTime} → PAST (refuse)
+  Otherwise → FUTURE (verify real availability)
 
 NEVER propose, accept, or book any appointment in the past.
 - Any date BEFORE ${todayIso} is PAST — refuse clearly.
 - Any slot TODAY (${todayIso}) STRICTLY BEFORE ${currentTime} is PAST — refuse clearly.
-- A slot is FUTURE if its startTime >= ${currentTime}, regardless of which business session it belongs to.
+- A slot on a FUTURE date (${todayIso} < requestedDate) is ALWAYS FUTURE, regardless of the time.
 - ⚠️ CRITICAL: A clinic with split hours (e.g. 08:30-12:30 and 14:00-18:00) is NOT fully closed between sessions.
   Example at ${currentTime}: a slot at 14:00 is FUTURE if 14:00 >= ${currentTime}. NEVER say it is "déjà passé".
 - If the patient requests a past slot: say "Ce créneau est déjà passé." and propose future alternatives.
 - If a previously proposed slot is now past when the patient confirms: do NOT book it. Propose new slots.
 
 ⚠️ MANDATORY PRE-CHECK BEFORE SAYING "CE CRÉNEAU EST DÉJÀ PASSÉ" :
-  STEP 1 — Compare: is requestedTime < ${currentTime}?
+  STEP 1 — Check the date. If requestedDate > ${todayIso}, it is FUTURE.
+  STEP 2 — If requestedDate === ${todayIso}, compare: is requestedTime < ${currentTime}?
     YES → slot is PAST → say "Ce créneau est déjà passé."
     NO  → slot is FUTURE → NEVER say "déjà passé". Query real availability.
-  STEP 2 — If FUTURE: set scheduling.date = ${todayIso}, scheduling and check availability.
-  NEVER skip STEP 1. NEVER assume a slot is past without this comparison.
+  NEVER skip this check. NEVER assume a slot is past on a future date.
 
 🔴 BACKEND AVAILABILITY = SEULE SOURCE DE VÉRITÉ (RÈGLE ABSOLUE) :
   Quand le backend (getAvailableSlots / [SYSTEM] message) retourne une liste de créneaux disponibles,
@@ -588,10 +654,10 @@ CONFIRMATION OF UPCOMING APPOINTMENT (Reminder Attendance Confirmation):
   - Check "Upcoming Appointment" in BUSINESS CONTEXT. If an appointment with Status 'scheduled' exists:
     - Set intent to "appointment_confirmation".
     - Output action "confirm_appointment" with:
-      - "targetId": "${context?.appointment?.id ?? "self"}"
+      - "targetId": "self"
       - "reason": "Patient confirmed attendance for upcoming appointment",
       - "confidence": 1.0
-    - Reply warmly: confirm that their appointment for ${context?.appointment?.date ?? "demain"} at ${context?.appointment?.startTime ?? "l'heure convenue"} is officially validated in the clinic agenda!
+    - Reply warmly: confirm that their appointment is officially validated in the clinic agenda!
 
 SCHEDULING & BOOKING FLOW (New Appointments — NO existing appointment):
 - 🔴 EXCEPTION: Si la POLITIQUE DE NO-SHOW bloque le patient (voir PATIENT CONTEXT), refusez la demande, ne proposez aucun créneau, définissez "intent": "human_request", et activez "needsHumanEscalation": true.
@@ -615,23 +681,30 @@ SCHEDULING & BOOKING FLOW (New Appointments — NO existing appointment):
   - If the patient also provided their name, include it in "patientInfo".
 
 RESCHEDULING & MODIFICATION FLOW (appointment_change_request — EXPLICIT change only):
-- Triggered ONLY when the patient EXPLICITLY requests to move/reschedule/postpone their existing appointment.
+- Triggered ONLY when the patient EXPLICITLY requests to move/reschedule/postpone an existing appointment (their own OR a family member's).
 - A simple availability question ("10h est disponible ?") is NOT a change request — apply RULE D.
-- Check "Upcoming Appointment" in BUSINESS CONTEXT. Acknowledge it warmly (e.g. "Votre rendez-vous est actuellement prévu le [date] à [heure].").
+- For OWN appointment: Check "Upcoming Appointment" in BUSINESS CONTEXT. Acknowledge it warmly.
+- For FAMILY MEMBER appointment: Check "Rendez-vous des membres de la famille" in BUSINESS CONTEXT. Identify which appointment the patient wants to modify.
 - If the patient asks to reschedule without giving a day: ask which day or timeframe they prefer.
-- If the patient specifies a day or timeframe (e.g. "demain après-midi", "vendredi", "la semaine prochaine"): use the TEMPORAL REFERENCE above for relative dates ("demain" = ${tomorrowIso}, etc.) or resolve the explicit date to YYYY-MM-DD. Set "scheduling.date" so the system fetches the real open slots!
-- When open slots are presented and the patient confirms a new slot (e.g. "15h me convient", "d'accord pour 15h", "demain à 16h"):
+- If the patient specifies a day or timeframe: set "scheduling.date" so the system fetches the real open slots!
+- When open slots are presented and the patient confirms a new slot:
   - Set intent to "appointment_change_request".
   - Output action "reschedule_appointment" with:
-    - "targetId": "${context?.appointment?.id ?? "self"}"
+    - For OWN appointment: "targetId": l'ID du rendez-vous choisi parmi "Upcoming Appointments".
+    - For FAMILY MEMBER appointment: "targetId": <the appointmentId of the family member from BUSINESS CONTEXT>
     - "reason": "Patient requested to reschedule appointment",
     - "confidence": 1.0,
     - "booking": {
         "date": "YYYY-MM-DD",
         "startTime": "HH:MM",
         "durationMin": 30,
-        "treatment": "${context?.appointment?.treatment ?? "Consultation dentaire"}"
+        "treatment": "<treatment from the appointment being modified>"
       }
+
+⚠️ RÈGLE CRITIQUE — MODIFICATION FAMILLE:
+- Si le patient dit "je veux modifier le rendez-vous de mon père/fils/femme/etc.", identifie le membre dans "Rendez-vous des membres de la famille" et utilise son appointmentId comme targetId.
+- NE JAMAIS utiliser targetId="self" pour modifier le rendez-vous d'un autre patient.
+- Si le patient confirme un nouveau créneau pour un membre de la famille (ex: "10h30 pour mon père"), output IMMÉDIATEMENT l'action reschedule_appointment avec le bon appointmentId.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 HUMAN ESCALATION
@@ -660,7 +733,7 @@ AVAILABLE ACTIONS
 
 - Allowed action types: mark_recovery_contacted | mark_recovery_responded | dismiss_recovery | confirm_appointment | book_appointment | reschedule_appointment
 - For "book_appointment": output action ONLY when patient selects or confirms a time slot for a NEW appointment with NO existing upcoming appointment (or after clarification that they want an additional appointment).
-- For "reschedule_appointment": output action ONLY when patient EXPLICITLY confirms a new slot to move/reschedule their existing appointment. targetId must be "${context?.appointment?.id ?? "self"}". NEVER output this from a simple question.
+- For "reschedule_appointment": output action ONLY when patient EXPLICITLY confirms a new slot to move/reschedule their existing appointment. targetId must be the specific appointment ID. NEVER output this from a simple question.
 - For "mark_recovery_contacted", "mark_recovery_responded", "dismiss_recovery": use the recovery id from BUSINESS CONTEXT.
 - For "confirm_appointment": use the appointment id from BUSINESS CONTEXT.
 - If no action is warranted: set action to null.
