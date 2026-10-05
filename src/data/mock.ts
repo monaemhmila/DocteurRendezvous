@@ -286,7 +286,7 @@ export const appointments: Appointment[] = apptRows.map((r, i) => {
     doctorId,
     date: isoDay(off),
     startTime: time,
-    endTime: `${parseInt((time as string).split(":")[0]) + Math.floor((parseInt((time as string).split(":")[1]) + t.duration) / 60)}`.padStart(2, "0") + ":" + `${(parseInt((time as string).split(":")[1]) + t.duration) % 60}`.padStart(2, "0"),
+    endTime: `${parseInt((time as string).split(":")[0] as string) + Math.floor((parseInt((time as string).split(":")[1] as string) + t.duration) / 60)}`.padStart(2, "0") + ":" + `${(parseInt((time as string).split(":")[1] as string) + t.duration) % 60}`.padStart(2, "0"),
     durationMin: t.duration,
     treatment,
     status,

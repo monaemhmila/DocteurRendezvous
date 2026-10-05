@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useAppState } from "@/hooks/use-app-state";
 import { api } from "@/lib/api";
 import { IFollowUpTask, IPatient } from "@/types/api";
 import { PageHeader, SectionCard, PriorityBadge, PatientAvatar } from "@/components/shared/ui-kit";
@@ -49,15 +50,21 @@ const taskStatusLabel: Record<string, string> = {
 };
 
 function FollowUpsPage() {
+  const { t } = useAppState();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>("active"); // active = pending + in_progress
   const [priorityFilter, setPriorityFilter] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<string>("");
 
-  const { data: allTasks = [], isLoading } = useQuery<IFollowUpTask[]>({
+  const { data: rawTasks = [], isLoading } = useQuery<IFollowUpTask[]>({
     queryKey: ["follow-ups"],
     queryFn: () => api.get("/follow-ups"),
   });
+
+  // Filter out dummy patients used for doctor reservations
+  const allTasks = rawTasks.filter(
+    (task) => (task.patientId as IPatient)?.phone !== "00000000"
+  );
 
   // KPI Calculations
   const today = new Date().toISOString().split("T")[0] as string;

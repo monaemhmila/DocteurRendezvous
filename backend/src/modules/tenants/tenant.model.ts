@@ -24,6 +24,7 @@ export interface ITenant extends Document {
       maxAllowed: number;
       rejectionMessage?: string;
     };
+    doctorPhones?: string[];
     [key: string]: any;
   };
   createdAt: Date;

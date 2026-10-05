@@ -124,6 +124,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
 
     const id = req.params["id"];
     const content = req.body["content"];
+    const reqDoc = req.body["document"];
 
     if (!id) {
       return res.status(404).json({ error: "Conversation not found" });
@@ -151,8 +152,9 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
       providerResponse = await whatsappProvider.sendMessage(
         {
           to: conversation.contactWaId,
-          type: "text",
-          content: content.trim(),
+          type: reqDoc ? "document" : "text",
+          content: content ? content.trim() : "",
+          document: reqDoc,
         },
         tenant
       );
@@ -168,17 +170,102 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
       patientId: conversation.patientId,
       direction: "outbound",
       status: "sent",
-      content: content.trim(),
+      content: (content ? content.trim() : "") + (document ? " [Document PDF Envoyé]" : ""),
       providerMessageId: providerResponse.providerMessageId,
     });
 
-    // Update conversation lastMessageAt
+    import("./sse.service").then(({ sseService }) => {
+      sseService.notifyNewMessage(
+        tenantId.toString(),
+        conversation._id.toString(),
+        newMessage
+      );
+    });
+
+    // Update conversation lastMessageAt and CLEAR AI pending state
+    // because a human has intervened and taken over the conversation.
     conversation.lastMessageAt = new Date();
+    conversation.needsHuman = false;
+    conversation.pendingBookingIntent = undefined;
+    conversation.pendingBookingContext = undefined;
+    
     await conversation.save();
 
     return res.json(newMessage);
   } catch (error) {
     console.error("[sendMessage] Error:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const sendMessageToPatient = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = await resolveTenantId(req);
+    if (!tenantId) return res.status(403).json({ error: "No tenant context" });
+
+    const { patientId } = req.params;
+    const { content, document } = req.body;
+    if (!content && !document) return res.status(400).json({ error: "Content or document is required" });
+
+    const patient = await Patient.findOne({ _id: patientId, tenantId });
+    if (!patient) return res.status(404).json({ error: "Patient not found" });
+
+    let conversation = await Conversation.findOne({ tenantId, patientId: patient._id });
+    if (!conversation) {
+      if (!patient.phone) return res.status(400).json({ error: "Patient has no phone number" });
+      conversation = await Conversation.create({
+        tenantId,
+        patientId: patient._id,
+        contactWaId: patient.phone,
+        channel: "whatsapp",
+        status: "active",
+        lastMessageAt: new Date(),
+      });
+    }
+
+    const tenant = await Tenant.findById(tenantId);
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    
+    let providerResponse: any;
+    try {
+      providerResponse = await whatsappProvider.sendMessage(
+        {
+          to: conversation.contactWaId,
+          type: "text",
+          content: content.trim(),
+        },
+        tenant
+      );
+    } catch (providerError: any) {
+      console.error("[sendMessageToPatient] Provider error:", providerError);
+      return res.status(502).json({ error: providerError.message || "Failed to send message via provider" });
+    }
+
+    const newMessage = await Message.create({
+      tenantId,
+      conversationId: conversation._id,
+      patientId: conversation.patientId,
+      direction: "outbound",
+      status: "sent",
+      content: content.trim(),
+      providerMessageId: providerResponse.providerMessageId,
+    });
+
+    import("./sse.service").then(({ sseService }) => {
+      sseService.notifyNewMessage(
+        tenantId.toString(),
+        conversation._id.toString(),
+        newMessage
+      );
+    });
+
+    conversation.lastMessageAt = new Date();
+    conversation.needsHuman = false;
+    await conversation.save();
+
+    return res.json(newMessage);
+  } catch (error) {
+    console.error("[sendMessageToPatient] Error:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 };
@@ -222,7 +309,7 @@ export const simulateInboundMessage = async (req: AuthRequest, res: Response) =>
     if (!conversation && phone) {
       conversation = await Conversation.findOne({ tenantId, contactWaId: phone });
       if (!conversation) {
-        const patient = await Patient.findOne({ tenantId, phone });
+        const patient = await Patient.findOne({ tenantId, phone }).sort({ createdAt: 1 });
         conversation = await Conversation.create({
           tenantId,
           ...(patient ? { patientId: patient._id } : {}),
@@ -262,6 +349,14 @@ export const simulateInboundMessage = async (req: AuthRequest, res: Response) =>
       status: "received",
       content: content.trim(),
       providerMessageId: wamid,
+    });
+
+    import("./sse.service").then(({ sseService }) => {
+      sseService.notifyNewMessage(
+        tenantId.toString(),
+        conversation._id.toString(),
+        inboundMessage
+      );
     });
 
     conversation.lastMessageAt = new Date();

@@ -47,6 +47,7 @@
 
 import mongoose from "mongoose";
 import { Conversation, Message } from "../communications/communication.model";
+import { sseService } from "../communications/sse.service";
 import { Appointment } from "../appointments/appointment.model";
 import { Patient } from "../patients/patient.model";
 import { Tenant } from "../tenants/tenant.model";
@@ -60,137 +61,29 @@ import {
 import { availabilityService } from "../appointments/availability.service";
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Confirmation message builder
-// Generates the WhatsApp text from REAL appointment data — never from AI reply.
-// ──────────────────────────────────────────────────────────────────────────────
+import {
+  buildConfirmationMessage,
+  normalizeTime,
+  extractTimeFromMessage,
+  extractPatientNameFromText,
+  hasFamilyKeyword,
+  detectLanguageFromText,
+  isSelfConfirmation,
+  isPlaceholderPatient,
+  formatTimeRange
+} from "./ai.utils";
 
-export function buildBookingConfirmationMessage(
-  appointment: {
-    date: string;
-    startTime: string;
-    endTime: string;
-    treatment: string;
-  },
-  patientFirstName: string,
-  language = "fr"
-): string {
-  if (language === "en") {
-    return `Hello ${patientFirstName}, your appointment has been confirmed: ${appointment.date} from ${appointment.startTime} to ${appointment.endTime} (${appointment.treatment}). See you soon!`;
-  }
-  // Default: French
-  return `Bonjour ${patientFirstName}, votre rendez-vous a bien \u00e9t\u00e9 confirm\u00e9 : le ${appointment.date} de ${appointment.startTime} \u00e0 ${appointment.endTime} (${appointment.treatment}). \u00c0 bient\u00f4t au cabinet !`;
-}
-
-export function buildRescheduleConfirmationMessage(
-  appointment: {
-    date: string;
-    startTime: string;
-    endTime: string;
-    treatment: string;
-  },
-  patientFirstName: string,
-  language = "fr"
-): string {
-  if (language === "en") {
-    return `Hello ${patientFirstName}, your appointment has been modified: it is now scheduled on ${appointment.date} from ${appointment.startTime} to ${appointment.endTime} (${appointment.treatment}). See you soon!`;
-  }
-  // Default: French
-  return `Bonjour ${patientFirstName}, votre rendez-vous a bien \u00e9t\u00e9 modifi\u00e9 : il est d\u00e9sormais pr\u00e9vu le ${appointment.date} de ${appointment.startTime} \u00e0 ${appointment.endTime} (${appointment.treatment}). \u00c0 bient\u00f4t au cabinet !`;
-}
+import { resolveTargetPatient } from "./ai.identity.resolver";
+import { AIBookingManager } from "./ai.booking.manager";
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Service
-// ──────────────────────────────────────────────────────────────────────────────
-
-function normalizeTime(timeStr?: string): string {
-  if (!timeStr) return "09:00";
-  const clean = timeStr.trim().toLowerCase().replace("h", ":");
-  const parts = clean.split(":");
-  const h = (parts[0] || "9").padStart(2, "0");
-  const m = (parts[1] || "00").padStart(2, "0");
-  return `${h}:${m}`;
-}
-
-function extractPatientNameFromText(text: string): { firstName?: string; lastName?: string } | null {
-  if (!text) return null;
-  const match1 = text.match(/(?:je m'appelle|moi c'est|mon nom est|je suis)\s+([A-Za-zÀ-ÿ\-]+)\s+([A-Za-zÀ-ÿ\-]+)/i);
-  if (match1) {
-    return { firstName: match1[1], lastName: match1[2] };
-  }
-  const match2 = text.match(/(?:nom\s*(?:et\s*pr[ée]nom)?)\s*[:\-]\s*([A-Za-zÀ-ÿ\-]+)\s+([A-Za-zÀ-ÿ\-]+)/i);
-  if (match2) {
-    return { firstName: match2[1], lastName: match2[2] };
-  }
-  return null;
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Phase 6.17.1 — Family / target patient detection
-// ──────────────────────────────────────────────────────────────────────────────
-
-/**
- * French family-relation keywords.
- * If any of these appear in a message, the booking target is ANOTHER person
- * (not the conversation patient), and we must never update the existing record.
- */
-const FAMILY_KEYWORDS = [
-  "mon fils", "ma fille", "ma femme", "mon mari",
-  "ma mère", "mon père", "mon frère", "ma sœur",
-  "mon enfant", "pour mon", "pour ma",
-];
-
-/**
- * Returns true when the message explicitly names a family relation.
- * Pure function — no DB access.
- */
-function hasFamilyKeyword(text: string): boolean {
-  const lower = text.toLowerCase();
-  return FAMILY_KEYWORDS.some((kw) => lower.includes(kw));
-}
-
-/**
- * Detect if a message confirms the appointment is for SELF (not family).
- * Handles cases like "pour moi", "c'est pour moi", "c'est moi", "moi" (in target clarification context).
- */
-function isSelfConfirmation(text: string): boolean {
-  const lower = text.toLowerCase().trim();
-  const SELF_KEYWORDS = [
-    "pour moi", "c'est pour moi", "c'est moi", "pour moi-même",
-    "moi et", "c'est mon", "mon surnom", "c'est ma", "je suis",
-    "c'est bien moi", "oui pour moi",
-  ];
-  return SELF_KEYWORDS.some((kw) => lower.includes(kw));
-}
 
 /**
  * Extract a HH:MM time string from a French patient message.
  * Handles formats: "10h", "10h30", "10:30", "10h00", "10", "9h", "14h30"
  * Returns "HH:MM" or null if no time found.
  */
-function extractTimeFromMessage(text: string): string | null {
-  const lower = text.toLowerCase().trim();
-  // Format: 10h30, 9h00, 14h30
-  const m1 = lower.match(/\b(\d{1,2})h(\d{2})\b/);
-  if (m1) {
-    const h = m1[1].padStart(2, "0");
-    const min = m1[2];
-    return `${h}:${min}`;
-  }
-  // Format: 10h, 9h, 14h (hour only, minutes = 00)
-  const m2 = lower.match(/\b(\d{1,2})h\b/);
-  if (m2) {
-    const h = m2[1].padStart(2, "0");
-    return `${h}:00`;
-  }
-  // Format: 10:30, 9:00
-  const m3 = lower.match(/\b(\d{1,2}):(\d{2})\b/);
-  if (m3) {
-    const h = m3[1].padStart(2, "0");
-    const min = m3[2];
-    return `${h}:${min}`;
-  }
-  return null;
-}
+// Removed extractTimeFromMessage
 
 /**
  * Returns true when the current patient is still a placeholder
@@ -203,108 +96,19 @@ function extractTimeFromMessage(text: string): string | null {
  *  - Missing lastName (WhatsApp only gives a display name, no last name)
  *  - Display names with emojis (not a real civil identity)
  */
-function isPlaceholderPatient(p: any): boolean {
-  if (!p || !p.firstName || p.firstName === "Patient" || p.lastName === "WhatsApp") return true;
-  // Status "lead" means auto-created from WhatsApp — not a confirmed identity
-  if (p.status === "lead") return true;
-  // No last name means identity is incomplete (WhatsApp only gives display name)
-  if (!p.lastName) return true;
-  // Emoji in first name suggests WhatsApp display name, not real civil identity
-  const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}]/u;
-  if (emojiRegex.test(p.firstName)) return true;
-  return false;
-}
+// Removed isPlaceholderPatient
 
-/**
- * Phase 6.17.1 — Resolve the target patient for a booking.
- *
- * Priority:
- *  1. If targetInfo is absent → use the conversation patient as-is.
- *  2. If targetInfo names the SAME person as the conversation patient → use as-is.
- *  3. Otherwise: search the tenant DB for firstName+lastName (case-insensitive).
- *     - Found  → reuse existing record (NEVER create a duplicate)
- *     - Not found → create a new lead patient
- *
- * CRITICAL: the conversation patient is NEVER modified.
- *
- * @param tenantId         Tenant scope — never crossed
- * @param conversationPatient  The patient already linked to the conversation (may be placeholder)
- * @param targetInfo       Name provided for the booking target (may be null)
- * @returns { targetPatientId: string, targetFirstName: string, targetLanguage: string }
- */
-async function resolveTargetPatient(
-  tenantId: string,
-  conversationPatient: any,
-  targetInfo: { firstName: string; lastName: string } | null,
-  contactWaId?: string
-): Promise<{ targetPatientId: string; targetFirstName: string; targetLanguage: string }> {
-  // No explicit target → booking is for the conversation patient
-  if (!targetInfo || (!targetInfo.firstName && !targetInfo.lastName)) {
-    return {
-      targetPatientId: conversationPatient._id.toString(),
-      targetFirstName: conversationPatient.firstName || "",
-      targetLanguage: conversationPatient.language || "fr",
-    };
-  }
-
-  // Same name as conversation patient (case-insensitive) → use existing record
-  const sameName =
-    targetInfo.firstName.toLowerCase() === (conversationPatient.firstName || "").toLowerCase() &&
-    targetInfo.lastName.toLowerCase() === (conversationPatient.lastName || "").toLowerCase();
-
-  if (sameName && !isPlaceholderPatient(conversationPatient)) {
-    return {
-      targetPatientId: conversationPatient._id.toString(),
-      targetFirstName: conversationPatient.firstName,
-      targetLanguage: conversationPatient.language || "fr",
-    };
-  }
-
-  // Search tenant-scoped by exact name (case-insensitive)
-  const existing = await Patient.findOne({
-    tenantId: new mongoose.Types.ObjectId(tenantId),
-    firstName: { $regex: new RegExp(`^${targetInfo.firstName}$`, "i") },
-    lastName: { $regex: new RegExp(`^${targetInfo.lastName}$`, "i") },
-  })
-    .select("_id firstName lastName language")
-    .lean();
-
-  if (existing) {
-    console.log(`[AI Conversation] resolveTargetPatient: found existing patient ${existing._id} (${(existing as any).firstName} ${(existing as any).lastName})`);
-    return {
-      targetPatientId: (existing as any)._id.toString(),
-      targetFirstName: (existing as any).firstName,
-      targetLanguage: (existing as any).language || "fr",
-    };
-  }
-
-  // Not found → create a new lead patient (tenant-scoped)
-  // Use the caller's WhatsApp number so the family member is reachable via the same channel.
-  // Fall back to a unique placeholder only if contactWaId is unavailable.
-  const phone = contactWaId || `wa-family-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  const created = await Patient.create({
-    tenantId: new mongoose.Types.ObjectId(tenantId),
-    firstName: targetInfo.firstName,
-    lastName: targetInfo.lastName,
-    language: "fr",
-    status: "lead",
-    phone,
-  });
-  console.log(`[AI Conversation] resolveTargetPatient: created new patient ${created._id} (${targetInfo.firstName} ${targetInfo.lastName}) phone=${phone}`);
-  return {
-    targetPatientId: created._id.toString(),
-    targetFirstName: targetInfo.firstName,
-    targetLanguage: "fr",
-  };
-}
+// Removed resolveTargetPatient
 
 export class AIAutoBookingService {
   private aiService: AIService;
   private messagingProvider: IMessagingProvider;
+  private bookingManager: AIBookingManager;
 
   constructor(aiService?: AIService, messagingProvider?: IMessagingProvider) {
     this.aiService = aiService ?? new AIService(new OpenAICompatibleProvider());
     this.messagingProvider = messagingProvider ?? new MetaWhatsAppProvider();
+    this.bookingManager = new AIBookingManager(this.messagingProvider, this.generateErrorReply.bind(this), this.sendConversationalReply.bind(this));
   }
 
   /**
@@ -329,12 +133,146 @@ export class AIAutoBookingService {
       return;
     }
 
-    // A human has taken over this conversation → AI must stay silent.
+    // A human has taken over this conversation → AI acknowledges but does NOT process.
     if (conversation.needsHuman === true) {
       console.log(
-        "[AI Conversation] Conversation is under human takeover — skipping AI processing."
+        "[AI Conversation] Conversation is under human takeover — sending polite holding reply."
       );
+      try {
+        const holdingReply = await this.generateErrorReply(
+          tenantId,
+          conversation,
+          `[SYSTEM: This conversation has been escalated to a human. The patient just sent a new message.
+           Your ONLY job: send ONE SHORT, POLITE holding message.
+           CRITICAL: Detect the patient's language AUTOMATICALLY from the recent conversation history (French, Tunisian Arabizi, Arabic script, or English) and reply in that EXACT language.
+           Tell them that their message has been received and that the secretariat/doctor will respond shortly.
+           Do NOT try to answer their question. Do NOT say "I can't answer". Do NOT mention that you are an AI. Just reassure them warmly and briefly in their language.
+           IMPORTANT: Send only this holding message. Nothing else.]`
+        );
+        if (holdingReply) {
+          const freshConv = await Conversation.findOne({ _id: conversationId, tenantId: new mongoose.Types.ObjectId(tenantId) }).lean();
+          if (freshConv) {
+            await this.sendConversationalReply(
+              tenantId,
+              conversationId,
+              freshConv,
+              { suggestion: holdingReply, structured: true, intent: "general_question", needsHumanEscalation: false, action: null },
+              inboundWaId
+            );
+          }
+        }
+      } catch (err: any) {
+        console.error("[AI Conversation] Failed to send holding reply:", err.message);
+      }
       return;
+    }
+
+    // ── Step 1a: Handle pendingActionConfirmation (cancel / confirm / reschedule) ────
+    // If a previous turn asked the patient to confirm an action (cancel, confirm
+    // appointment status, reschedule), handle their response here BEFORE calling AI.
+    if ((conversation as any).pendingActionConfirmation) {
+      const pac = (conversation as any).pendingActionConfirmation as {
+        type: "cancel_appointment" | "confirm_appointment_status" | "reschedule_appointment";
+        appointmentId: string;
+        appointmentSummary: string; // human-readable "Jasser - 2026-10-02 à 09:00"
+      };
+
+      const pacMsg = await Message.findOne({
+        tenantId: new mongoose.Types.ObjectId(tenantId),
+        conversationId: new mongoose.Types.ObjectId(conversationId),
+        direction: "inbound",
+      }).sort({ createdAt: -1 }).lean();
+      const pacText = (pacMsg?.content || "").trim().toLowerCase();
+
+      // Positive confirmation keywords (arabizi + fr + ar)
+      const PAC_CONFIRM = [
+        "oui", "behi", "ey", "ey behy", "ey behi", "na3am", "ok", "okay",
+        "confirme", "confirmer", "d'accord", "daccord", "mriguel",
+        "ayeh", "belehy", "nta3mi", "mzien", "yes", "yasss",
+        "\u0646\u0639\u0645", "\u0646\u0624\u0643\u062f", "\u0623\u0624\u0643\u062f",
+      ];
+      // Negative / cancel keywords
+      const PAC_CANCEL = [
+        "non", "la", "la3", "la2", "annuler", "cancel", "waqef", "no",
+        "maheych", "maheche", "\u0644\u0627",
+      ];
+
+      const pacConfirmed = PAC_CONFIRM.some(kw => pacText === kw || pacText.startsWith(kw + " ") || pacText.endsWith(" " + kw));
+      const pacRefused = PAC_CANCEL.some(kw => pacText === kw || pacText.startsWith(kw + " ") || pacText.endsWith(" " + kw));
+
+      if (pacConfirmed) {
+        console.log(`[AI Conversation] pendingActionConfirmation CONFIRMED by patient. Executing: ${pac.type}`);
+        // Clear the pending confirmation first
+        await Conversation.findByIdAndUpdate(conversationId, { $unset: { pendingActionConfirmation: 1 } });
+
+        if (pac.type === "cancel_appointment") {
+          try {
+            await executeAIAction(tenantId, conversationId, {
+              type: "cancel_appointment",
+              targetId: pac.appointmentId,
+            });
+            const cancelReply = await this.generateErrorReply(tenantId, conversation, `[SYSTEM: The appointment (${pac.appointmentSummary}) has just been cancelled successfully. Inform the patient naturally in their language.]`) || "";
+            const freshConvPAC = await Conversation.findOne({ _id: conversationId, tenantId: new mongoose.Types.ObjectId(tenantId) }).lean();
+            if (freshConvPAC && cancelReply) await this.sendConversationalReply(tenantId, conversationId, freshConvPAC, { suggestion: cancelReply, structured: true, intent: "cancel_appointment", needsHumanEscalation: false, action: null }, inboundWaId);
+          } catch (err: any) {
+            console.error("[AI Conversation] pendingActionConfirmation: cancel failed:", err.message);
+          }
+          return;
+        }
+
+        if (pac.type === "confirm_appointment_status") {
+          try {
+            const apptToConfirm = await Appointment.findOne({ _id: pac.appointmentId, tenantId: new mongoose.Types.ObjectId(tenantId) });
+            if (apptToConfirm) {
+              apptToConfirm.status = "confirmed";
+              await apptToConfirm.save();
+              const pat = await Patient.findById(apptToConfirm.patientId).lean();
+              const patName = (pat as any)?.firstName || "";
+              const freshConvPAC2 = await Conversation.findOne({ _id: conversationId, tenantId: new mongoose.Types.ObjectId(tenantId) }).lean();
+              const confirmReply = await this.generateErrorReply(tenantId, freshConvPAC2 || conversation, `[SYSTEM: The appointment for ${patName || "the patient"} on ${apptToConfirm.date} at ${apptToConfirm.startTime} has just been confirmed. Inform the patient naturally in their language.]`);
+              if (freshConvPAC2 && confirmReply) await this.sendConversationalReply(tenantId, conversationId, freshConvPAC2, { suggestion: confirmReply, structured: true, intent: "confirm_appointment", needsHumanEscalation: false, action: null }, inboundWaId);
+            }
+          } catch (err: any) {
+            console.error("[AI Conversation] pendingActionConfirmation: confirm status failed:", err.message);
+          }
+          return;
+        }
+
+        if (pac.type === "reschedule_appointment" && (pac as any).actionData) {
+          try {
+            const bypassResult = {
+              intent: "appointment_change_request",
+              suggestion: "",
+              needsHumanEscalation: false,
+              structured: false,
+              action: (pac as any).actionData
+            };
+            const freshConvPAC3 = await Conversation.findOne({ _id: conversationId, tenantId: new mongoose.Types.ObjectId(tenantId) }).lean();
+            if (freshConvPAC3) {
+              const handled = await this.bookingManager.handleRescheduleProposal(tenantId, conversationId, freshConvPAC3, bypassResult as any);
+              if (handled) return;
+            }
+          } catch (err: any) {
+            console.error("[AI Conversation] pendingActionConfirmation: reschedule failed:", err.message);
+          }
+          return;
+        }
+      } else if (pacRefused) {
+        console.log(`[AI Conversation] pendingActionConfirmation REFUSED by patient.`);
+        await Conversation.findByIdAndUpdate(conversationId, { $unset: { pendingActionConfirmation: 1 } });
+        const refuseReply = await this.generateErrorReply(tenantId, conversation, `[SYSTEM: The patient just refused/cancelled the pending action. Acknowledge naturally in their language and offer further help.]`);
+        const freshConvPACR = await Conversation.findOne({ _id: conversationId, tenantId: new mongoose.Types.ObjectId(tenantId) }).lean();
+        if (freshConvPACR) await this.sendConversationalReply(tenantId, conversationId, freshConvPACR, { suggestion: refuseReply, structured: !!refuseReply, intent: "general_question", needsHumanEscalation: false, action: null }, inboundWaId);
+        return;
+      } else {
+        // Ambiguous — re-ask the confirmation question and return.
+        console.log(`[AI Conversation] pendingActionConfirmation: ambiguous response, re-asking.`);
+        const actionVerb = pac.type === "cancel_appointment" ? "cancel" : pac.type === "reschedule_appointment" ? "reschedule" : "confirm";
+        const reAsk = await this.generateErrorReply(tenantId, conversation, `[SYSTEM: The patient's answer was ambiguous. Re-ask them naturally in their language whether they want to ${actionVerb} the appointment (${pac.appointmentSummary}). Ask for a clear yes or no.]`);
+        const freshConvPACA = await Conversation.findOne({ _id: conversationId, tenantId: new mongoose.Types.ObjectId(tenantId) }).lean();
+        if (freshConvPACA) await this.sendConversationalReply(tenantId, conversationId, freshConvPACA, { suggestion: reAsk, structured: !!reAsk, intent: "general_question", needsHumanEscalation: false, action: null }, inboundWaId);
+        return;
+      }
     }
 
     // ── Step 1b: Resolve awaitingTargetConfirmation BEFORE calling AI ──────────
@@ -360,9 +298,9 @@ export class AIAutoBookingService {
         const nameExtracted = extractPatientNameFromText(msgText) || pendingIntent.targetPatientInfo;
         if (nameExtracted?.firstName && conversation.patientId) {
           const currentPatient = await Patient.findById(conversation.patientId).lean();
-          if (isPlaceholderPatient(currentPatient) || 
-              (nameExtracted.firstName.toLowerCase() === pendingIntent.targetPatientInfo?.firstName?.toLowerCase() &&
-               nameExtracted.lastName?.toLowerCase() === pendingIntent.targetPatientInfo?.lastName?.toLowerCase())) {
+          if (isPlaceholderPatient(currentPatient) ||
+            (nameExtracted.firstName.toLowerCase() === pendingIntent.targetPatientInfo?.firstName?.toLowerCase() &&
+              nameExtracted.lastName?.toLowerCase() === pendingIntent.targetPatientInfo?.lastName?.toLowerCase())) {
             await Patient.findByIdAndUpdate(conversation.patientId, {
               $set: {
                 firstName: nameExtracted.firstName,
@@ -394,7 +332,7 @@ export class AIAutoBookingService {
           }
         };
         const freshConv = await Conversation.findOne({ _id: conversationId, tenantId: new mongoose.Types.ObjectId(tenantId) }).lean();
-        if (freshConv) await this.handleBookingProposal(tenantId, conversationId, freshConv, resumeResult, inboundWaId);
+        if (freshConv) await this.bookingManager.handleBookingProposal(tenantId, conversationId, freshConv, resumeResult, inboundWaId);
         return;
       }
     }
@@ -413,7 +351,21 @@ export class AIAutoBookingService {
       }).sort({ createdAt: -1 }).lean();
 
       const bypassMsgText = latestMsgForBypass?.content || "";
-      const extractedTime = extractTimeFromMessage(bypassMsgText);
+      let extractedTime = extractTimeFromMessage(bypassMsgText);
+
+      // Fallback for Tunisian dialect: people often just say "10 mriguel" or "l 10" without "h"
+      if (!extractedTime && pendingCtx.proposedSlots) {
+        for (const slot of pendingCtx.proposedSlots) {
+          const h = slot.startTime.split(":")[0];
+          const hNum = parseInt(h, 10).toString(); // e.g. "09" -> "9"
+          // Match the number only if it's isolated (e.g. word boundary)
+          const rx = new RegExp(`\\b(?:${h}|${hNum})\\b`);
+          if (rx.test(bypassMsgText)) {
+            extractedTime = slot.startTime;
+            break;
+          }
+        }
+      }
 
       if (extractedTime) {
         const matchedSlot = pendingCtx.proposedSlots.find(
@@ -421,74 +373,128 @@ export class AIAutoBookingService {
         );
 
         if (matchedSlot) {
-          console.log(`[AI Conversation] BACKEND BYPASS: ${mode} slot confirmed by patient: ${extractedTime} on ${pendingCtx.date}. Skipping AI call.`);
+          console.log(`[AI Conversation] BACKEND BYPASS: ${mode} slot matched by patient: ${extractedTime} on ${pendingCtx.date}.`);
+
+          // ── RESCHEDULE CONFIRMATION GUARD ────────────────────────────────────
+          const RESCHEDULE_CONFIRM_KEYWORDS = [
+            "mriguel", "behy", "ok", "oui", "confirme", "confirmer", "d'accord",
+            "nta3mi", "sayez", "parfait", "cbon", "c bon", "accept", "belehy",
+            "ya3tik", "barak", "chokran", "merci", "yes", "ey", "na3am", "mzien",
+          ];
+          const msgLower = bypassMsgText.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
+          const hasConfirmWord = RESCHEDULE_CONFIRM_KEYWORDS.some(kw => msgLower.includes(kw));
 
           if (mode === "reschedule") {
-            const targetAppointmentId = (pendingCtx as any).targetAppointmentId;
-            let treatmentForBypass = "Consultation générale";
-            if (targetAppointmentId && mongoose.Types.ObjectId.isValid(targetAppointmentId)) {
-              const apptForTreatment = await Appointment.findOne({ _id: targetAppointmentId, tenantId }).lean();
-              if (apptForTreatment) treatmentForBypass = (apptForTreatment as any).treatment || treatmentForBypass;
-            } else if (conversation.patientId) {
-              const now = new Date().toISOString().slice(0, 10);
-              const ownApptTreatment = await Appointment.findOne({
+            let targetAppointmentId = (pendingCtx as any).targetAppointmentId;
+
+            // If missing but we have targetPatientId (family reschedule), resolve it now!
+            if (!targetAppointmentId && (pendingCtx as any).targetPatientId) {
+              const familyAppt = await Appointment.findOne({
                 tenantId: new mongoose.Types.ObjectId(tenantId),
-                patientId: new mongoose.Types.ObjectId(conversation.patientId.toString()),
-                date: { $gte: now },
-                status: { $in: ["scheduled", "confirmed"] },
+                patientId: new mongoose.Types.ObjectId((pendingCtx as any).targetPatientId),
+                status: { $in: ["scheduled", "confirmed"] }
               }).sort({ date: 1, startTime: 1 }).lean();
-              if (ownApptTreatment) treatmentForBypass = (ownApptTreatment as any).treatment || treatmentForBypass;
+              if (familyAppt) {
+                targetAppointmentId = familyAppt._id.toString();
+              }
             }
 
-            const bypassResult: AISuggestionResult = {
-              intent: "appointment_change_request",
-              suggestion: "",
-              needsHumanEscalation: false,
-              structured: false,
-              action: {
-                type: "reschedule_appointment",
-                targetId: targetAppointmentId || "self",
-                reason: "Backend bypass: patient confirmed slot from proposed list",
-                confidence: 1.0,
-                booking: {
-                  date: pendingCtx.date,
-                  startTime: matchedSlot.startTime,
-                  durationMin: pendingCtx.durationMin || 30,
-                  treatment: treatmentForBypass,
-                },
-              },
-            };
+            if (!targetAppointmentId) {
+              console.log(`[AI Conversation] BACKEND BYPASS: reschedule confirmed but targetAppointmentId missing. Skipping to AI.`);
+              // Let the AI process it so it can output the correct targetId
+            } else {
+              let treatmentForBypass = "Consultation générale";
+              if (mongoose.Types.ObjectId.isValid(targetAppointmentId)) {
+                const apptForTreatment = await Appointment.findOne({ _id: targetAppointmentId, tenantId }).lean();
+                if (apptForTreatment) treatmentForBypass = (apptForTreatment as any).treatment || treatmentForBypass;
+              }
 
-            const freshConvForBypass = await Conversation.findOne({ _id: conversationId, tenantId: new mongoose.Types.ObjectId(tenantId) }).lean();
-            if (freshConvForBypass) {
-              const handled = await this.handleRescheduleProposal(tenantId, conversationId, freshConvForBypass, bypassResult);
-              if (handled) return;
+              const bypassResult: AISuggestionResult = {
+                intent: "appointment_change_request",
+                suggestion: "",
+                needsHumanEscalation: false,
+                structured: false,
+                action: {
+                  type: "reschedule_appointment",
+                  targetId: targetAppointmentId,
+                  reason: "Backend bypass: patient confirmed slot from proposed list",
+                  confidence: 1.0,
+                  booking: {
+                    date: pendingCtx.date,
+                    startTime: matchedSlot.startTime,
+                    durationMin: pendingCtx.durationMin || 30,
+                    treatment: treatmentForBypass,
+                  },
+                },
+              };
+
+              if (!hasConfirmWord) {
+                console.log(`[AI Conversation] BACKEND BYPASS: reschedule slot selected (${extractedTime}) but no confirmation keyword. Sending explicit confirmation prompt.`);
+                const confirmCtx = `[SYSTEM: The patient selected the time slot ${extractedTime} for rescheduling their appointment. Ask them to confirm this choice naturally in their language. Keep it short.]`;
+                const echoMsg = await this.generateErrorReply(tenantId, conversation, confirmCtx) || `${extractedTime} ?`;
+
+                await Conversation.findByIdAndUpdate(conversationId, {
+                  $set: {
+                    pendingActionConfirmation: {
+                      type: "reschedule_appointment",
+                      appointmentId: targetAppointmentId,
+                      appointmentSummary: `${pendingCtx.date} l ${extractedTime}`,
+                      actionData: bypassResult.action
+                    }
+                  }
+                });
+
+                const echoResult = {
+                  intent: "appointment_change_request",
+                  suggestion: echoMsg,
+                  needsHumanEscalation: false,
+                  structured: true,
+                  action: null
+                };
+                await this.sendConversationalReply(tenantId, conversationId, conversation, echoResult as any, inboundWaId);
+                return;
+              } else {
+                const freshConvForBypass = await Conversation.findOne({ _id: conversationId, tenantId: new mongoose.Types.ObjectId(tenantId) }).lean();
+                if (freshConvForBypass) {
+                  const handled = await this.bookingManager.handleRescheduleProposal(tenantId, conversationId, freshConvForBypass, bypassResult);
+                  if (handled) return;
+                }
+              }
             }
           } else {
-            // Mode = booking
-            const bypassResult: AISuggestionResult = {
-              intent: "appointment_confirmation",
-              suggestion: "",
-              needsHumanEscalation: false,
-              structured: false,
-              ...(pendingCtx.targetPatientInfo ? { patientInfo: pendingCtx.targetPatientInfo } : {}),
-              action: {
-                type: "book_appointment",
-                targetId: "self",
-                reason: "Backend bypass: patient confirmed slot from proposed list",
-                confidence: 1.0,
-                booking: {
-                  date: pendingCtx.date,
-                  startTime: matchedSlot.startTime,
-                  durationMin: pendingCtx.durationMin || 30,
-                  treatment: "Consultation générale", // Default for new bookings if unknown
-                },
-              },
-            };
-
+            // Mode = booking — always reload the conversation to get the LATEST pendingBookingContext
             const freshConvForBypass = await Conversation.findOne({ _id: conversationId, tenantId: new mongoose.Types.ObjectId(tenantId) }).lean();
-            if (freshConvForBypass) {
-              await this.handleBookingProposal(tenantId, conversationId, freshConvForBypass, bypassResult, inboundWaId);
+            if (!freshConvForBypass) return;
+
+            // Prefer targetPatientInfo from the FRESH conversation (most up-to-date)
+            const freshTargetInfo = freshConvForBypass.pendingBookingContext?.targetPatientInfo || pendingCtx.targetPatientInfo;
+
+            // ── CRITICAL FAMILY GUARD: if target is still unknown, let AI handle it ──
+            if (freshTargetInfo && freshTargetInfo.firstName === "votre" && freshTargetInfo.lastName === "proche") {
+              console.log("[AI Bypass] Target identity missing (votre proche). Skipping bypass to let AI handle name extraction intelligently.");
+              // Do nothing here; it will fall through to the AI provider below
+            } else {
+              const bypassResult: AISuggestionResult = {
+                intent: "appointment_confirmation",
+                suggestion: "",
+                needsHumanEscalation: false,
+                structured: false,
+                ...(freshTargetInfo ? { patientInfo: freshTargetInfo } : {}),
+                action: {
+                  type: "book_appointment",
+                  targetId: freshTargetInfo ? "family" : "self",
+                  reason: "Backend bypass: patient confirmed slot from proposed list",
+                  confidence: 1.0,
+                  booking: {
+                    date: pendingCtx.date,
+                    startTime: matchedSlot.startTime,
+                    durationMin: pendingCtx.durationMin || 30,
+                    treatment: pendingCtx.treatment || "Consultation générale",
+                  },
+                },
+              };
+
+              await this.bookingManager.handleBookingProposal(tenantId, conversationId, freshConvForBypass, bypassResult, inboundWaId);
               return;
             }
           }
@@ -505,7 +511,42 @@ export class AIAutoBookingService {
         "[AI Conversation] getSuggestion failed:",
         (err as Error).message
       );
+
+      // SEND FALLBACK MESSAGE TO PATIENT
+      // SEND FALLBACK MESSAGE TO PATIENT
+      // We try to generate it dynamically without JSON (using generateErrorReply)
+      let fallbackMsg = await this.generateErrorReply(
+        tenantId,
+        conversation,
+        "[SYSTEM: The AI system encountered a temporary error or timeout. Apologize to the patient and tell them a team member will reply shortly.]"
+      );
+
+      // If the AI is completely dead/down, we use the absolute last-resort hardcoded string
+      if (!fallbackMsg) {
+        fallbackMsg = "Désolé, je rencontre un problème technique momentané. Un membre de l'équipe va vous répondre dans les plus brefs délais.";
+      }
+
+      try {
+        await this.sendConversationalReply(
+          tenantId,
+          conversationId,
+          conversation,
+          { suggestion: fallbackMsg, structured: true, intent: "general_question", needsHumanEscalation: false, action: undefined } as any,
+          inboundWaId
+        );
+      } catch (e) {
+        console.error("[AI Conversation] Failed to send fallback message:", e);
+      }
       return;
+    }
+
+    // ── Step 2.5: Auto-detect and update Patient Language ─────────────────────
+    if (result.detectedLang && conversation.patientId) {
+      const currentPat = await Patient.findById(conversation.patientId).lean();
+      if (currentPat && (currentPat as any).language !== result.detectedLang) {
+        await Patient.findByIdAndUpdate(conversation.patientId, { $set: { language: result.detectedLang } });
+        console.log(`[AI Conversation] Updated patient ${conversation.patientId} language from ${(currentPat as any).language} to ${result.detectedLang}`);
+      }
     }
 
     // ── Step 2a: Update Patient Profile if patientInfo was provided ────────────
@@ -547,18 +588,65 @@ export class AIAutoBookingService {
 
           // Only update if still a placeholder OR we are explicitly resuming after identity
           if (isPlaceholder || isResumingBooking) {
-            const updateFields: any = { status: "active" };
+            const updateFields: any = {};
             if (pInfo.firstName) updateFields.firstName = pInfo.firstName;
             if (pInfo.lastName) updateFields.lastName = pInfo.lastName;
 
+            // Only set to active if they provided both a valid first and last name
+            if (pInfo.firstName && pInfo.lastName && pInfo.lastName.length > 1) {
+              updateFields.status = "active";
+            }
+
             await Patient.findByIdAndUpdate(conversation.patientId, { $set: updateFields });
             console.log(`[AI Conversation] Updated patient profile for ${conversation.patientId}:`, updateFields);
+          }
+
+          // NEW: Always update symptoms/notes if provided by AI
+          if ((pInfo as any).symptoms) {
+            const patientDoc = await Patient.findById(conversation.patientId).lean();
+            const currentNotes = (patientDoc as any)?.notes ? `${(patientDoc as any).notes}\n` : "";
+            const timestamp = new Date().toLocaleDateString("fr-FR");
+            const newNotes = `${currentNotes}[${timestamp}] WhatsApp IA: ${(pInfo as any).symptoms}`;
+            await Patient.findByIdAndUpdate(conversation.patientId, { $set: { notes: newNotes } });
+            console.log(`[AI Conversation] Updated patient symptoms for ${conversation.patientId}:`, (pInfo as any).symptoms);
           }
         }
 
         // Resume pending booking if we were waiting for identity and now have it
         const patientDoc = await Patient.findById(conversation.patientId).lean();
-        const hasFullIdentity = (patientDoc as any).firstName && (patientDoc as any).firstName !== "Patient" && !!(patientDoc as any).lastName && (patientDoc as any).lastName !== "WhatsApp";
+        const hasFullIdentity = !isPlaceholderPatient(patientDoc);
+
+        if (conversation.pendingBookingIntent?.awaitingTargetIdentity && pInfo?.firstName && pInfo?.lastName) {
+          console.log("[AI Conversation] Target patient identity provided. Resuming pending family booking.");
+          const pendingIntent = conversation.pendingBookingIntent;
+
+          await Conversation.findByIdAndUpdate(conversationId, {
+            $unset: { pendingBookingIntent: 1 }
+          });
+
+          const resumeResult: AISuggestionResult = {
+            intent: "appointment_confirmation",
+            suggestion: "",
+            needsHumanEscalation: false,
+            structured: false,
+            patientInfo: pInfo,
+            action: {
+              type: "book_appointment",
+              targetId: "self", // will be resolved in handleBookingProposal using patientInfo
+              reason: "Reprise de la réservation après la fourniture de l'identité du proche",
+              confidence: 1.0,
+              booking: {
+                date: pendingIntent.date,
+                startTime: pendingIntent.startTime,
+                durationMin: pendingIntent.durationMin,
+                treatment: pendingIntent.treatment
+              }
+            }
+          };
+
+          await this.bookingManager.handleBookingProposal(tenantId, conversationId, conversation, resumeResult, inboundWaId);
+          return;
+        }
 
         if (hasFullIdentity && conversation.pendingBookingIntent?.awaitingIdentity) {
           console.log("[AI Conversation] Patient identity provided. Resuming pending booking.");
@@ -592,7 +680,7 @@ export class AIAutoBookingService {
           };
 
           // Delegate back to the orchestrator method so all guards (P0, avail, double-booking) run again
-          await this.handleBookingProposal(tenantId, conversationId, conversation, resumeResult, inboundWaId);
+          await this.bookingManager.handleBookingProposal(tenantId, conversationId, conversation, resumeResult, inboundWaId);
           return; // Stop further processing of this message, booking is handled
         }
       } catch (err: any) {
@@ -603,14 +691,46 @@ export class AIAutoBookingService {
     // ── Step 2b: human escalation → send handoff reply, flag conversation, NO action ──
     if (result.needsHumanEscalation === true) {
       await this.sendConversationalReply(tenantId, conversationId, conversation, result, inboundWaId);
+
+      try {
+        await Conversation.findByIdAndUpdate(conversationId, {
+          $set: { needsHuman: true },
+        });
+
+        // Trigger SSE notification
+        let patientName = "Patient Inconnu";
+        if (conversation.patientId) {
+          const p = await Patient.findById(conversation.patientId).lean();
+          if (p && !isPlaceholderPatient(p)) {
+            patientName = `${(p as any).firstName || ""} ${(p as any).lastName || ""}`.trim();
+          }
+        }
+        sseService.notifyHumanEscalation(
+          tenantId,
+          conversationId,
+          patientName,
+          result.intent === "unknown" ? "Incompréhension de l'IA" : "Demande d'escalade médicale/humaine"
+        );
+      } catch (err: any) {
+        console.error("[AI Conversation] Failed to handle human escalation:", err.message);
+      }
+      return;
+    }
+    // ── Strategy 2: Fallback menu for unknown intent ───────────────────────
+    if (result.intent === "unknown" && !result.needsHumanEscalation) {
+      result.suggestion = await this.generateErrorReply(tenantId, conversation, `[SYSTEM: The AI did not understand the patient's request. Ask them naturally in their language if they want to: 1. Book an appointment 2. Reschedule an appointment 3. Speak to the secretariat.]`) || "Je n'ai pas bien compris. Souhaitez-vous prendre rendez-vous, modifier un rendez-vous, ou parler au secrétariat ?";
+      result.structured = true;
+      result.action = null;
+      await this.sendConversationalReply(tenantId, conversationId, conversation, result, inboundWaId);
+      return;
+    }
+
+    // ── Strategy 3: Cancel or Reset Context ─────────────────────────────────
+    if (result.intent === "cancel_or_reset") {
       await Conversation.findByIdAndUpdate(conversationId, {
-        $set: { needsHuman: true },
-      }).catch((err) =>
-        console.error(
-          "[AI Conversation] Failed to flag human escalation:",
-          err.message
-        )
-      );
+        $unset: { pendingBookingContext: 1, pendingBookingIntent: 1 }
+      });
+      await this.sendConversationalReply(tenantId, conversationId, conversation, result, inboundWaId);
       return;
     }
 
@@ -619,9 +739,10 @@ export class AIAutoBookingService {
       (result.intent === "appointment_availability" || result.intent === "appointment_change_request") &&
       result.proposedSlots &&
       result.proposedSlots.length > 0 &&
-      result.scheduling?.date &&
-      result.scheduling?.durationMin
+      result.scheduling?.date
     ) {
+      // Ensure durationMin is present, default to 30
+      const durationMin = result.scheduling.durationMin || 30;
       const isRescheduleIntent = result.intent === "appointment_change_request";
       let pendingTargetAppointmentId: string | undefined;
       let pendingTargetPatientId: string | undefined;
@@ -632,24 +753,94 @@ export class AIAutoBookingService {
         if (result.action?.type === "reschedule_appointment" && result.action.targetId && result.action.targetId !== "self") {
           pendingTargetAppointmentId = result.action.targetId;
         } else if (conversation.patientId) {
-          // Fallback: find the conversation patient's own upcoming appointment
-          const now = new Date().toISOString().slice(0, 10);
-          const ownAppt = await Appointment.findOne({
-            tenantId: new mongoose.Types.ObjectId(tenantId),
-            patientId: new mongoose.Types.ObjectId(conversation.patientId.toString()),
-            date: { $gte: now },
-            status: { $in: ["scheduled", "confirmed"] },
-          }).sort({ date: 1, startTime: 1 }).lean();
-          if (ownAppt) {
-            pendingTargetAppointmentId = ownAppt._id.toString();
-            pendingTargetPatientId = (ownAppt as any).patientId.toString();
+          let targetPatientIdToSearch = conversation.patientId;
+          let isExplicitFamily = false;
+
+          // 1. Check if AI extracted a specific name (e.g. "Yahya")
+          if (result.patientInfo && result.patientInfo.firstName && result.patientInfo.firstName.toLowerCase() !== "votre") {
+            const familyMember = await Patient.findOne({
+              tenantId: new mongoose.Types.ObjectId(tenantId),
+              firstName: { $regex: new RegExp(`^${result.patientInfo.firstName}$`, "i") }
+            }).lean();
+            if (familyMember && familyMember._id.toString() !== conversation.patientId.toString()) {
+              targetPatientIdToSearch = familyMember._id;
+              isExplicitFamily = true;
+            }
+          }
+
+          // 2. Check for family keywords in recent messages
+          if (!isExplicitFamily) {
+            try {
+              const recentMsgs = await Message.find({
+                tenantId: new mongoose.Types.ObjectId(tenantId),
+                conversationId: new mongoose.Types.ObjectId(conversationId),
+                direction: "inbound",
+              }).sort({ createdAt: -1 }).limit(5).lean();
+              if (recentMsgs.some(m => m.content && hasFamilyKeyword(m.content))) {
+                isExplicitFamily = true;
+              }
+            } catch (_) { }
+          }
+
+          // 3. Find the upcoming appointment for the resolved target
+          // If we couldn't resolve a specific family member but detected family context, we can't safely fallback to self
+          if (!isExplicitFamily || targetPatientIdToSearch !== conversation.patientId) {
+            const now = new Date().toISOString().slice(0, 10);
+            const targetAppt = await Appointment.findOne({
+              tenantId: new mongoose.Types.ObjectId(tenantId),
+              patientId: targetPatientIdToSearch,
+              date: { $gte: now },
+              status: { $in: ["scheduled", "confirmed"] },
+            }).sort({ date: 1, startTime: 1 }).lean();
+            if (targetAppt) {
+              pendingTargetAppointmentId = targetAppt._id.toString();
+              pendingTargetPatientId = (targetAppt as any).patientId.toString();
+            }
           }
         }
-      } else {
-        // Booking mode: capture family member info if it was resolved
-        if (conversation.pendingBookingIntent?.targetPatientInfo) {
-          pendingTargetPatientInfo = conversation.pendingBookingIntent.targetPatientInfo;
+      }
+
+      // 1. First, check if recent messages indicate a family booking
+      let isFamilyContext = false;
+      try {
+        const recentMsgs = await Message.find({
+          tenantId: new mongoose.Types.ObjectId(tenantId),
+          conversationId: new mongoose.Types.ObjectId(conversationId),
+          direction: "inbound",
+        }).sort({ createdAt: -1 }).limit(5).lean();
+        if (recentMsgs.some(m => m.content && hasFamilyKeyword(m.content))) {
+          isFamilyContext = true;
         }
+      } catch (_) { }
+
+      // 2. Safely assign pendingTargetPatientInfo
+      if (isFamilyContext) {
+        let cpFirst = "";
+        let cpLast = "";
+        if (conversation.patientId) {
+          const cp = await Patient.findById(conversation.patientId).lean();
+          if (cp) {
+            cpFirst = cp.firstName?.toLowerCase() || "";
+            cpLast = cp.lastName?.toLowerCase() || "";
+          }
+        }
+
+        if (result.patientInfo && result.patientInfo.firstName &&
+          (result.patientInfo.firstName.toLowerCase() !== cpFirst || result.patientInfo.lastName?.toLowerCase() !== cpLast)) {
+          pendingTargetPatientInfo = {
+            firstName: result.patientInfo.firstName,
+            lastName: result.patientInfo.lastName || "",
+          };
+        } else {
+          pendingTargetPatientInfo = { firstName: "votre", lastName: "proche" };
+        }
+      } else if (result.patientInfo && result.patientInfo.firstName) {
+        pendingTargetPatientInfo = {
+          firstName: result.patientInfo.firstName,
+          lastName: result.patientInfo.lastName || "",
+        };
+      } else if (!isRescheduleIntent && conversation.pendingBookingIntent?.targetPatientInfo) {
+        pendingTargetPatientInfo = conversation.pendingBookingIntent.targetPatientInfo;
       }
 
       try {
@@ -657,9 +848,12 @@ export class AIAutoBookingService {
           $set: {
             pendingBookingContext: {
               date: result.scheduling.date,
-              durationMin: result.scheduling.durationMin,
+              durationMin: durationMin,
+              treatment: "Consultation générale", // Can be updated if scheduling provides treatment
               proposedSlots: result.proposedSlots,
               proposedAt: new Date(),
+              expiresAt: new Date(Date.now() + 15 * 60 * 1000), // Expires in 15 minutes
+              version: Date.now(), // Use timestamp as version
               mode: isRescheduleIntent ? "reschedule" : "booking",
               ...(pendingTargetAppointmentId ? { targetAppointmentId: pendingTargetAppointmentId } : {}),
               ...(pendingTargetPatientId ? { targetPatientId: pendingTargetPatientId } : {}),
@@ -677,17 +871,21 @@ export class AIAutoBookingService {
 
     // ── Step 3b: booking proposal → dedicated secure booking flow ─────────────
     if (result.action?.type === "book_appointment" && result.action.booking) {
-      if (result.intent === "appointment_change_request") {
-        await this.handleRescheduleProposal(tenantId, conversationId, conversation, result);
+      if (result.intent === "appointment_change_request" && conversation.pendingBookingContext?.mode !== "booking") {
+        await this.bookingManager.handleRescheduleProposal(tenantId, conversationId, conversation, result);
         return;
       }
-      await this.handleBookingProposal(tenantId, conversationId, conversation, result, inboundWaId);
+      await this.bookingManager.handleBookingProposal(tenantId, conversationId, conversation, result, inboundWaId);
       return;
     }
 
     // ── Step 3c: reschedule proposal → dedicated secure rescheduling flow ─────
     if (result.action?.type === "reschedule_appointment" && result.action.booking) {
-      await this.handleRescheduleProposal(tenantId, conversationId, conversation, result);
+      if (conversation.pendingBookingContext?.mode === "booking") {
+        await this.bookingManager.handleBookingProposal(tenantId, conversationId, conversation, result, inboundWaId);
+        return;
+      }
+      await this.bookingManager.handleRescheduleProposal(tenantId, conversationId, conversation, result);
       return;
     }
 
@@ -699,22 +897,197 @@ export class AIAutoBookingService {
     }).sort({ createdAt: -1 }).lean();
 
     const lowerMsg = (latestInbound?.content || "").trim().toLowerCase();
-    const isConfirmationText =
-      lowerMsg === "oui" ||
-      lowerMsg === "oui confirmer" ||
-      lowerMsg === "je confirme" ||
-      lowerMsg === "confirmer" ||
-      lowerMsg === "confirme" ||
-      lowerMsg === "d'accord" ||
-      lowerMsg === "daccord" ||
-      lowerMsg === "c'est bon" ||
-      lowerMsg === "\u0646\u0639\u0645" ||
-      lowerMsg === "\u0646\u0624\u0643\u062f" ||
-      lowerMsg === "\u0623\u0624\u0643\u062f";
+    const EXPLICIT_CONFIRM_WORDS = [
+      "oui", "behi", "ey", "na3am", "ok", "confirme", "confirmer",
+      "d'accord", "daccord", "mriguel", "belehy", "\u0646\u0639\u0645", "\u0646\u0624\u0643\u062f"
+    ];
+    const isConfirmationText = EXPLICIT_CONFIRM_WORDS.some(kw => {
+      const regex = new RegExp(`\\b${kw}\\b`, 'i');
+      return regex.test(lowerMsg);
+    });
 
-    if (result.action?.type === "confirm_appointment" || isConfirmationText) {
-      const handled = await this.handleConfirmAppointmentProposal(tenantId, conversationId, conversation, result, inboundWaId);
+    // CRITICAL FIX: Never treat a message as an appointment confirmation if
+    // a family pendingBookingContext is in progress. In that case the patient
+    // is selecting a TIME SLOT for their family member, not confirming their own
+    // existing appointment. Route to the booking flow below instead.
+    const hasPendingFamilyBooking =
+      !!conversation.pendingBookingContext ||
+      !!conversation.pendingBookingIntent?.awaitingTargetIdentity;
+
+    if (!hasPendingFamilyBooking && (result.action?.type === "confirm_appointment" || isConfirmationText)) {
+      const handled = await this.bookingManager.handleConfirmAppointmentProposal(tenantId, conversationId, conversation, result, inboundWaId);
       if (handled) return;
+    }
+
+    // ── Step 3d2: cancel appointment ─────────
+    // MANDATORY CONFIRMATION: never cancel immediately — always ask the patient first.
+    if (result.action?.type === "cancel_appointment") {
+      try {
+        let targetIdToUse = result.action.targetId || "self";
+        const __pat1 = await Patient.findById(conversation.patientId).select("language").lean();
+        const isTunCancel = detectLanguageFromText(latestInbound?.content || "", (__pat1 as any)?.language || "arabizi");
+
+        // Resolve the target appointment
+        if (targetIdToUse === "self" || !mongoose.Types.ObjectId.isValid(targetIdToUse)) {
+          const now = new Date().toISOString().slice(0, 10);
+
+          // PRIORITY 1: Look for the conversation patient's OWN upcoming appointments first.
+          // This prevents cancelling a family member's appointment when the patient says "annule mon rendez-vous".
+          const selfAppts = await Appointment.find({
+            tenantId: new mongoose.Types.ObjectId(tenantId),
+            patientId: new mongoose.Types.ObjectId(conversation.patientId),
+            date: { $gte: now },
+            status: { $in: ["scheduled", "confirmed"] }
+          }).populate("patientId", "firstName lastName").sort({ date: 1, startTime: 1 }).lean();
+
+          let upcomingAppts = selfAppts;
+
+          // PRIORITY 2: Only if the patient has no personal RDV, check if the cancel request
+          // explicitly names a family member (via result.action.patientInfo).
+          if (selfAppts.length === 0) {
+            const familyPatsCancel = await Patient.find({
+              tenantId: new mongoose.Types.ObjectId(tenantId),
+              phone: conversation.contactWaId,
+            }).select("_id").lean();
+            const familyPatIdsCancel = familyPatsCancel.map((p) => p._id);
+
+            upcomingAppts = await Appointment.find({
+              tenantId: new mongoose.Types.ObjectId(tenantId),
+              patientId: { $in: familyPatIdsCancel.length > 0 ? familyPatIdsCancel : [new mongoose.Types.ObjectId(conversation.patientId)] },
+              date: { $gte: now },
+              status: { $in: ["scheduled", "confirmed"] }
+            }).populate("patientId", "firstName lastName").sort({ date: 1, startTime: 1 }).lean();
+          }
+
+          if (upcomingAppts.length === 0) {
+            const noApptReply = isTunCancel === "arabizi" || isTunCancel === "ar"
+              ? "Ma 3andek 7ata rendez-vous m9ayed bech talghih."
+              : "Vous n'avez aucun rendez-vous actif à annuler.";
+            const noApptResult = { ...result, suggestion: noApptReply, structured: true, action: null };
+            await this.sendConversationalReply(tenantId, conversationId, conversation, noApptResult as any, inboundWaId);
+            return;
+          }
+          targetIdToUse = upcomingAppts[0]._id.toString();
+        }
+
+        // Load the appointment to show a human-readable summary in the confirmation question
+        const apptForCancel = await Appointment.findOne({
+          _id: new mongoose.Types.ObjectId(targetIdToUse),
+          tenantId: new mongoose.Types.ObjectId(tenantId),
+        }).populate("patientId", "firstName lastName").lean();
+
+        if (!apptForCancel) {
+          const notFoundReply = isTunCancel === "arabizi" || isTunCancel === "ar"
+            ? "Ma najamtech nlakeh rendez-vous bech nalbghou."
+            : "Je n'ai pas trouvé le rendez-vous à annuler.";
+          const nfResult = { ...result, suggestion: notFoundReply, structured: true, action: null };
+          await this.sendConversationalReply(tenantId, conversationId, conversation, nfResult as any, inboundWaId);
+          return;
+        }
+
+        const patName = (apptForCancel.patientId as any)?.firstName || "";
+        const apptSummary = `${patName ? patName + " - " : ""}${apptForCancel.date} à ${apptForCancel.startTime}`;
+
+        // Store pendingActionConfirmation and ask patient
+        await Conversation.findByIdAndUpdate(conversationId, {
+          $set: {
+            pendingActionConfirmation: {
+              type: "cancel_appointment",
+              appointmentId: targetIdToUse,
+              appointmentSummary: apptSummary,
+            }
+          }
+        });
+
+        const confirmAsk = isTunCancel === "arabizi" || isTunCancel === "ar"
+          ? `Akid theb telghi rendez-vous (${apptSummary}) ? jeweb b "oui" bech nakkadou.`
+          : `Êtes-vous sûr de vouloir annuler le rendez-vous (${apptSummary}) ? Répondez par "oui" pour confirmer.`;
+        const askResult = { ...result, suggestion: confirmAsk, structured: true, action: null };
+        await this.sendConversationalReply(tenantId, conversationId, conversation, askResult as any, inboundWaId);
+        return;
+      } catch (err: any) {
+        console.error("[AI Conversation] cancel_appointment confirmation setup failed:", err.message);
+        return;
+      }
+    }
+
+    // ── Step 3d3: join waitlist ─────────
+    if (result.action?.type === "join_waitlist" && result.action.booking) {
+      try {
+        const { executeAIAction } = await import("./ai.action.executor");
+        await executeAIAction(tenantId, conversationId, {
+          type: "join_waitlist",
+          targetId: result.action.targetId || "self",
+          booking: result.action.booking as any,
+        });
+
+        // After successful execution, send the conversational reply
+        await this.sendConversationalReply(tenantId, conversationId, conversation, result, inboundWaId);
+        return;
+        } catch (err: any) {
+        console.error("[AI Conversation] executeAIAction failed for join_waitlist:", err.message);
+        const reply = await this.generateErrorReply(tenantId, conversation, `[SYSTEM: An error occurred while joining the waitlist. Apologize briefly in the patient's language and suggest they try again.]`) || "";
+        if (reply) {
+          const fallbackResult = { ...result, reply, suggestion: reply, action: null };
+          await this.sendConversationalReply(tenantId, conversationId, conversation, fallbackResult as any, inboundWaId);
+        }
+        return;
+      }
+    }
+
+    // ── Step 3e: reassign appointment patient ─────────
+    if (result.action?.type === "reassign_appointment_patient" && result.action.targetId) {
+      try {
+        let targetIdToUse = result.action.targetId;
+
+        // Phase 3: Identifier le rendez-vous à modifier
+        if (!mongoose.Types.ObjectId.isValid(targetIdToUse)) {
+          const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
+          const recentAppt = await Appointment.findOne({
+            tenantId: new mongoose.Types.ObjectId(tenantId),
+            patientId: new mongoose.Types.ObjectId(conversation.patientId),
+            createdAt: { $gte: fifteenMinsAgo },
+            status: { $in: ["scheduled", "confirmed"] }
+          }).sort({ createdAt: -1 }).lean();
+
+          if (recentAppt) {
+            targetIdToUse = recentAppt._id.toString();
+          } else {
+            const now = new Date().toISOString().slice(0, 10);
+            const upcomingAppts = await Appointment.find({
+              tenantId: new mongoose.Types.ObjectId(tenantId),
+              patientId: new mongoose.Types.ObjectId(conversation.patientId),
+              date: { $gte: now },
+              status: { $in: ["scheduled", "confirmed"] }
+            }).lean();
+
+            if (upcomingAppts.length === 1) {
+              targetIdToUse = upcomingAppts[0]._id.toString();
+            } else if (upcomingAppts.length > 1) {
+              const reply = "Lequel de vos rendez-vous souhaitez-vous modifier ?";
+              const fallbackResult = { ...result, reply, suggestion: reply, action: null };
+              await this.sendConversationalReply(tenantId, conversationId, conversation, fallbackResult as any, inboundWaId);
+              return;
+            }
+          }
+        }
+
+        const { executeAIAction } = await import("./ai.action.executor");
+        await executeAIAction(tenantId, conversationId, {
+          type: "reassign_appointment_patient",
+          targetId: targetIdToUse,
+          patientInfo: result.action.patientInfo as any, // Bypass TS interface strictness for now
+        });
+        // After successful execution, send the conversational reply
+        await this.sendConversationalReply(tenantId, conversationId, conversation, result, inboundWaId);
+        return;
+      } catch (err: any) {
+        console.error("[AI Conversation] executeAIAction failed for reassign:", err.message);
+        let reply = await this.generateErrorReply(tenantId, conversation, `[SYSTEM: Failed to modify the appointment details. Error: ${err.message}. Apologize naturally in their language and offer to try again or ask for the secretariat.]`) || "Désolé, une erreur est survenue lors de la modification. Veuillez réessayer.";
+        const fallbackResult = { ...result, reply, suggestion: reply, action: null };
+        await this.sendConversationalReply(tenantId, conversationId, conversation, fallbackResult as any, inboundWaId);
+        return;
+      }
     }
 
     // ── Step 4: general conversational reply (non-booking, non-escalation, or fallback) ────
@@ -751,8 +1124,8 @@ export class AIAutoBookingService {
     const booking = {
       date: bookingDate,
       startTime: normalizeTime(rawBooking.startTime),
-      durationMin: rawBooking.durationMin || 30,
-      treatment: rawBooking.treatment,
+      durationMin: rawBooking.durationMin || conversation.pendingBookingIntent?.durationMin || conversation.pendingBookingContext?.durationMin || 30,
+      treatment: rawBooking.treatment || conversation.pendingBookingIntent?.treatment || conversation.pendingBookingContext?.treatment || "Consultation générale",
     };
 
     // ── Load conversation patient (never modified) ──────────────────────────
@@ -781,7 +1154,12 @@ export class AIAutoBookingService {
       conversation.pendingBookingIntent?.targetPatientInfo || conversation.pendingBookingContext?.targetPatientInfo || null;
 
     // If AI returned a non-self targetId that looks like a name, extract from patientInfo
-    if (!rawTargetInfo && result.patientInfo?.firstName && result.patientInfo?.lastName) {
+    // OR if the current rawTargetInfo is the "votre proche" placeholder and we have a new extracted name
+    if (
+      (!rawTargetInfo || (rawTargetInfo.firstName === "votre" && rawTargetInfo.lastName === "proche")) &&
+      result.patientInfo?.firstName &&
+      result.patientInfo?.lastName
+    ) {
       rawTargetInfo = {
         firstName: result.patientInfo.firstName,
         lastName: result.patientInfo.lastName,
@@ -795,12 +1173,12 @@ export class AIAutoBookingService {
       isForOther = true;
     } else {
       try {
-        const latestMsg = await Message.findOne({
+        const recentMsgs = await Message.find({
           tenantId: new mongoose.Types.ObjectId(tenantId),
           conversationId: new mongoose.Types.ObjectId(conversationId),
           direction: "inbound",
-        }).sort({ createdAt: -1 }).lean();
-        if (latestMsg?.content && hasFamilyKeyword(latestMsg.content)) {
+        }).sort({ createdAt: -1 }).limit(5).lean();
+        if (recentMsgs.some(m => m.content && hasFamilyKeyword(m.content))) {
           isForOther = true;
         }
       } catch (_) { /* non-fatal */ }
@@ -811,6 +1189,46 @@ export class AIAutoBookingService {
     // CRITICAL: If the system EXPLICITLY asked for the patient's name (awaitingIdentity),
     // the response IS their real identity — NEVER ask for target clarification.
     const wasAwaitingIdentity = !!conversation.pendingBookingIntent?.awaitingIdentity;
+    let actualConversationPatientId = conversationPatientId;
+
+    if (wasAwaitingIdentity && result.patientInfo?.firstName && result.patientInfo?.lastName) {
+      console.log(`[AI Conversation] Resolving caller identity: ${result.patientInfo.firstName} ${result.patientInfo.lastName}`);
+
+      const existingManualPatient = await Patient.findOne({
+        tenantId: new mongoose.Types.ObjectId(tenantId),
+        firstName: { $regex: new RegExp(`^${result.patientInfo.firstName}$`, "i") },
+        lastName: { $regex: new RegExp(`^${result.patientInfo.lastName}$`, "i") },
+      }).lean();
+
+      if (existingManualPatient) {
+        console.log(`[AI Conversation] Found existing manual patient (${existingManualPatient._id}). Merging placeholder.`);
+        actualConversationPatientId = (existingManualPatient as any)._id;
+
+        await Patient.findByIdAndUpdate(actualConversationPatientId, {
+          $set: { phone: conversation.contactWaId }
+        });
+
+        await Conversation.findByIdAndUpdate(conversationId, {
+          $set: { patientId: actualConversationPatientId }
+        });
+
+        // Remove the placeholder patient
+        await Patient.findByIdAndDelete(conversationPatientId).catch(() => { });
+      } else {
+        console.log(`[AI Conversation] No existing patient found. Updating placeholder name.`);
+        await Patient.findByIdAndUpdate(conversationPatientId, {
+          $set: {
+            firstName: result.patientInfo.firstName,
+            lastName: result.patientInfo.lastName,
+            status: "active",
+          }
+        });
+      }
+
+      // Reflect changes locally
+      (conversationPatient as any).firstName = result.patientInfo.firstName;
+      (conversationPatient as any).lastName = result.patientInfo.lastName;
+    }
 
     if (
       rawTargetInfo &&
@@ -844,6 +1262,7 @@ export class AIAutoBookingService {
         const clarificationResult = {
           ...result,
           suggestion: `Bien sûr. Souhaitez-vous que le rendez-vous soit pour vous (${cpFirst} ${cpLast}) ou pour ${rawTargetInfo.firstName} ${rawTargetInfo.lastName} ?`,
+          structured: true,
           action: undefined,
         };
         await this.sendConversationalReply(tenantId, conversationId, conversation, clarificationResult as any, inboundWaId);
@@ -855,6 +1274,42 @@ export class AIAutoBookingService {
     // and isForOther is implicitly true — resolve the target now.
     if (!isForOther && conversation.pendingBookingIntent?.awaitingTargetConfirmation) {
       isForOther = true;
+    }
+
+    // ── Enforce TARGET identity if we know it's for a family member but don't have a resolved name ──
+    if (isForOther && (!rawTargetInfo || (rawTargetInfo.firstName === "votre" && rawTargetInfo.lastName === "proche"))) {
+      console.log("[AI Conversation] Target identity missing (placeholder). Requesting target identity before booking.");
+      await Conversation.findByIdAndUpdate(conversationId, {
+        $set: {
+          pendingBookingIntent: {
+            date: booking.date,
+            startTime: booking.startTime,
+            durationMin: booking.durationMin,
+            treatment: booking.treatment,
+            awaitingIdentity: false,
+            awaitingTargetConfirmation: false,
+            awaitingTargetIdentity: true,
+            targetPatientInfo: rawTargetInfo,
+          }
+        }
+      });
+      const recentInboundForLang = await Message.find({
+        tenantId: new mongoose.Types.ObjectId(tenantId),
+        conversationId: new mongoose.Types.ObjectId(conversationId),
+        direction: "inbound",
+      }).sort({ createdAt: -1 }).limit(5).lean();
+      const combinedText = recentInboundForLang.map((m: any) => m.content).join(" ");
+      const detLang2 = detectLanguageFromText(combinedText, conversationPatient.language);
+      const isAr = detLang2 === "ar" || detLang2 === "arabizi";
+
+      const identityRequestResult = {
+        ...result,
+        suggestion: await this.generateErrorReply(tenantId, conversation, `[SYSTEM: Demandez au patient le nom et prénom du membre de la famille pour lequel il prend rendez-vous. RÈGLE STRICTE: Utilisez la phrase exacte "chnowa esm w la9ab li bech tekhoulou rendez-vous ?" si le patient parle tunisien. N'utilisez JAMAIS "smit" ou "t7ajerlo".]`),
+        structured: true,
+        action: undefined
+      };
+      await this.sendConversationalReply(tenantId, conversationId, conversation, identityRequestResult as any, inboundWaId);
+      return true;
     }
 
     // Resolve the actual target patient (never overwrites the conversation patient)
@@ -883,9 +1338,19 @@ export class AIAutoBookingService {
           }
         }
       });
+      const recentInboundForLang = await Message.find({
+        tenantId: new mongoose.Types.ObjectId(tenantId),
+        conversationId: new mongoose.Types.ObjectId(conversationId),
+        direction: "inbound",
+      }).sort({ createdAt: -1 }).limit(5).lean();
+      const combinedText = recentInboundForLang.map((m: any) => m.content).join(" ");
+      const detLang3 = detectLanguageFromText(combinedText, conversationPatient.language);
+      const isAr = detLang3 === "ar" || detLang3 === "arabizi";
+
       const identityRequestResult = {
         ...result,
-        suggestion: "Parfait. Pour créer votre dossier et confirmer le rendez-vous, pouvez-vous me donner votre nom et prénom, s'il vous plaît ?",
+        suggestion: await this.generateErrorReply(tenantId, conversation, `[SYSTEM: To create a medical record and confirm the appointment, we need the patient's full name (first name and last name). Ask them naturally in their language. STRICT RULE: If the patient speaks Tunisian, you MUST use exactly "chnowa esmek el kamel aman". NEVER use "smitek" or "3afak".]`),
+        structured: true,
         action: undefined
       };
       await this.sendConversationalReply(tenantId, conversationId, conversation, identityRequestResult as any, inboundWaId);
@@ -893,28 +1358,64 @@ export class AIAutoBookingService {
     }
 
     // ── Validate against pendingBookingContext proposedSlots or REAL availability ──
-    if (
-      conversation.pendingBookingContext?.proposedSlots &&
-      conversation.pendingBookingContext.proposedSlots.length > 0 &&
-      conversation.pendingBookingContext.date === booking.date
-    ) {
-      const isProposed = conversation.pendingBookingContext.proposedSlots.some(
-        (s: any) => normalizeTime(s.startTime) === booking.startTime
-      );
-      if (!isProposed) {
-        console.warn(
-          `[AI Conversation] Attempted to book unproposed slot ${booking.startTime} on ${booking.date}. Verifying real availability.`
-        );
-        const realSlots = await availabilityService.getAvailableSlots({ tenantId, date: booking.date, durationMin: booking.durationMin });
-        const isTrulyAvailable = !("error" in realSlots) && realSlots.slots && realSlots.slots.some(
-          (s: { startTime: string; endTime: string }) => normalizeTime(s.startTime) === booking.startTime
-        );
-        
-        if (!isTrulyAvailable) {
-          console.warn(`[AI Conversation] Slot ${booking.startTime} is truly unavailable.`);
-          return false;
+    if (conversation.pendingBookingContext) {
+      // 1. Expiration check
+      if (
+        conversation.pendingBookingContext.expiresAt &&
+        new Date() > new Date(conversation.pendingBookingContext.expiresAt)
+      ) {
+        console.warn(`[AI Conversation] pendingBookingContext expired.`);
+
+        // Clear old context
+        await Conversation.findByIdAndUpdate(conversationId, {
+          $unset: { pendingBookingContext: 1 }
+        });
+
+        // Recalculate availabilities
+        const newSlots = await availabilityService.getAvailableSlots({ tenantId, date: booking.date, durationMin: booking.durationMin });
+
+        let newProposalMsg = "Désolé, les horaires que je vous avais proposés ont expiré. ";
+        if ("error" in newSlots || !newSlots.slots || newSlots.slots.length === 0) {
+          newProposalMsg += "Malheureusement, il n'y a plus de disponibilités pour ce jour. Souhaitez-vous une autre date ?";
+        } else {
+          newProposalMsg += "Voici les nouvelles disponibilités : " + newSlots.slots.map((s: any) => s.startTime).join(", ");
         }
-        console.log(`[AI Conversation] Slot ${booking.startTime} is actually available. Bypassing proposedSlots guard.`);
+
+        const expiredResult = {
+          ...result,
+          reply: newProposalMsg,
+          suggestion: newProposalMsg,
+          structured: true,
+          action: undefined
+        };
+        await this.sendConversationalReply(tenantId, conversationId, conversation, expiredResult as any, inboundWaId);
+        return true;
+      }
+
+      // 2. Slots validation
+      if (
+        conversation.pendingBookingContext.proposedSlots &&
+        conversation.pendingBookingContext.proposedSlots.length > 0 &&
+        conversation.pendingBookingContext.date === booking.date
+      ) {
+        const isProposed = conversation.pendingBookingContext.proposedSlots.some(
+          (s: any) => normalizeTime(s.startTime) === booking.startTime
+        );
+        if (!isProposed) {
+          console.warn(
+            `[AI Conversation] Attempted to book unproposed slot ${booking.startTime} on ${booking.date}. Verifying real availability.`
+          );
+          const realSlots = await availabilityService.getAvailableSlots({ tenantId, date: booking.date, durationMin: booking.durationMin });
+          const isTrulyAvailable = !("error" in realSlots) && realSlots.slots && realSlots.slots.some(
+            (s: { startTime: string; endTime: string }) => normalizeTime(s.startTime) === booking.startTime
+          );
+
+          if (!isTrulyAvailable) {
+            console.warn(`[AI Conversation] Slot ${booking.startTime} is truly unavailable.`);
+            return false;
+          }
+          console.log(`[AI Conversation] Slot ${booking.startTime} is actually available. Bypassing proposedSlots guard.`);
+        }
       }
     }
 
@@ -939,8 +1440,8 @@ export class AIAutoBookingService {
         const aiTargetId = result.action?.targetId || "self";
         const executorTargetId =
           aiTargetId !== "self" &&
-          aiTargetId !== conversationPatientId.toString() &&
-          !isForOther
+            aiTargetId !== actualConversationPatientId.toString() &&
+            !isForOther
             ? aiTargetId           // let executor reject this cross-patient attempt
             : targetPatientId;     // resolved family member or self
 
@@ -951,20 +1452,56 @@ export class AIAutoBookingService {
         });
         bookingSucceeded = true;
       } catch (err: any) {
-        if (err.message?.includes("Vous avez déjà un rendez-vous prévu")) {
+        if (err.message?.includes("Vous avez déjà un rendez-vous prévu") || err.message?.includes("3andek rendez-vous m9ayed") || err.message?.startsWith("Active_Appointment_Exists")) {
           console.log("[AI Conversation] Active_Appointment_Exists — sending refusal message.");
-          const refusalResult = { ...result, suggestion: err.message, action: undefined };
+          let msg: string;
+          if (err.message.startsWith("Active_Appointment_Exists")) {
+            const parts = err.message.split(":");
+            const existingDate = parts[1];
+            const existingTime = parts.slice(2).join(":");
+            // Use AI to generate a natural message in the correct language, mentioning the family member if relevant
+            const familyName = (isForOther && rawTargetInfo) ? `${rawTargetInfo.firstName} ${rawTargetInfo.lastName}` : null;
+            const systemCtx = familyName
+              ? `[SYSTEM: ${familyName} already has an upcoming appointment on ${existingDate} at ${existingTime}. Inform the patient naturally in their language that ${familyName} already has an appointment on that date. Suggest they reschedule it instead if they want a different date/time. Keep it short.]`
+              : `[SYSTEM: The patient already has an upcoming appointment on ${existingDate} at ${existingTime}. Inform them naturally in their language. Suggest rescheduling if they want a different date/time. Keep it short.]`;
+            msg = await this.generateErrorReply(tenantId, conversation, systemCtx) || (familyName
+              ? `${familyName} a déjà un rendez-vous le ${existingDate} à ${existingTime}. Souhaitez-vous le déplacer ?`
+              : `Vous avez déjà un rendez-vous le ${existingDate} à ${existingTime}. Souhaitez-vous le déplacer ?`);
+          } else {
+            msg = err.message;
+          }
+          const refusalResult = { ...result, suggestion: msg, structured: true, action: undefined };
           await this.sendConversationalReply(tenantId, conversationId, conversation, refusalResult as any, inboundWaId);
           return true;
         }
-        if (err.message?.includes("Le créneau n'est plus disponible") || err.message?.includes("SLOT_UNAVAILABLE")) {
-          console.log("[AI Conversation] SLOT_UNAVAILABLE — sending refusal message.");
-          const refusalResult = { ...result, reply: "Désolé, ce créneau vient tout juste d'être réservé par un autre patient. Souhaitez-vous que je vous propose d'autres horaires ?", suggestion: "Désolé, ce créneau vient tout juste d'être réservé par un autre patient. Souhaitez-vous que je vous propose d'autres horaires ?", action: undefined };
-          await this.sendConversationalReply(tenantId, conversationId, conversation, refusalResult as any, inboundWaId);
+        if (err.message?.includes("Le créneau n'est plus disponible") || err.message?.includes("SLOT_UNAVAILABLE") || err.message?.includes("Lwa9t hedha ma 3adech disponible")) {
+          console.log("[AI Conversation] SLOT_UNAVAILABLE — fetching alternative slots and offering them.");
+          try {
+            const altSlots = await availabilityService.getAvailableSlots({ tenantId, date: booking.date, durationMin: booking.durationMin });
+            let altMsg: string;
+            if (!("error" in altSlots) && altSlots.slots && altSlots.slots.length > 0) {
+              const slotsStr = altSlots.slots.map((s: any) => s.startTime).join(", ");
+              altMsg = await this.generateErrorReply(tenantId, conversation, `[SYSTEM: The slot ${booking.startTime} on ${booking.date} is no longer available (taken by another patient). The available slots for that day are: ${slotsStr}. Apologize naturally in the patient's language and offer these alternative slots.]`) || `Désolé, ce créneau n'est plus disponible. Voici les créneaux disponibles : ${slotsStr}.`;
+              // Save new proposed slots so the patient can pick one
+              await Conversation.findByIdAndUpdate(conversationId, {
+                $set: { "pendingBookingContext.proposedSlots": altSlots.slots }
+              }).catch(() => {});
+            } else {
+              altMsg = await this.generateErrorReply(tenantId, conversation, `[SYSTEM: The slot ${booking.startTime} on ${booking.date} is no longer available and there are no more slots that day. Apologize in the patient's language and ask if they want another day.]`) || "Désolé, aucun créneau n'est plus disponible ce jour-là. Souhaitez-vous choisir une autre date ?";
+            }
+            const refusalResult = { ...result, reply: altMsg, suggestion: altMsg, structured: true, action: undefined };
+            await this.sendConversationalReply(tenantId, conversationId, conversation, refusalResult as any, inboundWaId);
+          } catch (_) {
+            const refusalResult = { ...result, reply: err.message, suggestion: err.message, structured: true, action: undefined };
+            await this.sendConversationalReply(tenantId, conversationId, conversation, refusalResult as any, inboundWaId);
+          }
           return true;
         }
         console.error("[AI Conversation] executeAIAction failed:", err.message);
-        const fallbackResult = { ...result, reply: "Désolé, une erreur est survenue lors de l'enregistrement. Veuillez réessayer.", suggestion: "Désolé, une erreur est survenue lors de l'enregistrement. Veuillez réessayer.", action: undefined };
+        const fallbackMsg = err.message?.includes("Past_Date_Error")
+          ? await this.generateErrorReply(tenantId, conversation, `[SYSTEM: The date requested is in the past. Apologize naturally in the patient's language and suggest they pick a future date.]`) || "Désolé, cette date est déjà passée. Veuillez choisir une date future."
+          : await this.generateErrorReply(tenantId, conversation, `[SYSTEM: An error occurred during booking. Apologize briefly in the patient's language and suggest retrying or contacting the secretariat.]`) || "Désolé, une erreur est survenue lors de l'enregistrement. Veuillez réessayer.";
+        const fallbackResult = { ...result, reply: fallbackMsg, suggestion: fallbackMsg, action: undefined };
         await this.sendConversationalReply(tenantId, conversationId, conversation, fallbackResult as any, inboundWaId);
         return true;
       }
@@ -1001,16 +1538,31 @@ export class AIAutoBookingService {
       return false;
     }
 
-    const confirmationText = buildBookingConfirmationMessage(
-      {
-        date: createdAppointment.date,
-        startTime: createdAppointment.startTime,
-        endTime: createdAppointment.endTime,
-        treatment: createdAppointment.treatment,
-      },
-      targetFirstName || "",
-      targetLanguage
-    );
+    let confirmationText = result.suggestion;
+    if (!confirmationText || !confirmationText.includes(createdAppointment.startTime)) {
+      const recentInboundMsgs = await Message.find({
+        tenantId: new mongoose.Types.ObjectId(tenantId),
+        conversationId: new mongoose.Types.ObjectId(conversationId),
+        direction: "inbound",
+      }).sort({ createdAt: -1 }).limit(5).lean();
+
+      const combinedText = recentInboundMsgs.map((m: any) => m.content).join(" ");
+      const detectedLang = detectLanguageFromText(combinedText, conversationPatient.language);
+      const finalLang = detectedLang === "arabizi" ? "arabizi" : (detectedLang === "ar" ? "ar" : targetLanguage);
+
+      confirmationText = await buildConfirmationMessage(
+        "booking",
+        {
+          date: createdAppointment.date,
+          startTime: createdAppointment.startTime,
+          endTime: createdAppointment.endTime,
+          treatment: createdAppointment.treatment,
+        },
+        targetFirstName || "",
+        conversationId,
+        finalLang
+      );
+    }
 
     // ── Check WhatsApp confirmation idempotency ─────────────────────────────
     // Prevent sending duplicate confirmations for the same appointment.
@@ -1080,164 +1632,67 @@ export class AIAutoBookingService {
   // Reschedule flow
   // ────────────────────────────────────────────────────────────────────────────
 
-  private async handleRescheduleProposal(
+  private async generateErrorReply(
     tenantId: string,
-    conversationId: string,
     conversation: any,
-    result: AISuggestionResult
-  ): Promise<boolean> {
-    const rawBooking = result.action?.booking as {
-      date: string;
-      startTime: string;
-      durationMin: number;
-      treatment: string;
-    };
-
-    if (!rawBooking) return false;
-
-    const patientId = conversation.patientId;
-    if (!patientId) {
-      console.warn("[AI Conversation] No patientId on conversation — cannot reschedule.");
-      return false;
-    }
-
-    const bookingDate = conversation.pendingBookingContext?.date || rawBooking.date || new Date().toISOString().slice(0, 10);
-    const booking = {
-      date: bookingDate,
-      startTime: normalizeTime(rawBooking.startTime),
-      durationMin: rawBooking.durationMin || 30,
-      treatment: rawBooking.treatment || "Consultation dentaire",
-    };
-
-    const actionTarget = result.action?.targetId && result.action.targetId !== "self"
-      ? result.action.targetId
-      : "";
-
-    let targetPatientId = patientId.toString();
-    let targetLanguage = "fr";
-
-    // The AI may pass either a patientId or an appointmentId as targetId.
-    // We pass it through directly to executeAIAction which handles both cases.
-    // For the confirmation message, we need the actual patient info.
-    const executorTargetId = actionTarget || targetPatientId;
-
-    // If actionTarget looks like a MongoDB ObjectId, check if it's an appointment
-    // and resolve the patient from that appointment (for confirmation message).
-    if (actionTarget && mongoose.Types.ObjectId.isValid(actionTarget)) {
-      // Try as appointment ID first
-      const { Appointment: ApptModel } = await import("../appointments/appointment.model");
-      const linkedAppt = await ApptModel.findOne({ _id: actionTarget, tenantId }).lean();
-      if (linkedAppt) {
-        // It's an appointment ID — get the patient from the appointment
-        targetPatientId = (linkedAppt as any).patientId.toString();
-        const linkedPatient = await Patient.findOne({ _id: targetPatientId, tenantId }).lean();
-        if (linkedPatient) {
-          targetLanguage = (linkedPatient as any).language ?? "fr";
-        }
-      } else {
-        // Try as patient ID
-        const targetPatient = await Patient.findOne({ _id: actionTarget, tenantId }).lean();
-        if (targetPatient) {
-          targetPatientId = actionTarget;
-          targetLanguage = (targetPatient as any).language ?? "fr";
-        }
-      }
-    }
-
-    let rescheduleSucceeded = false;
+    errorContext: string
+  ): Promise<string> {
     try {
-      await executeAIAction(tenantId, conversationId, {
-        type: "reschedule_appointment",
-        targetId: executorTargetId,
-        booking,
-      });
-      rescheduleSucceeded = true;
-    } catch (err: any) {
-      if (err.message?.includes("Le créneau n'est plus disponible") || err.message?.includes("SLOT_UNAVAILABLE")) {
-        console.log("[AI Conversation] SLOT_UNAVAILABLE during reschedule — sending refusal message.");
-        const refusalResult = { ...result, reply: "Désolé, ce créneau vient tout juste d'être pris par un autre patient. Souhaitez-vous que je vous propose d'autres horaires ?", suggestion: "Désolé, ce créneau vient tout juste d'être pris par un autre patient. Souhaitez-vous que je vous propose d'autres horaires ?", action: undefined };
-        await this.sendConversationalReply(tenantId, conversationId, conversation, refusalResult as any);
-        return true;
+      const providerUrl = process.env.AI_PROVIDER_URL?.trim()?.replace(/^['"]/g, "").replace(/['"]$/g, "");
+      const apiKey = process.env.AI_API_KEY?.trim()?.replace(/^['"]/g, "").replace(/['"]$/g, "");
+      const model = process.env.AI_MODEL?.trim()?.replace(/^['"]/g, "").replace(/['"]$/g, "");
+
+      if (!providerUrl || !apiKey || !model) {
+        console.warn("[AI] generateErrorReply: AI provider not configured.");
+        return "";
       }
-      console.error("[AI Conversation] Reschedule failed:", err.message);
-      const fallbackResult = { ...result, reply: "Désolé, la modification du rendez-vous a échoué. Veuillez réessayer.", suggestion: "Désolé, la modification du rendez-vous a échoué. Veuillez réessayer.", action: undefined };
-      await this.sendConversationalReply(tenantId, conversationId, conversation, fallbackResult as any);
-      return true;
-    }
 
-    // Clear pendingBookingContext after successful rescheduling
-    if (rescheduleSucceeded) {
-      await Conversation.findByIdAndUpdate(conversationId, {
-        $unset: { pendingBookingContext: 1 },
-      }).catch((err) => console.error("[AI Conversation] Failed to clear pendingBookingContext:", err.message));
-    }
+      // Load the last 6 messages to provide language context to the AI
+      const recentMessages = await Message.find({ conversationId: conversation._id })
+        .sort({ createdAt: -1 })
+        .limit(6)
+        .lean();
 
-    // Load updated appointment
-    const updatedAppointment = await Appointment.findOne({
-      tenantId,
-      patientId: targetPatientId,
-      date: booking.date,
-      startTime: booking.startTime,
-      status: { $in: ["scheduled", "confirmed"] }
-    }).lean();
+      const historyMessages = recentMessages
+        .reverse()
+        .map((m: any) => ({
+          role: (m.direction === "inbound" ? "user" : "assistant") as "user" | "assistant",
+          content: m.content || "",
+        }))
+        .filter((m: any) => m.content);
 
-    if (!updatedAppointment) {
-      console.error("[AI Conversation] Could not load updated appointment after rescheduling.");
-      return false;
-    }
+      // Minimal system instruction: stay in patient language, plain text, short
+      const systemInstruction = `You are a WhatsApp assistant for a medical clinic. Look at the conversation history to detect the patient's language (French, Tunisian arabizi, Arabic, English). Always reply in that same language. Write a single short empathetic sentence. No JSON, no greetings, no formatting.`;
 
-    const [targetPatient, tenant] = await Promise.all([
-      Patient.findOne({ _id: targetPatientId, tenantId }).select("firstName lastName language").lean(),
-      Tenant.findById(tenantId).lean(),
-    ]);
+      const messages = [
+        { role: "system" as const, content: systemInstruction },
+        ...historyMessages,
+        { role: "user" as const, content: errorContext },
+      ];
 
-    if (!targetPatient || !tenant) {
-      console.error("[AI Conversation] Could not load patient/tenant for reschedule confirmation.");
-      return false;
-    }
-
-    const patientDisplayName = (targetPatient as any).firstName && (targetPatient as any).firstName !== "Patient"
-      ? (targetPatient as any).firstName
-      : "";
-
-    const confirmationText = buildRescheduleConfirmationMessage(
-      {
-        date: updatedAppointment.date,
-        startTime: updatedAppointment.startTime,
-        endTime: updatedAppointment.endTime,
-        treatment: updatedAppointment.treatment,
-      },
-      patientDisplayName,
-      (targetPatient as any).language ?? "fr"
-    );
-
-    const deterministicWaMsgId = `auto-reschedule-confirm-${updatedAppointment._id.toString()}-${Date.now()}`;
-
-    try {
-      await this.messagingProvider.sendMessage(
-        { to: conversation.contactWaId, type: "text", content: confirmationText },
-        tenant as any
-      );
-
-      await Message.create({
-        tenantId,
-        conversationId,
-        patientId,
-        direction: "outbound",
-        status: "sent",
-        content: confirmationText,
-        providerMessageId: deterministicWaMsgId,
+      const response = await fetch(`${providerUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 100 }),
+        signal: AbortSignal.timeout(10_000),
       });
-    } catch (sendErr: any) {
-      console.error("[AI Conversation] Failed to send reschedule confirmation:", sendErr.message);
-    }
 
-    return true;
+      if (!response.ok) {
+        console.error(`[AI] generateErrorReply HTTP ${response.status}`);
+        return "";
+      }
+
+      const data = await response.json() as any;
+      const reply: string | undefined = data?.choices?.[0]?.message?.content?.trim();
+      return reply || "";
+    } catch (e) {
+      console.error("[AI] generateErrorReply failed:", e);
+      return "";
+    }
   }
-
-  // ────────────────────────────────────────────────────────────────────────────
-  // Conversational reply (Phase 6.10)
-  // ────────────────────────────────────────────────────────────────────────────
 
   /**
    * Send the AI's natural reply to the patient via WhatsApp and persist the
@@ -1283,13 +1738,26 @@ export class AIAutoBookingService {
 
     const deterministicId = `ai-reply-${baseId}`;
 
-    // Idempotency: never send the same AI reply twice
-    const alreadySent = await Message.findOne({
-      providerMessageId: deterministicId,
-      status: { $ne: "failed" },
-    });
-    if (alreadySent) {
-      console.log("[AI Conversation] AI reply already sent. Skipping.");
+    const patientId = conversation.patientId;
+
+    try {
+      // Phase 6: Strict 1:1 message/reply locking
+      await Message.create({
+        tenantId,
+        conversationId,
+        patientId,
+        direction: "outbound",
+        status: "sent",
+        content: reply,
+        providerMessageId: `temp-ai-reply-${Date.now()}-${Math.random().toString(36).substring(7)}`, // Will be updated by WhatsApp
+        idempotencyKey: deterministicId,
+      });
+    } catch (err: any) {
+      if (err.code === 11000) {
+        console.log("[AI Conversation] AI reply already processing/sent for this inbound message. Skipping duplicate.");
+        return;
+      }
+      console.error("[AI Conversation] Failed to lock AI reply:", err.message);
       return;
     }
 
@@ -1299,59 +1767,37 @@ export class AIAutoBookingService {
       return;
     }
 
-    const patientId = conversation.patientId;
-
     try {
+      // Send the real WhatsApp Message
       const sendResult = await this.messagingProvider.sendMessage(
         { to: conversation.contactWaId, type: "text", content: reply },
         tenant as any
       );
 
+      // Update the locked placeholder with the real provider message ID for delivery receipts
       await Message.findOneAndUpdate(
-        { providerMessageId: deterministicId },
+        { idempotencyKey: deterministicId },
         {
           $set: {
-            tenantId,
-            conversationId,
-            patientId,
-            direction: "outbound",
-            status: "sent",
-            content: reply,
+            providerMessageId: sendResult.providerMessageId,
             error: null,
           },
-        },
-        { upsert: true }
-      ).catch((err) =>
-        console.error(
-          "[AI Conversation] Failed to persist outbound reply:",
-          err.message
-        )
+        }
       );
     } catch (sendErr) {
-      // WhatsApp send failure: persist as failed for later retry (same deterministic id)
       console.error(
         "[AI Conversation] WhatsApp send failed for AI reply:",
         (sendErr as Error).message
       );
+      // Mark the locked message as failed so it doesn't block future retries if needed
       await Message.findOneAndUpdate(
-        { providerMessageId: deterministicId },
+        { idempotencyKey: deterministicId },
         {
           $set: {
-            tenantId,
-            conversationId,
-            patientId,
-            direction: "outbound",
             status: "failed",
-            content: reply,
             error: (sendErr as Error).message,
           },
-        },
-        { upsert: true }
-      ).catch((err) =>
-        console.error(
-          "[AI Conversation] Failed to persist failed reply:",
-          err.message
-        )
+        }
       );
     }
   }
@@ -1359,60 +1805,7 @@ export class AIAutoBookingService {
   /**
    * Handle confirmation of an existing upcoming appointment when the patient confirms.
    */
-  private async handleConfirmAppointmentProposal(
-    tenantId: string,
-    conversationId: string,
-    conversation: any,
-    result: AISuggestionResult,
-    inboundWaId?: string
-  ): Promise<boolean> {
-    const patientId = conversation.patientId;
-    if (!patientId) return false;
 
-    const today = new Date().toISOString().slice(0, 10);
-    let appt = null;
-
-    if (result.action?.targetId && mongoose.Types.ObjectId.isValid(result.action.targetId)) {
-      appt = await Appointment.findOne({
-        _id: new mongoose.Types.ObjectId(result.action.targetId),
-        tenantId: new mongoose.Types.ObjectId(tenantId),
-      });
-    }
-
-    if (!appt) {
-      appt = await Appointment.findOne({
-        tenantId: new mongoose.Types.ObjectId(tenantId),
-        patientId: new mongoose.Types.ObjectId(patientId.toString()),
-        date: { $gte: today },
-        status: { $in: ["scheduled", "confirmed"] },
-      }).sort({ date: 1, startTime: 1 });
-    }
-
-    if (!appt) return false;
-
-    // Update appointment status to confirmed in agenda
-    appt.status = "confirmed";
-    await appt.save();
-    console.log(`[AI Conversation] Appointment ${appt._id} updated to CONFIRMED for ${appt.date} at ${appt.startTime}`);
-
-    // Compose tailored confirmation reply
-    let reply = result.suggestion;
-    if (!reply || reply.includes("Je ne suis pas sûr") || !result.structured) {
-      reply = `Parfait ! Votre rendez-vous du ${appt.date} à ${appt.startTime} est bien confirmé dans notre agenda. Nous vous attendons avec plaisir au cabinet !`;
-    }
-
-    await this.sendConversationalReply(
-      tenantId,
-      conversationId,
-      conversation,
-      { ...result, suggestion: reply, structured: true },
-      inboundWaId
-    );
-
-    return true;
-  }
 }
 
-
-// Singleton for production use (injectable in tests via constructor)
 export const aiAutoBookingService = new AIAutoBookingService();

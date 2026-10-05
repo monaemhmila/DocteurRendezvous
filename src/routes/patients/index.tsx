@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
+import { useAdmin } from "@/contexts/admin-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, Plus, Mail, MessageSquare, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -22,6 +23,7 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { useAppState } from "@/hooks/use-app-state";
 
 /**
  * Backend patient response shape from GET /patients.
@@ -67,6 +69,8 @@ function PatientsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const queryClient = useQueryClient();
+  const { t } = useAppState();
+  const { isAdminUnlocked } = useAdmin();
 
   const { data: patients = [], isLoading, isError } = useQuery<BackendPatient[]>({
     queryKey: ["patients"],
@@ -80,10 +84,10 @@ function PatientsPage() {
     mutationFn: (data: any) => api.post("/patients", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["patients"] });
-      toast.success("Patient ajouté avec succès.");
+      toast.success(t.patientsPage.successAdd);
       setIsDialogOpen(false);
     },
-    onError: () => toast.error("Erreur lors de la création du patient."),
+    onError: () => toast.error(t.patientsPage.errorAdd),
   });
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -99,15 +103,22 @@ function PatientsPage() {
   };
 
   const filteredPatients = useMemo(() => {
+    let list = patients;
+    // Hide the dummy Indisponible (Bloqué) patient unless unlocked
+    if (!isAdminUnlocked) {
+      list = list.filter(p => p.phone !== "00000000");
+    }
+    
     const q = query.trim().toLowerCase();
-    if (!q) return patients;
-    return patients.filter(
+    if (!q) return list;
+    
+    return list.filter(
       (p) =>
         `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) ||
         (p.phone && p.phone.replace(/\s/g, "").includes(q)) ||
         (p.email && p.email.toLowerCase().includes(q)),
     );
-  }, [query, patients]);
+  }, [query, patients, isAdminUnlocked]);
 
   const toggleAll = () => {
     if (selected.size === filteredPatients.length) {
@@ -127,48 +138,48 @@ function PatientsPage() {
   return (
     <div className="mx-auto max-w-[1400px] space-y-6 pb-20">
       <PageHeader
-        title="Patients"
-        subtitle={isLoading ? "Chargement..." : `${patients.length} patients au total`}
+        title={t.patientsPage.title}
+        subtitle={isLoading ? t.common.loading : t.patientsPage.subtitle.replace("{count}", patients.length.toString())}
         actions={
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="mr-2 size-4" />
-                Nouveau patient
+                {t.patientsPage.newPatient}
               </Button>
             </DialogTrigger>
             <DialogContent>
               <form onSubmit={handleSubmit}>
                 <DialogHeader>
-                  <DialogTitle>Nouveau patient</DialogTitle>
+                  <DialogTitle>{t.patientsPage.newPatient}</DialogTitle>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Prénom</label>
-                      <Input name="firstName" required placeholder="Ex: Jean" />
+                      <label className="text-sm font-medium">{t.patientsPage.firstName}</label>
+                      <Input name="firstName" required placeholder={t.patientsPage.firstNameEx} />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Nom</label>
-                      <Input name="lastName" required placeholder="Ex: Dupont" />
+                      <label className="text-sm font-medium">{t.patientsPage.lastName}</label>
+                      <Input name="lastName" required placeholder={t.patientsPage.lastNameEx} />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Téléphone</label>
+                    <label className="text-sm font-medium">{t.patientsPage.phone}</label>
                     <Input name="phone" required placeholder="+216 ..." />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Email</label>
-                    <Input name="email" type="email" placeholder="Optionnel" />
+                    <label className="text-sm font-medium">{t.patientsPage.email}</label>
+                    <Input name="email" type="email" placeholder={t.patientsPage.emailOptional} />
                   </div>
                 </div>
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                    Annuler
+                    {t.common.cancel}
                   </Button>
                   <Button type="submit" disabled={createPatient.isPending}>
                     {createPatient.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-                    Créer le patient
+                    {t.patientsPage.createPatient}
                   </Button>
                 </DialogFooter>
               </form>
@@ -184,37 +195,37 @@ function PatientsPage() {
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Rechercher par nom, téléphone..."
+              placeholder={t.patientsPage.searchPlaceholder}
               className="pl-9"
             />
           </div>
           {selected.size > 0 && (
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-muted-foreground mr-2">
-                {selected.size} sélectionné{selected.size > 1 ? "s" : ""}
+              <span className="text-sm font-medium text-muted-foreground mx-2">
+                {t.patientsPage.selected.replace("{count}", selected.size.toString())}
               </span>
               <Button variant="outline" size="sm">
-                <MessageSquare className="mr-2 size-3.5" />
-                Message
+                <MessageSquare className="mx-2 size-3.5" />
+                {t.patientsPage.message}
               </Button>
               <Button variant="outline" size="sm">
-                <Mail className="mr-2 size-3.5" />
-                Campagne
+                <Mail className="mx-2 size-3.5" />
+                {t.patientsPage.campaign}
               </Button>
               <Button variant="outline" size="sm">
-                <Download className="mr-2 size-3.5" />
-                Exporter
+                <Download className="mx-2 size-3.5" />
+                {t.patientsPage.export}
               </Button>
             </div>
           )}
         </div>
         <div className="overflow-x-auto">
           {isLoading ? (
-            <div className="p-8 text-center text-muted-foreground animate-pulse">Chargement des patients...</div>
+            <div className="p-8 text-center text-muted-foreground animate-pulse">{t.patientsPage.loadingPatients}</div>
           ) : isError ? (
-            <div className="p-8 text-center text-destructive">Impossible de charger la liste des patients.</div>
+            <div className="p-8 text-center text-destructive">{t.patientsPage.errorLoading}</div>
           ) : (
-            <table className="w-full text-left text-sm whitespace-nowrap">
+            <table className="w-full text-start text-sm whitespace-nowrap">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
                   <th className="px-5 py-3 w-10">
@@ -226,11 +237,11 @@ function PatientsPage() {
                       onCheckedChange={toggleAll}
                     />
                   </th>
-                  <th className="px-5 py-3 font-medium text-muted-foreground">Patient</th>
-                  <th className="px-5 py-3 font-medium text-muted-foreground">Contact</th>
-                  <th className="px-5 py-3 font-medium text-muted-foreground">Dernière visite</th>
-                  <th className="px-5 py-3 font-medium text-muted-foreground">Statut</th>
-                  <th className="px-5 py-3 font-medium text-muted-foreground">Visites</th>
+                  <th className="px-5 py-3 font-medium text-muted-foreground">{t.patientsPage.patient}</th>
+                  <th className="px-5 py-3 font-medium text-muted-foreground">{t.patientsPage.contact}</th>
+                  <th className="px-5 py-3 font-medium text-muted-foreground">{t.patientsPage.lastVisit}</th>
+                  <th className="px-5 py-3 font-medium text-muted-foreground">{t.patientsPage.status}</th>
+                  <th className="px-5 py-3 font-medium text-muted-foreground">{t.patientsPage.visits}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -284,7 +295,7 @@ function PatientsPage() {
                 {filteredPatients.length === 0 && !isLoading && (
                   <tr>
                     <td colSpan={6} className="px-5 py-8 text-center text-muted-foreground">
-                      {query ? `Aucun patient trouvé pour "${query}".` : "Aucun patient."}
+                      {query ? t.patientsPage.noPatientSearch.replace("{query}", query) : t.patientsPage.noPatient}
                     </td>
                   </tr>
                 )}

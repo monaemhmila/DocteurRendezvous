@@ -29,8 +29,10 @@ import {
   Building,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { BackendAppointment, useAppointments, useCreateAppointment, useUpdateAppointmentStatus, useDeleteAppointment, useUpdateAppointment } from "@/features/appointments/hooks/useAppointments";
+import { Edit3 } from "lucide-react";
 
 import {
   AppointmentStatusBadge,
@@ -46,6 +48,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { addDays, formatLongDate, formatShortDate, money, startOfWeek, parseISO } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useAppState } from "@/hooks/use-app-state";
+import { useAdmin } from "@/contexts/admin-context";
 
 // Today's date as ISO YYYY-MM-DD
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -56,24 +60,6 @@ function isoDay(offset = 0): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 const TODAY = isoDay(0);
-
-interface BackendAppointment {
-  _id?: string;
-  id: string;
-  patientId: string;
-  patientName: string;
-  doctorId: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  durationMin: number;
-  treatment: string;
-  notes?: string;
-  status: "scheduled" | "confirmed" | "cancelled" | "completed" | "no_show";
-  source?: "ai" | "manual" | string;
-  createdByAi?: boolean;
-  value?: number;
-}
 
 export const Route = createFileRoute("/agenda")({
   head: () => ({
@@ -104,19 +90,28 @@ function AgendaPage() {
   const [quickBookTime, setQuickBookTime] = useState<string>("09:00");
   const [quickBookDate, setQuickBookDate] = useState<string>(TODAY);
 
-  // Filters State
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [treatmentFilter, setTreatmentFilter] = useState<string>("all");
 
-  const queryClient = useQueryClient();
+  // New appointment form state
+  const [newApptTreatment, setNewApptTreatment] = useState<string>("");
+  const [newApptPrice, setNewApptPrice] = useState<number | string>(60);
+  const [newApptDuration, setNewApptDuration] = useState<number>(30);
+
+  // Price inline editing state in details dialog
+  const [isEditingPrice, setIsEditingPrice] = useState<boolean>(false);
+  const [editedPriceVal, setEditedPriceVal] = useState<string>("");
+
+  const { t } = useAppState();
+  const { isAdminUnlocked } = useAdmin();
 
   const queryWindow = useMemo(() => {
     const d = new Date(day);
     const from = new Date(d);
     const to = new Date(d);
-    
+
     if (view === "day") {
       from.setDate(d.getDate() - 1);
       to.setDate(d.getDate() + 1);
@@ -129,7 +124,7 @@ function AgendaPage() {
       to.setDate(28);
       to.setMonth(d.getMonth() + 1);
     }
-    
+
     const pad = (n: number) => String(n).padStart(2, "0");
     return {
       dateFrom: `${from.getFullYear()}-${pad(from.getMonth() + 1)}-${pad(from.getDate())}`,
@@ -138,13 +133,7 @@ function AgendaPage() {
   }, [day, view]);
 
   // Queries
-  const { data: serverAppointments = [], isLoading: isLoadingAppts, isError } = useQuery<BackendAppointment[]>({
-    queryKey: ["appointments", queryWindow.dateFrom, queryWindow.dateTo],
-    queryFn: async () => {
-      const res = await api.get(`/appointments?dateFrom=${queryWindow.dateFrom}&dateTo=${queryWindow.dateTo}&limit=100`);
-      return Array.isArray(res) ? res : (res.data || []);
-    },
-  });
+  const { data: serverAppointments = [], isLoading: isLoadingAppts, isError } = useAppointments(queryWindow.dateFrom, queryWindow.dateTo);
 
   const { data: serverPatients = [] } = useQuery<any[]>({
     queryKey: ["patients"],
@@ -175,45 +164,30 @@ function AgendaPage() {
   }, [tenant]);
 
   // Mutations
-  const createAppointment = useMutation({
-    mutationFn: (data: any) => api.post("/appointments", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["appointments"] });
-      toast.success("Rendez-vous ajouté avec succès au planning.");
-      setIsDialogOpen(false);
-    },
-    onError: (err: any) => {
-      if (err.message?.includes("409") || err.message?.includes("Double_Booking")) {
-        toast.error("Créneau non disponible (chevauchement avec un autre rendez-vous).");
-      } else {
-        toast.error(err.message || "Erreur lors de la création du rendez-vous.");
-      }
-    },
+  const createAppointment = useCreateAppointment(() => setIsDialogOpen(false));
+  const updateStatus = useUpdateAppointmentStatus(() => setSelected(null));
+  const deleteAppointment = useDeleteAppointment(() => setSelected(null));
+  const updateAppointment = useUpdateAppointment(() => {
+    setIsEditingPrice(false);
+    setSelected((prev) => {
+      if (!prev) return null;
+      const p = parseFloat(editedPriceVal);
+      return { ...prev, price: !isNaN(p) ? p : prev.price };
+    });
   });
 
-  const updateStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      api.patch(`/appointments/${id}/status`, { status }),
-    onSuccess: (data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["appointments"] });
-      queryClient.invalidateQueries({ queryKey: ["stats"] });
-      queryClient.invalidateQueries({ queryKey: ["recoveries"] });
-      queryClient.invalidateQueries({ queryKey: ["follow-ups"] });
-      toast.success(`Statut mis à jour : ${variables.status}`);
-      setSelected(null);
-    },
-    onError: () => toast.error("Erreur lors de la mise à jour du statut."),
-  });
-
-  const deleteAppointment = useMutation({
-    mutationFn: (id: string) => api.delete(`/appointments/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["appointments"] });
-      toast.success("Rendez-vous supprimé.");
-      setSelected(null);
-    },
-    onError: () => toast.error("Erreur lors de la suppression."),
-  });
+  const getAppointmentValue = (appt: BackendAppointment | null | undefined): number => {
+    if (!appt) return 0;
+    if (typeof appt.price === "number" && !isNaN(appt.price) && appt.price >= 0) return appt.price;
+    if (typeof appt.value === "number" && !isNaN(appt.value) && appt.value >= 0) return appt.value;
+    if (appt.treatment) {
+      const match = servicesCatalog.find(
+        (s) => s.name?.toLowerCase().trim() === appt.treatment?.toLowerCase().trim()
+      );
+      if (match?.price !== undefined) return Number(match.price);
+    }
+    return 60;
+  };
 
   const getPatient = (id: string) => serverPatients.find((p) => p.id === id || p._id === id);
 
@@ -293,8 +267,8 @@ function AgendaPage() {
     const list = view === "day"
       ? serverAppointments.filter((a) => a.date === day)
       : view === "week"
-      ? serverAppointments.filter((a) => weekDays.includes(a.date))
-      : serverAppointments;
+        ? serverAppointments.filter((a) => weekDays.includes(a.date))
+        : serverAppointments;
 
     const total = list.length;
     const confirmed = list.filter((a) => a.status === "confirmed" || a.status === "completed").length;
@@ -302,10 +276,10 @@ function AgendaPage() {
     const aiCount = list.filter((a) => a.source === "ai" || a.createdByAi === true).length;
     const totalRevenue = list
       .filter((a) => a.status !== "cancelled" && a.status !== "no_show")
-      .reduce((sum, a) => sum + (a.value || 60), 0);
+      .reduce((sum, a) => sum + getAppointmentValue(a), 0);
 
     return { total, confirmed, scheduled, aiCount, totalRevenue };
-  }, [serverAppointments, day, view, weekDays]);
+  }, [serverAppointments, day, view, weekDays, servicesCatalog]);
 
   // Navigation handlers
   const handlePrev = () => {
@@ -335,15 +309,21 @@ function AgendaPage() {
   const handleOpenQuickBook = (selectedDate: string, selectedTime: string) => {
     setQuickBookDate(selectedDate);
     setQuickBookTime(selectedTime);
+    const defService = servicesCatalog[0];
+    setNewApptTreatment(defService?.name || "Consultation générale");
+    setNewApptDuration(defService?.durationMin || 30);
+    setNewApptPrice(defService?.price ?? 60);
     setIsDialogOpen(true);
   };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const durationMin = parseInt(formData.get("durationMin") as string) || 30;
+    const durationMin = parseInt(formData.get("durationMin") as string) || newApptDuration || 30;
     const time = formData.get("time") as string;
     const targetDate = formData.get("date") as string;
+    const priceInput = formData.get("price") as string;
+    const parsedPrice = priceInput !== "" && priceInput !== null ? parseFloat(priceInput) : undefined;
 
     const [hours = 9, minutes = 0] = (time || "09:00").split(":").map(Number);
     const totalMinutes = (hours ?? 9) * 60 + (minutes ?? 0) + durationMin;
@@ -356,8 +336,9 @@ function AgendaPage() {
       date: targetDate,
       startTime: time,
       endTime: endTime,
-      treatment: formData.get("treatment"),
+      treatment: formData.get("treatment") || newApptTreatment,
       durationMin: durationMin,
+      price: typeof parsedPrice === "number" && !isNaN(parsedPrice) ? parsedPrice : undefined,
       notes: formData.get("notes"),
       status: "scheduled",
       source: "manual",
@@ -387,15 +368,15 @@ function AgendaPage() {
     <div className="mx-auto max-w-[1500px] space-y-6 pb-20">
       {/* ── HEADER ──────────────────────────────────────────────────────────── */}
       <PageHeader
-        title="Agenda & Planning Médical"
+        title={t.agendaPage.title}
         subtitle={
           view === "day"
-            ? formatLongDate(day)
+            ? t.agendaPage.subtitleDay.replace("{date}", formatLongDate(day))
             : view === "week"
-            ? `Semaine du ${formatShortDate(weekStart)} au ${formatShortDate(addDays(weekStart, 6))}`
-            : view === "month"
-            ? `Mois de ${parseISO(day).toLocaleString("fr-FR", { month: "long", year: "numeric" })}`
-            : "Vue Liste détaillée des consultations"
+              ? t.agendaPage.subtitleWeek.replace("{start}", formatShortDate(weekStart)).replace("{end}", formatShortDate(addDays(weekStart, 6)))
+              : view === "month"
+                ? t.agendaPage.subtitleMonth.replace("{month}", parseISO(day).toLocaleString(t.common.active === "Actif" ? "fr-FR" : "en-US", { month: "long", year: "numeric" }))
+                : t.agendaPage.subtitleList
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -405,7 +386,7 @@ function AgendaPage() {
                 <ChevronLeft className="size-4" />
               </Button>
               <Button variant="ghost" size="sm" className="text-xs font-semibold px-2.5 h-8" onClick={() => setDay(TODAY)}>
-                Aujourd'hui
+                {t.agendaPage.today}
               </Button>
               <Button variant="ghost" size="icon" className="size-8" onClick={handleNext}>
                 <ChevronRight className="size-4" />
@@ -415,10 +396,10 @@ function AgendaPage() {
             {/* View Switcher Tabs */}
             <div className="flex rounded-lg border bg-muted/60 p-0.5 shadow-xs">
               {[
-                { key: "day", label: "Jour", icon: Clock },
-                { key: "week", label: "Semaine", icon: LayoutGrid },
-                { key: "month", label: "Mois", icon: CalendarDays },
-                { key: "list", label: "Liste", icon: ListFilter },
+                { key: "day", label: t.agendaPage.day, icon: Clock },
+                { key: "week", label: t.agendaPage.week, icon: LayoutGrid },
+                { key: "month", label: t.agendaPage.month, icon: CalendarDays },
+                { key: "list", label: t.agendaPage.list, icon: ListFilter },
               ].map((tab) => {
                 const Icon = tab.icon;
                 const active = view === tab.key;
@@ -448,10 +429,14 @@ function AgendaPage() {
                   onClick={() => {
                     setQuickBookDate(day);
                     setQuickBookTime("09:00");
+                    const defService = servicesCatalog[0];
+                    setNewApptTreatment(defService?.name || "Consultation générale");
+                    setNewApptDuration(defService?.durationMin || 30);
+                    setNewApptPrice(defService?.price ?? 60);
                   }}
                 >
                   <Plus className="size-4" />
-                  Nouveau Rendez-vous
+                  {t.agendaPage.newAppointment}
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-lg">
@@ -459,7 +444,7 @@ function AgendaPage() {
                   <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                       <Calendar className="size-5 text-emerald-600" />
-                      Planifier un Rendez-vous
+                      {t.agendaPage.planAppointment}
                     </DialogTitle>
                   </DialogHeader>
 
@@ -472,7 +457,7 @@ function AgendaPage() {
                         className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         required
                       >
-                        <option value="">Sélectionner un patient existant</option>
+                        <option value="">{t.agendaPage.selectPatient}</option>
                         {serverPatients.map((p) => (
                           <option key={p.id || p._id} value={p.id || p._id}>
                             {p.firstName} {p.lastName} {p.phone ? `(${p.phone})` : ""}
@@ -484,58 +469,107 @@ function AgendaPage() {
                     {/* Date & Time */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold">Date</Label>
+                        <Label className="text-xs font-semibold">{t.agendaPage.date}</Label>
                         <Input name="date" type="date" required defaultValue={quickBookDate} className="h-9 text-sm" />
                       </div>
                       <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold">Heure de début</Label>
+                        <Label className="text-xs font-semibold">{t.agendaPage.startTime}</Label>
                         <Input name="time" type="time" required defaultValue={quickBookTime} className="h-9 text-sm font-semibold" />
                       </div>
                     </div>
 
-                    {/* Treatment preset selector & Duration */}
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* Treatment quick picker from catalog */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Prestation prédéfinie (catalogue)</Label>
+                      <select
+                        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                        value={newApptTreatment}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setNewApptTreatment(val);
+                          const s = servicesCatalog.find((srv) => srv.name === val);
+                          if (s) {
+                            if (s.durationMin) setNewApptDuration(s.durationMin);
+                            if (s.price !== undefined) setNewApptPrice(s.price);
+                          }
+                        }}
+                      >
+                        <option value="">Sélectionner dans le catalogue de soins...</option>
+                        {servicesCatalog.map((s) => (
+                          <option key={s.name} value={s.name}>
+                            {s.name} — {s.durationMin} min {isAdminUnlocked && s.price ? `(${s.price} DT)` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Treatment custom name, Duration & Price */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold">Prestation / Soin</Label>
+                        <Label className="text-xs font-semibold">{t.agendaPage.treatment}</Label>
                         <Input
                           name="treatment"
                           required
-                          placeholder="Ex: Consultation, Détartrage..."
-                          defaultValue={servicesCatalog[0]?.name || "Consultation générale"}
+                          value={newApptTreatment}
+                          onChange={(e) => setNewApptTreatment(e.target.value)}
+                          placeholder="Ex: Consultation..."
                           className="h-9 text-sm"
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold">Durée estimée</Label>
+                        <Label className="text-xs font-semibold">{t.agendaPage.duration}</Label>
                         <select
                           name="durationMin"
-                          defaultValue="30"
+                          value={newApptDuration}
+                          onChange={(e) => setNewApptDuration(Number(e.target.value))}
                           className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         >
-                          <option value="15">15 min (Contrôle rapide)</option>
-                          <option value="20">20 min (Consultation)</option>
-                          <option value="30">30 min (Détartrage / Soin)</option>
-                          <option value="45">45 min (Soin complexe)</option>
-                          <option value="60">1h00 (Chirurgie / Implant)</option>
-                          <option value="90">1h30 (Chirurgie lourde)</option>
+                          <option value="15">15 min</option>
+                          <option value="20">20 min</option>
+                          <option value="25">25 min</option>
+                          <option value="30">30 min</option>
+                          <option value="45">45 min</option>
+                          <option value="60">1h00</option>
+                          <option value="90">1h30</option>
                         </select>
                       </div>
+                      {isAdminUnlocked && (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">Tarif / Montant</Label>
+                          <div className="relative">
+                            <Input
+                              name="price"
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={newApptPrice}
+                              onChange={(e) => setNewApptPrice(e.target.value)}
+                              placeholder="60"
+                              disabled={!isAdminUnlocked}
+                              className="h-9 text-sm font-semibold pr-9 text-emerald-700 dark:text-emerald-400"
+                            />
+                            <span className="absolute right-2.5 top-2 text-xs font-bold text-muted-foreground pointer-events-none">
+                              DT
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Notes */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold">Notes & Consignes particulières</Label>
-                      <Input name="notes" placeholder="Ex: Première consultation, phobie du dentiste..." className="h-9 text-sm" />
+                      <Label className="text-xs font-semibold">{t.agendaPage.notes}</Label>
+                      <Input name="notes" placeholder={t.agendaPage.notesPlaceholder} className="h-9 text-sm" />
                     </div>
                   </div>
 
                   <DialogFooter className="gap-2">
                     <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                      Annuler
+                      {t.agendaPage.cancel}
                     </Button>
                     <Button type="submit" disabled={createAppointment.isPending} className="bg-emerald-600 hover:bg-emerald-700 text-white">
                       {createAppointment.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Check className="mr-2 size-4" />}
-                      Enregistrer le RDV
+                      {t.agendaPage.save}
                     </Button>
                   </DialogFooter>
                 </form>
@@ -549,38 +583,40 @@ function AgendaPage() {
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="p-3.5 rounded-xl border bg-card shadow-2xs space-y-1">
           <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-            <Calendar className="size-3.5 text-primary" /> Total Consultations
+            <Calendar className="size-3.5 text-primary" /> {t.agendaPage.statsTotal}
           </p>
           <p className="text-2xl font-bold text-foreground">{stats.total}</p>
         </div>
 
         <div className="p-3.5 rounded-xl border bg-card shadow-2xs space-y-1">
           <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-            <CheckCircle2 className="size-3.5 text-emerald-600" /> Confirmés
+            <CheckCircle2 className="size-3.5 text-emerald-600" /> {t.agendaPage.statsConfirmed}
           </p>
           <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{stats.confirmed}</p>
         </div>
 
         <div className="p-3.5 rounded-xl border bg-card shadow-2xs space-y-1">
           <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-            <Clock className="size-3.5 text-amber-600" /> En attente
+            <Clock className="size-3.5 text-amber-600" /> {t.agendaPage.statsPending}
           </p>
           <p className="text-2xl font-bold text-amber-700 dark:text-amber-400">{stats.scheduled}</p>
         </div>
 
         <div className="p-3.5 rounded-xl border bg-card shadow-2xs space-y-1">
           <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-            <Sparkles className="size-3.5 text-emerald-600" /> Pris par IA
+            <Sparkles className="size-3.5 text-emerald-600" /> {t.agendaPage.statsAi}
           </p>
           <p className="text-2xl font-bold text-emerald-600">{stats.aiCount}</p>
         </div>
 
-        <div className="p-3.5 rounded-xl border bg-card shadow-2xs space-y-1 col-span-2 sm:col-span-1">
-          <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-            <TrendingUp className="size-3.5 text-blue-600" /> CA Prévisionnel
-          </p>
-          <p className="text-2xl font-bold text-foreground">{money(stats.totalRevenue)}</p>
-        </div>
+        {isAdminUnlocked && (
+          <div className="p-3.5 rounded-xl border bg-card shadow-2xs space-y-1 col-span-2 sm:col-span-1">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <TrendingUp className="size-3.5 text-blue-600" /> {t.agendaPage.statsRevenue}
+            </p>
+            <p className="text-2xl font-bold text-foreground">{money(stats.totalRevenue)}</p>
+          </div>
+        )}
       </div>
 
       {/* ── ADVANCED FILTERS BAR ────────────────────────────────────────────── */}
@@ -591,7 +627,7 @@ function AgendaPage() {
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Rechercher patient, téléphone, soin..."
+            placeholder={t.agendaPage.searchPlaceholder}
             className="pl-9 h-9 text-xs"
           />
           {searchQuery && (
@@ -609,12 +645,12 @@ function AgendaPage() {
           {/* Status Filter */}
           <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-lg border text-xs">
             {[
-              { key: "all", label: "Tous" },
-              { key: "confirmed", label: "Confirmés" },
-              { key: "scheduled", label: "Planifiés" },
-              { key: "completed", label: "Terminés" },
-              { key: "cancelled", label: "Annulés" },
-              { key: "no_show", label: "🐰 No-Shows" },
+              { key: "all", label: t.agendaPage.filterAll },
+              { key: "confirmed", label: t.agendaPage.filterConfirmed },
+              { key: "scheduled", label: t.agendaPage.filterScheduled },
+              { key: "completed", label: t.agendaPage.filterCompleted },
+              { key: "cancelled", label: t.agendaPage.filterCancelled },
+              { key: "no_show", label: t.agendaPage.filterNoShow },
             ].map((st) => (
               <button
                 key={st.key}
@@ -637,9 +673,9 @@ function AgendaPage() {
             onChange={(e) => setSourceFilter(e.target.value)}
             className="h-8 rounded-md border border-input bg-background px-2.5 text-xs shadow-2xs focus:outline-none"
           >
-            <option value="all">Toutes sources</option>
-            <option value="ai">🤖 Créés par IA</option>
-            <option value="manual">👤 Manuel / Secrétariat</option>
+            <option value="all">{t.agendaPage.sourceAll}</option>
+            <option value="ai">{t.agendaPage.sourceAi}</option>
+            <option value="manual">{t.agendaPage.sourceManual}</option>
           </select>
 
           {/* Treatment Filter */}
@@ -649,7 +685,7 @@ function AgendaPage() {
               onChange={(e) => setTreatmentFilter(e.target.value)}
               className="h-8 rounded-md border border-input bg-background px-2.5 text-xs shadow-2xs focus:outline-none"
             >
-              <option value="all">Tous les soins</option>
+              <option value="all">{t.agendaPage.treatmentsAll}</option>
               {uniqueTreatments.map((t) => (
                 <option key={t} value={t}>
                   {t}
@@ -671,7 +707,7 @@ function AgendaPage() {
               }}
               className="h-8 text-xs text-muted-foreground hover:text-foreground gap-1"
             >
-              <X className="size-3.5" /> Réinitialiser
+              <X className="size-3.5" /> {t.agendaPage.reset}
             </Button>
           )}
         </div>
@@ -681,15 +717,15 @@ function AgendaPage() {
       {isError ? (
         <div className="p-12 text-center rounded-xl border bg-card">
           <AlertCircle className="mx-auto size-8 text-destructive mb-2" />
-          <p className="text-sm font-semibold text-destructive">Impossible de charger l'agenda.</p>
-          <Button variant="outline" size="sm" className="mt-4" onClick={() => queryClient.invalidateQueries({ queryKey: ["appointments"] })}>
-            Réessayer
+          <p className="text-sm font-semibold text-destructive">{t.agendaPage.errorLoading}</p>
+          <Button variant="outline" size="sm" className="mt-4" onClick={() => window.location.reload()}>
+            {t.agendaPage.retry}
           </Button>
         </div>
       ) : isLoadingAppts ? (
         <div className="flex h-80 flex-col items-center justify-center gap-3 text-muted-foreground rounded-xl border bg-card">
           <Loader2 className="size-8 animate-spin text-primary" />
-          <p className="text-xs font-medium">Synchronisation du planning médical...</p>
+          <p className="text-xs font-medium">{t.agendaPage.syncing}</p>
         </div>
       ) : view === "day" ? (
         /* ══════════════════════════════════════════════════════════════════════
@@ -776,10 +812,15 @@ function AgendaPage() {
                             </div>
 
                             {/* Actions & Status */}
-                            <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                            <div className="flex items-center gap-2.5 w-full sm:w-auto justify-between sm:justify-end">
                               {p?.phone && (
                                 <span className="text-xs text-muted-foreground hidden md:inline-flex items-center gap-1">
                                   <Phone className="size-3" /> {p.phone}
+                                </span>
+                              )}
+                              {isAdminUnlocked && (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold text-xs border border-emerald-200/70 dark:border-emerald-800/50">
+                                  {money(getAppointmentValue(appt))}
                                 </span>
                               )}
                               <AppointmentStatusBadge status={appt.status} />
@@ -789,7 +830,7 @@ function AgendaPage() {
                       })
                     ) : (
                       <div className="flex items-center justify-between py-1 text-xs text-muted-foreground opacity-40 group-hover:opacity-100 transition-opacity">
-                        <span>Créneau libre — Cliquer pour réserver</span>
+                        <span>{t.agendaPage.freeSlot}</span>
                         <Plus className="size-4 text-emerald-600 mr-2" />
                       </div>
                     )}
@@ -835,9 +876,16 @@ function AgendaPage() {
                   <p className="text-lg font-bold text-foreground mt-0.5">
                     {parseISO(d).getDate()}
                   </p>
-                  <span className="text-[10px] text-muted-foreground font-medium">
-                    {list.length} RDV
-                  </span>
+                  <div className="flex flex-col items-center gap-0.5 mt-0.5">
+                    <span className="text-[10px] text-muted-foreground font-medium">
+                      {list.length} RDV
+                    </span>
+                    {list.length > 0 && isAdminUnlocked && (
+                      <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200/50">
+                        {money(list.filter(a => a.status !== 'cancelled' && a.status !== 'no_show').reduce((sum, a) => sum + getAppointmentValue(a), 0))}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Day Slots / Appointments */}
@@ -867,6 +915,11 @@ function AgendaPage() {
                         >
                           <div className="flex items-center justify-between">
                             <span className="font-bold text-[11px] font-mono">{appt.startTime}</span>
+                            {isAdminUnlocked && (
+                              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                                {money(getAppointmentValue(appt))}
+                              </span>
+                            )}
                             {isAi && <Sparkles className="size-3 text-emerald-600" />}
                           </div>
                           <p className="font-semibold text-foreground truncate">{pName}</p>
@@ -934,9 +987,16 @@ function AgendaPage() {
                       {parseISO(mDay).getDate()}
                     </span>
                     {list.length > 0 && (
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-mono font-bold">
-                        {list.length}
-                      </Badge>
+                      <div className="flex items-center gap-1">
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-mono font-bold">
+                          {list.length}
+                        </Badge>
+                        {isAdminUnlocked && (
+                          <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 hidden xl:inline">
+                            {money(list.filter(a => a.status !== 'cancelled' && a.status !== 'no_show').reduce((sum, a) => sum + getAppointmentValue(a), 0))}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -987,6 +1047,7 @@ function AgendaPage() {
                     <th className="p-3">Téléphone</th>
                     <th className="p-3">Prestation / Soin</th>
                     <th className="p-3">Durée</th>
+                    {isAdminUnlocked && <th className="p-3">Tarif</th>}
                     <th className="p-3">Source</th>
                     <th className="p-3">Statut</th>
                     <th className="p-3 text-right">Actions</th>
@@ -1015,6 +1076,13 @@ function AgendaPage() {
                         <td className="p-3 text-muted-foreground whitespace-nowrap font-mono">
                           {a.durationMin} min
                         </td>
+                        {isAdminUnlocked && (
+                          <td className="p-3 whitespace-nowrap">
+                            <span className="font-bold text-emerald-700 dark:text-emerald-400 font-mono">
+                              {money(getAppointmentValue(a))}
+                            </span>
+                          </td>
+                        )}
                         <td className="p-3 whitespace-nowrap">
                           {isAi ? (
                             <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] gap-1">
@@ -1116,12 +1184,68 @@ function AgendaPage() {
                         {selected.source === "ai" || selected.createdByAi ? "🤖 Assistant IA" : "👤 Manuel"}
                       </p>
                     </div>
-                    <div className="space-y-1">
-                      <p className="text-muted-foreground font-medium">Valeur estimée</p>
-                      <p className="font-bold text-emerald-700 dark:text-emerald-400 text-sm">
-                        {money(selected.value || 60)}
-                      </p>
-                    </div>
+                    {isAdminUnlocked && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <p className="text-muted-foreground font-medium">Tarif / Montant</p>
+                          {!isEditingPrice && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsEditingPrice(true);
+                                setEditedPriceVal(String(getAppointmentValue(selected)));
+                              }}
+                              className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 font-semibold"
+                            >
+                              <Edit3 className="size-2.5" /> Modifier
+                            </button>
+                          )}
+                        </div>
+                        {isEditingPrice ? (
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <Input
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={editedPriceVal}
+                              onChange={(e) => setEditedPriceVal(e.target.value)}
+                              className="h-7 text-xs font-bold w-20 text-emerald-700"
+                            />
+                            <span className="text-xs font-bold text-muted-foreground">DT</span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-7 px-2 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white"
+                              disabled={updateAppointment.isPending}
+                              onClick={() => {
+                                const p = parseFloat(editedPriceVal);
+                                if (!isNaN(p)) {
+                                  updateAppointment.mutate({
+                                    id: (selected._id || selected.id)!,
+                                    data: { price: p }
+                                  });
+                                }
+                              }}
+                            >
+                              OK
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-1.5 text-[10px]"
+                              onClick={() => setIsEditingPrice(false)}
+                            >
+                              ✕
+                            </Button>
+                          </div>
+                        ) : (
+                          <p className="font-bold text-emerald-700 dark:text-emerald-400 text-sm">
+                            {money(getAppointmentValue(selected))}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Notes */}
@@ -1141,7 +1265,7 @@ function AgendaPage() {
                         size="sm"
                         variant={selected.status === "confirmed" ? "default" : "outline"}
                         disabled={isUpdating || selected.status === "confirmed"}
-                        onClick={() => updateStatus.mutate({ id: selected._id || selected.id, status: "confirmed" })}
+                        onClick={() => updateStatus.mutate({ id: (selected._id || selected.id)!, status: "confirmed" })}
                         className="w-full text-xs h-8 bg-emerald-600 hover:bg-emerald-700 text-white"
                       >
                         <CheckCircle2 className="mr-1.5 size-3.5" /> Confirmer
@@ -1152,7 +1276,7 @@ function AgendaPage() {
                         size="sm"
                         variant={selected.status === "completed" ? "default" : "outline"}
                         disabled={isUpdating || selected.status === "completed"}
-                        onClick={() => updateStatus.mutate({ id: selected._id || selected.id, status: "completed" })}
+                        onClick={() => updateStatus.mutate({ id: (selected._id || selected.id)!, status: "completed" })}
                         className="w-full text-xs h-8"
                       >
                         <Check className="mr-1.5 size-3.5 text-blue-500" /> Terminé
@@ -1163,7 +1287,7 @@ function AgendaPage() {
                         size="sm"
                         variant={selected.status === "cancelled" ? "default" : "outline"}
                         disabled={isUpdating || selected.status === "cancelled"}
-                        onClick={() => updateStatus.mutate({ id: selected._id || selected.id, status: "cancelled" })}
+                        onClick={() => updateStatus.mutate({ id: (selected._id || selected.id)!, status: "cancelled" })}
                         className="w-full text-xs h-8"
                       >
                         <XCircle className="mr-1.5 size-3.5 text-rose-500" /> Annuler
@@ -1174,7 +1298,7 @@ function AgendaPage() {
                         size="sm"
                         variant={selected.status === "no_show" ? "destructive" : "outline"}
                         disabled={isUpdating || selected.status === "no_show"}
-                        onClick={() => updateStatus.mutate({ id: selected._id || selected.id, status: "no_show" })}
+                        onClick={() => updateStatus.mutate({ id: (selected._id || selected.id)!, status: "no_show" })}
                         className="w-full text-xs h-8"
                       >
                         <AlertCircle className="mr-1.5 size-3.5" /> No-Show
@@ -1191,7 +1315,7 @@ function AgendaPage() {
                     className="text-xs text-destructive hover:bg-destructive/10"
                     onClick={() => {
                       if (confirm("Supprimer définitivement ce rendez-vous ?")) {
-                        deleteAppointment.mutate(selected._id || selected.id);
+                        deleteAppointment.mutate((selected._id || selected.id)!);
                       }
                     }}
                   >

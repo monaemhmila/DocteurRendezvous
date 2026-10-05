@@ -8,7 +8,7 @@
  * Configuration comes exclusively from environment variables:
  *   AI_PROVIDER_URL  — Base URL of the provider API (e.g. https://api.openai.com/v1)
  *   AI_API_KEY       — API key for the provider
- *   AI_MODEL         — Model identifier (e.g. gpt-4o-mini, mistral-7b, etc.)
+ *   AI_MODEL         — Model imédicalifier (e.g. gpt-4o-mini, mistral-7b, etc.)
  *
  * SECURITY:
  *   - The API key is NEVER logged, included in error messages, or returned to the client.
@@ -19,7 +19,7 @@
 import { IAIProvider, IChatMessage } from "./ai.provider.interface";
 import { ProviderNotConfiguredError, ProviderUnavailableError } from "./ai.errors";
 
-const TIMEOUT_MS = 15_000;
+const TIMEOUT_MS = 30_000;
 
 export class OpenAICompatibleProvider implements IAIProvider {
   async generateCompletion(messages: IChatMessage[]): Promise<string> {
@@ -27,7 +27,7 @@ export class OpenAICompatibleProvider implements IAIProvider {
     const apiKey = process.env.AI_API_KEY?.trim()?.replace(/^["']|["']$/g, "");
     const model = process.env.AI_MODEL?.trim()?.replace(/^["']|["']$/g, "");
 
-    // Guard: if no API key is provided, use the built-in Intelligent Dental Assistant engine (Sandbox mode)
+    // Guard: if no API key is provided, use the built-in Intelligent Medical Assistant engine (Sandbox mode)
     if (!providerUrl || !apiKey || !model) {
       return this.generateSmartLocalCompletion(messages);
     }
@@ -83,12 +83,12 @@ export class OpenAICompatibleProvider implements IAIProvider {
   }
 
   /**
-   * Built-in Intelligent Dental Assistant engine for local demo & sandbox testing.
+   * Built-in Intelligent Medical Assistant engine for local demo & sandbox testing.
    * Parses natural language patient queries, extracts requested dates & slots,
    * and formats structured JSON responses conforming to the system prompt schema.
    */
   private generateSmartLocalCompletion(messages: IChatMessage[]): string {
-    // 1. Identify the patient's actual latest message and any system updates
+    // 1. Imédicalify the patient's actual latest message and any system updates
     const patientMsg = [...messages].reverse().find((m) => m.role === "user")?.content || "";
     const systemUpdateMsg = messages.find(
       (m) => m.role === "system" && m.content.startsWith("[SYSTEM]")
@@ -118,14 +118,14 @@ export class OpenAICompatibleProvider implements IAIProvider {
           .join(", ");
 
         return JSON.stringify({
-          reply: `Bonjour ! Nous avons des créneaux disponibles pour votre rendez-vous le ${date} : à ${slotsFormatted}. Quel horaire vous convient le mieux ?`,
+          reply: `Nous avons des disponibilités le ${date} à ${slotsFormatted}. Quel horaire vous conviendrait ?`,
           intent: "general_question",
         });
       }
 
       // If no slots found or business hours not configured, offer realistic alternative slots
       return JSON.stringify({
-        reply: `Bonjour ! Nous avons plusieurs créneaux disponibles pour votre consultation : demain à 09h30, 11h00 ou 15h00. Lequel préférez-vous ?`,
+        reply: `Nous avons des disponibilités demain à 09h30, 11h00 ou 15h00. Lequel préférez-vous ?`,
         intent: "general_question",
       });
     }
@@ -161,28 +161,28 @@ export class OpenAICompatibleProvider implements IAIProvider {
       }
 
       return JSON.stringify({
-        reply: `Parfait ! Votre rendez-vous est bien confirmé pour le ${targetDate} à ${selectedHour}. Nous vous attendons au cabinet dentaire !`,
+        reply: `Parfait ! Votre rendez-vous est confirmé pour le ${targetDate} à ${selectedHour}. À bientôt au cabinet !`,
         intent: "book_appointment",
         action: {
           type: "book_appointment",
-          targetId: "sim-booking-action",
+          targetId: "self",
           reason: "Le patient a confirmé le créneau proposé",
           confidence: 0.98,
           booking: {
             date: targetDate,
             startTime: selectedHour,
             durationMin: 30,
-            treatment: "Consultation / Soin Dentaire",
+            treatment: "Consultation / Soin Médical",
           },
         },
       });
     }
 
-    // B. Urgence Dentaire Aiguë (Rage de dent / Douleur forte / Abcès / Urgence)
-    const isUrgencyDisabled = messages[0]?.content?.includes("Gestion prioritaire des Urgences dentaires: DÉSACTIVÉE");
+    // B. Urgence Médical Aiguë (Rage de médical / Douleur forte / Abcès / Urgence)
+    const isUrgencyDisabled = messages[0]?.content?.includes("Gestion prioritaire des Urgences médicalaires: DÉSACTIVÉE");
     if (
-      lowerPatient.includes("rage de dent") ||
-      lowerPatient.includes("rage de dents") ||
+      lowerPatient.includes("rage de médical") ||
+      lowerPatient.includes("rage de médicals") ||
       lowerPatient.includes("insupportable") ||
       lowerPatient.includes("mal atroce") ||
       lowerPatient.includes("urgence") ||
@@ -196,14 +196,14 @@ export class OpenAICompatibleProvider implements IAIProvider {
     ) {
       if (isUrgencyDisabled) {
         return JSON.stringify({
-          reply: "Pour toute urgence dentaire aiguë, notre secrétariat gère les admissions directement par téléphone. Veuillez contacter le cabinet ou les urgences hospitalières. Je préviens immédiatement l'équipe soignante.",
+          reply: "Pour les urgences, veuillez nous appeler ou vous rendre à l'hôpital. L'équipe est prévenue.",
           intent: "human_request",
           needsHumanEscalation: true,
         });
       }
 
       return JSON.stringify({
-        reply: "Nous prenons votre urgence dentaire très au sérieux ! Nous vous accueillons en priorité. Je vérifie immédiatement les créneaux d'urgence disponibles pour vous aujourd'hui.",
+        reply: "Nous prenons votre demande au sérieux. Je vérifie les disponibilités pour aujourd'hui.",
         intent: "appointment_availability",
         scheduling: {
           date: today.toISOString().split("T")[0],
@@ -229,7 +229,7 @@ export class OpenAICompatibleProvider implements IAIProvider {
       lowerPatient.includes("rappel")
     ) {
       return JSON.stringify({
-        reply: "J'ai bien pris note de votre message. Je transmets immédiatement votre demande directement au Dr. Sami Ben Amor et au secrétariat médical. Nous vous recontactons dans les plus brefs délais.",
+        reply: "J'ai bien noté votre message. Je le transmets au secrétariat, nous vous recontacterons rapidement.",
         intent: "general_question",
         needsHumanEscalation: true,
       });
@@ -245,7 +245,7 @@ export class OpenAICompatibleProvider implements IAIProvider {
       lowerPatient.includes("combien")
     ) {
       return JSON.stringify({
-        reply: "Nos tarifs débutent à partir de 50 DT pour une consultation et 80 DT pour un détartrage complet. Pour les soins prothétiques ou esthétiques (blanchiment, facettes), un devis détaillé vous sera remis lors de votre examen. Souhaitez-vous planifier une consultation cette semaine ?",
+        reply: "La consultation de base est à partir de 50 DT et le détartrage à 80 DT. Pour les autres soins, un devis sera établi après examen. Souhaitez-vous prendre rendez-vous ?",
         intent: "general_question",
       });
     }
@@ -268,7 +268,7 @@ export class OpenAICompatibleProvider implements IAIProvider {
       lowerPatient.includes("implant") ||
       lowerPatient.includes("chirurgie") ||
       lowerPatient.includes("extraction") ||
-      lowerPatient.includes("dent") ||
+      lowerPatient.includes("médical") ||
       lowerPatient.includes("semaine") ||
       lowerPatient.includes("demain")
     ) {
@@ -294,7 +294,7 @@ export class OpenAICompatibleProvider implements IAIProvider {
 
     // F. Salutation par défaut
     return JSON.stringify({
-      reply: "Bonjour ! Bienvenue au cabinet dentaire du Dr. Sami Ben Amor. Comment puis-je vous aider aujourd'hui ? (Prise de rendez-vous, urgence dentaire, question sur un soin ou devis...)",
+      reply: "Bonjour ! Bienvenue au cabinet. Comment puis-je vous aider aujourd'hui ?",
       intent: "general_question",
     });
   }

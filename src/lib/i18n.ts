@@ -27,6 +27,8 @@ export interface Translations {
   };
   // Topbar
   topbar: {
+
+  
     searchPlaceholder: string;
     notifications: string;
     markAllRead: string;
@@ -142,10 +144,331 @@ export interface Translations {
     resetPassword: string;
     confirm: string;
   };
+  // Patients Page
+  patientsPage: {
+    title: string;
+    subtitle: string;
+    newPatient: string;
+    successAdd: string;
+    errorAdd: string;
+    firstName: string;
+    lastName: string;
+    firstNameEx: string;
+    lastNameEx: string;
+    phone: string;
+    email: string;
+    emailOptional: string;
+    createPatient: string;
+    searchPlaceholder: string;
+    selected: string;
+    message: string;
+    campaign: string;
+    export: string;
+    loadingPatients: string;
+    errorLoading: string;
+    patient: string;
+    contact: string;
+    lastVisit: string;
+    status: string;
+    visits: string;
+    noPatientSearch: string;
+    noPatient: string;
+  };
+  // Agenda Page
+  agendaPage: {
+    title: string;
+    subtitleDay: string;
+    subtitleWeek: string;
+    subtitleMonth: string;
+    subtitleList: string;
+    today: string;
+    day: string;
+    week: string;
+    month: string;
+    list: string;
+    newAppointment: string;
+    planAppointment: string;
+    selectPatient: string;
+    date: string;
+    startTime: string;
+    treatment: string;
+    duration: string;
+    notes: string;
+    notesPlaceholder: string;
+    cancel: string;
+    save: string;
+    statsTotal: string;
+    statsConfirmed: string;
+    statsPending: string;
+    statsAi: string;
+    statsRevenue: string;
+    searchPlaceholder: string;
+    filterAll: string;
+    filterConfirmed: string;
+    filterScheduled: string;
+    filterCompleted: string;
+    filterCancelled: string;
+    filterNoShow: string;
+    sourceAll: string;
+    sourceAi: string;
+    sourceManual: string;
+    treatmentsAll: string;
+    reset: string;
+    errorLoading: string;
+    retry: string;
+    syncing: string;
+    freeSlot: string;
+  };
+  // Dashboard Page
+  dashboardPage: {
+    hello: string;
+    loadingError: string;
+    loadingErrorDesc: string;
+    startRecovery: string;
+    aiPerformance: string;
+    aiPerformanceDesc: string;
+    automationRate: string;
+    recoveredRevenue: string;
+    last30days: string;
+    apptsToday: string;
+    confirmedAppts: string;
+    patientsToRecover: string;
+    thisMonth: string;
+    recentNoShows: string;
+    last7days: string;
+    activeConversations: string;
+    needsHuman: string;
+    todayAgenda: string;
+    plannedAppts: string;
+    viewAgenda: string;
+    noApptsToday: string;
+    unknownPatient: string;
+    unspecifiedTreatment: string;
+    aiPriorities: string;
+    contactFirst: string;
+    seeAll: string;
+    noPriority: string;
+    needsFollowup: string;
+    recoveryFunnel: string;
+    noData: string;
+    freeSlots: string;
+    fillWithWaitlist: string;
+    waitlist: string;
+    aiActivity: string;
+    last24h: string;
+    inbox: string;
+    estimatedImpact: string;
+    simulationBased: string;
+    potentialRemaining: string;
+    messagesProcessed: string;
+    apptsCreated: string;
+  };
+  // Conversations Page
+  conversationsPage: {
+    title: string;
+    subtitle: string;
+    live: string;
+    hideSimulator: string;
+    openSimulator: string;
+    viewAgenda: string;
+    searchPlaceholder: string;
+    filterAll: string;
+    filterAi: string;
+    filterHuman: string;
+    loadingConvs: string;
+    noConvs: string;
+    humanRequired: string;
+    aiHandled: string;
+    patientRecord: string;
+    whatsappBusiness: string;
+    loadPrevMsgs: string;
+    loadingMsgs: string;
+    noMsgsTitle: string;
+    noMsgsDesc: string;
+    typeMsg: string;
+    whatsappSimulator: string;
+    simDesc: string;
+    online: string;
+    patientId: string;
+    simNewConv: string;
+    quickScenarios: string;
+    scenario1Label: string;
+    scenario1Text: string;
+    scenario2Label: string;
+    scenario2Text: string;
+    scenario3Label: string;
+    scenario3Text: string;
+    scenario4Label: string;
+    scenario4Text: string;
+    scenario5Label: string;
+    scenario5Text: string;
+    clearSim: string;
+    simWarning: string;
+    simulatorSubtitle: string;
+    directTestMode: string;
+    simPatientLabel: string;
+    simPatientUnknown: string;
+    clinicName: string;
+    onlineStatus: string;
+    welcomeMsg: string;
+    writeAsPatient: string;
+    suggestionSuccess: string;
+    suggestionError: string;
+    sendError: string;
+    simSuccess: string;
+    simError: string;
+    patient: string;
+    aiBot: string;
+    received: string;
+    delivered: string;
+    writeManualReply: string;
+    aiTip: string;
+    enterToSend: string;
+    selectConvTitle: string;
+    selectConvDesc: string;
+    simulatorTitle: string;
+  };
+  // AI Assistant Page
+  aiAssistantPage: {
+    title: string;
+    subtitle: string;
+    saveBtn: string;
+    saving: string;
+    successSave: string;
+    errorSave: string;
+  };
+  // AI Assistant Page
+  waitlistPage: {
+    title: string;
+    subtitle: string;
+  };
+  followupsPage: {
+    title: string;
+    subtitle: string;
+  };
+  // Recovery Page
+  recoveryPage: {
+    title: string;
+    subtitle: string;
+    detect: string;
+    launchCampaign: string;
+    analyzed: string;
+    toRecover: string;
+    contacted: string;
+    replied: string;
+    recoveredAppts: string;
+    completed: string;
+    estimatedValue: string;
+    bookedValue: string;
+    recoveredValue: string;
+    funnelTitle: string;
+    funnelSubtitle: string;
+    funnelIdentified: string;
+    funnelContacted: string;
+    funnelReplied: string;
+    funnelBooked: string;
+    funnelVisited: string;
+    opportunitiesTitle: string;
+    opportunitiesSubtitle: string;
+    campaigns: string;
+    colPatient: string;
+    colType: string;
+    colReason: string;
+    colPriority: string;
+    colEstValue: string;
+    colStatus: string;
+    colDetectedOn: string;
+    unknownPatient: string;
+    viewBtn: string;
+    errorLoading: string;
+    noOpportunities: string;
+    typeInactive: string;
+    typeInterrupted: string;
+    typePendingQuote: string;
+    typeNoShow: string;
+    typeCancellation: string;
+    typeOverdue: string;
+    typeFollowUp: string;
+    statusIdentified: string;
+    statusQueued: string;
+    statusContacted: string;
+    statusResponded: string;
+    statusBooked: string;
+    statusVisited: string;
+    statusNoResponse: string;
+    statusDismissed: string;
+    detectionComplete: string;
+    detectionError: string;
+  };
 }
 
 export const translations: Record<Language, Translations> = {
   fr: {
+    conversationsPage: {
+      title: "Boîte de réception & Chatbot WhatsApp IA",
+      subtitle: "Gérez les conversations et testez l'IA WhatsApp en temps réel.",
+      live: "Live 24/7",
+      hideSimulator: "Masquer le Simulateur",
+      openSimulator: "📱 Ouvrir le Simulateur Patient",
+      viewAgenda: "Voir l'agenda",
+      searchPlaceholder: "Rechercher par nom, tél...",
+      filterAll: "Toutes",
+      filterAi: "IA",
+      filterHuman: "Humain Requis",
+      loadingConvs: "Chargement des conversations...",
+      noConvs: "Aucune conversation pour le moment.",
+      humanRequired: "Intervention Humaine Requise",
+      aiHandled: "Géré par l'IA",
+      patientRecord: "Ouvrir dossier patient",
+      whatsappBusiness: "WhatsApp Business API",
+      loadPrevMsgs: "Charger les anciens messages",
+      loadingMsgs: "Chargement...",
+      noMsgsTitle: "Aucun message",
+      noMsgsDesc: "Cette conversation ne contient aucun message ou n'a pas pu être chargée.",
+      typeMsg: "Écrire un message en tant que clinique...",
+      whatsappSimulator: "Simulateur WhatsApp (Test Patient)",
+      simDesc: "Testez l'IA en temps réel. Mettez-vous à la place d'un patient et envoyez des messages pour voir comment l'assistant réagit (Prise de RDV, Urgence, Tarifs...).",
+      online: "en ligne",
+      patientId: "ID:",
+      simNewConv: "Simuler un nouveau patient",
+      quickScenarios: "Scénarios rapides à tester :",
+      scenario1Label: "📅 Détartrage",
+      scenario1Text: "Bonjour, je voudrais prendre un rendez-vous pour un détartrage cette semaine svp.",
+      scenario2Label: "⏱️ Confirmer",
+      scenario2Text: "Parfait, le créneau de 11h30 me convient très bien ! Je confirme.",
+      scenario3Label: "🚨 Urgence",
+      scenario3Text: "Bonjour docteur, j'ai une rage de dents insupportable depuis ce matin, pouvez-vous me prendre en urgence ?",
+      scenario4Label: "💰 Tarifs",
+      scenario4Text: "Bonjour, pouvez-vous me renseigner sur le prix d'un implant ou d'un blanchiment ?",
+      scenario5Label: "🧑‍⚕️ Docteur",
+      scenario5Text: "J'aimerais parler directement au médecin concernant mon traitement d'hier.",
+      clearSim: "Effacer la conversation test",
+      simWarning: "Vous simulez le patient avec le faux numéro :",
+      simulatorSubtitle: "Simulateur WhatsApp",
+      directTestMode: "Mode test direct",
+      simPatientLabel: "Patient simulé :",
+      simPatientUnknown: "Patient inconnu",
+      clinicName: "Votre Clinique",
+      onlineStatus: "en ligne",
+      welcomeMsg: "Message de bienvenue",
+      writeAsPatient: "Écrire en tant que patient...",
+
+      suggestionSuccess: "Suggestion copiée !",
+      suggestionError: "Erreur de suggestion",
+      sendError: "Erreur d'envoi",
+      simSuccess: "Message test envoyé !",
+      simError: "Erreur de simulation",
+      patient: "Patient",
+      aiBot: "Bot IA",
+      received: "Reçu",
+      delivered: "Distribué",
+      writeManualReply: "Écrire une réponse manuelle...",
+      aiTip: "L'IA gère automatiquement cette conversation.",
+      enterToSend: "Appuyez sur Entrée pour envoyer",
+      selectConvTitle: "Sélectionnez une conversation",
+      selectConvDesc: "Choisissez une conversation à gauche ou commencez un test dans le simulateur.",
+      simulatorTitle: "Simulateur WhatsApp",
+    },
     nav: {
       workspace: "Workspace",
       automation: "Automatisation",
@@ -282,8 +605,261 @@ export const translations: Record<Language, Translations> = {
       resetPassword: "Réinitialiser mot de passe",
       confirm: "Confirmer",
     },
+    patientsPage: {
+      title: "Patients",
+      subtitle: "{count} patients au total",
+      newPatient: "Nouveau patient",
+      successAdd: "Patient ajouté avec succès.",
+      errorAdd: "Erreur lors de la création du patient.",
+      firstName: "Prénom",
+      lastName: "Nom",
+      firstNameEx: "Ex: Jean",
+      lastNameEx: "Ex: Dupont",
+      phone: "Téléphone",
+      email: "Email",
+      emailOptional: "Optionnel",
+      createPatient: "Créer le patient",
+      searchPlaceholder: "Rechercher par nom, téléphone...",
+      selected: "{count} sélectionné(s)",
+      message: "Message",
+      campaign: "Campagne",
+      export: "Exporter",
+      loadingPatients: "Chargement des patients...",
+      errorLoading: "Impossible de charger la liste des patients.",
+      patient: "Patient",
+      contact: "Contact",
+      lastVisit: "Dernière visite",
+      status: "Statut",
+      visits: "Visites",
+      noPatientSearch: "Aucun patient trouvé pour \"{query}\".",
+      noPatient: "Aucun patient.",
+    },
+    agendaPage: {
+      title: "Agenda & Planning Médical",
+      subtitleDay: "{date}",
+      subtitleWeek: "Semaine du {start} au {end}",
+      subtitleMonth: "Mois de {month}",
+      subtitleList: "Vue Liste détaillée des consultations",
+      today: "Aujourd'hui",
+      day: "Jour",
+      week: "Semaine",
+      month: "Mois",
+      list: "Liste",
+      newAppointment: "Nouveau Rendez-vous",
+      planAppointment: "Planifier un Rendez-vous",
+      selectPatient: "Sélectionner un patient existant",
+      date: "Date",
+      startTime: "Heure de début",
+      treatment: "Prestation / Soin",
+      duration: "Durée estimée",
+      notes: "Notes & Consignes particulières",
+      notesPlaceholder: "Ex: Première consultation...",
+      cancel: "Annuler",
+      save: "Enregistrer le RDV",
+      statsTotal: "Total Consultations",
+      statsConfirmed: "Confirmés",
+      statsPending: "En attente",
+      statsAi: "Pris par IA",
+      statsRevenue: "CA Prévisionnel",
+      searchPlaceholder: "Rechercher patient, téléphone, soin...",
+      filterAll: "Tous",
+      filterConfirmed: "Confirmés",
+      filterScheduled: "Planifiés",
+      filterCompleted: "Terminés",
+      filterCancelled: "Annulés",
+      filterNoShow: "🐰 No-Shows",
+      sourceAll: "Toutes sources",
+      sourceAi: "🤖 Créés par IA",
+      sourceManual: "👤 Manuel / Secrétariat",
+      treatmentsAll: "Tous les soins",
+      reset: "Réinitialiser",
+      errorLoading: "Impossible de charger l'agenda.",
+      retry: "Réessayer",
+      syncing: "Synchronisation du planning médical...",
+      freeSlot: "Créneau libre — Cliquer pour réserver",
+    },
+    dashboardPage: {
+      hello: "Bonjour {name} 👋",
+      loadingError: "Erreur de chargement",
+      loadingErrorDesc: "Impossible de charger le tableau de bord.",
+      startRecovery: "Lancer une récupération",
+      aiPerformance: "Performances de l'IA",
+      aiPerformanceDesc: "Votre assistant virtuel gère vos conversations en autonomie, réduit vos no-shows et récupère vos revenus perdus sans intervention humaine.",
+      automationRate: "Taux d'Automatisation",
+      recoveredRevenue: "Revenus Récupérés",
+      last30days: "30 derniers jours",
+      apptsToday: "Rendez-vous aujourd'hui",
+      confirmedAppts: "{count} confirmés",
+      patientsToRecover: "Patients à récupérer",
+      thisMonth: "ce mois",
+      recentNoShows: "No-Shows Récent",
+      last7days: "7 derniers jours",
+      activeConversations: "Conversations actives",
+      needsHuman: "{count} à traiter",
+      todayAgenda: "Agenda du jour",
+      plannedAppts: "{count} rendez-vous planifiés",
+      viewAgenda: "Voir l'agenda",
+      noApptsToday: "Aucun rendez-vous aujourd'hui",
+      unknownPatient: "Patient inconnu",
+      unspecifiedTreatment: "Traitement non spécifié",
+      aiPriorities: "Priorités IA",
+      contactFirst: "Patients à contacter en premier",
+      seeAll: "Tout voir",
+      noPriority: "Aucun patient prioritaire",
+      needsFollowup: "Relance nécessaire",
+      recoveryFunnel: "Entonnoir de récupération",
+      noData: "Aucune donnée",
+      freeSlots: "Créneaux libres",
+      fillWithWaitlist: "À remplir avec la liste d'attente",
+      waitlist: "Liste d'attente",
+      aiActivity: "Activité de l'IA",
+      last24h: "Dernières 24 heures",
+      inbox: "Boîte de réception",
+      estimatedImpact: "Impact estimé",
+      simulationBased: "Simulation basée sur vos données locales",
+      potentialRemaining: "Potentiel restant à récupérer",
+      messagesProcessed: "Messages traités automatiquement ce mois",
+      apptsCreated: "Rendez-vous créés par l'IA ce mois",
+    },
+    aiAssistantPage: {
+      title: "Assistant IA & Paramètres WhatsApp",
+      subtitle: "Consignes personnalisées de l'IA, QR Code WhatsApp et règles de réservation du cabinet.",
+      saveBtn: "Enregistrer les modifications",
+      saving: "Enregistrement...",
+      successSave: "Consignes, catalogue de soins et paramètres enregistrés avec succès !",
+      errorSave: "Erreur lors de l'enregistrement des paramètres.",
+    },
+    waitlistPage: {
+      title: "Liste d'Attente Intelligente",
+      subtitle: "Comblez vos annulations automatiquement en proposant les créneaux libérés aux patients en attente.",
+    },
+    followupsPage: {
+      title: "Suivis Post-Opératoires",
+      subtitle: "L'IA prend des nouvelles de vos patients automatiquement après leurs interventions.",
+    },
+      
+    recoveryPage: {
+      title: "Récupération patients",
+      subtitle: "Identifiez automatiquement les patients que votre cabinet risque de perdre.",
+      detect: "Détecter",
+      launchCampaign: "Lancer une campagne",
+      analyzed: "Patients analysés",
+      toRecover: "À récupérer",
+      contacted: "Contactés",
+      replied: "Ont répondu",
+      recoveredAppts: "RDV récupérés",
+      completed: "Venus au cabinet",
+      estimatedValue: "Valeur estimée",
+      bookedValue: "Valeur réservée",
+      recoveredValue: "Valeur récupérée",
+      funnelTitle: "Entonnoir de récupération",
+      funnelSubtitle: "Performance globale",
+      funnelIdentified: "Patients identifiés",
+      funnelContacted: "Contactés",
+      funnelReplied: "Ont répondu",
+      funnelBooked: "Rendez-vous pris",
+      funnelVisited: "Venus au cabinet",
+      opportunitiesTitle: "Opportunités de récupération",
+      opportunitiesSubtitle: "{count} opportunités identifiées",
+      campaigns: "Campagnes",
+      colPatient: "Patient",
+      colType: "Type",
+      colReason: "Raison",
+      colPriority: "Priorité",
+      colEstValue: "Valeur est.",
+      colStatus: "Statut",
+      colDetectedOn: "Détecté le",
+      unknownPatient: "Patient inconnu",
+      viewBtn: "Voir",
+      errorLoading: "Impossible de charger les opportunités.",
+      noOpportunities: "Aucune opportunité de récupération. Cliquez sur \"Détecter\" pour analyser vos patients.",
+      typeInactive: "Patient inactif",
+      typeInterrupted: "Traitement interrompu",
+      typePendingQuote: "Devis en attente",
+      typeNoShow: "Rendez-vous manqué",
+      typeCancellation: "Annulation",
+      typeOverdue: "Contrôle dépassé",
+      typeFollowUp: "Suivi",
+      statusIdentified: "Identifié",
+      statusQueued: "En file",
+      statusContacted: "Contacté",
+      statusResponded: "A répondu",
+      statusBooked: "RDV pris",
+      statusVisited: "Venu",
+      statusNoResponse: "Sans réponse",
+      statusDismissed: "Écarté",
+      detectionComplete: "Détection terminée. {count} opportunités créées.",
+      detectionError: "Erreur lors de la détection.",
+    },
   },
   en: {
+    conversationsPage: {
+      title: "Inbox & WhatsApp AI Chatbot",
+      subtitle: "Manage conversations and test the WhatsApp AI in real time.",
+      live: "Live 24/7",
+      hideSimulator: "Hide Simulator",
+      openSimulator: "📱 Open Patient Simulator",
+      viewAgenda: "View agenda",
+      searchPlaceholder: "Search by name, phone...",
+      filterAll: "All",
+      filterAi: "AI",
+      filterHuman: "Human Required",
+      loadingConvs: "Loading conversations...",
+      noConvs: "No conversations yet.",
+      humanRequired: "Human Intervention Required",
+      aiHandled: "Handled by AI",
+      patientRecord: "Open patient record",
+      whatsappBusiness: "WhatsApp Business API",
+      loadPrevMsgs: "Load previous messages",
+      loadingMsgs: "Loading...",
+      noMsgsTitle: "No messages",
+      noMsgsDesc: "This conversation is empty or could not be loaded.",
+      typeMsg: "Type a message as the clinic...",
+      whatsappSimulator: "WhatsApp Simulator (Patient Test)",
+      simDesc: "Test the AI in real time. Put yourself in the patient's shoes and send messages to see how the assistant reacts.",
+      online: "online",
+      patientId: "ID:",
+      simNewConv: "Simulate a new patient",
+      quickScenarios: "Quick scenarios to test:",
+      scenario1Label: "📅 Appt",
+      scenario1Text: "Hello, I want to book an appointment for scaling this week.",
+      scenario2Label: "⏱️ Confirm",
+      scenario2Text: "Perfect, 11:30 works for me! I confirm.",
+      scenario3Label: "🚨 Emergency",
+      scenario3Text: "Doctor, I have a terrible toothache since this morning. Can you see me urgently?",
+      scenario4Label: "💰 Prices",
+      scenario4Text: "Hello, what is the price for an implant or whitening?",
+      scenario5Label: "🧑‍⚕️ Doctor",
+      scenario5Text: "I want to talk directly to the doctor about my treatment yesterday.",
+      clearSim: "Clear test conversation",
+      simWarning: "You are simulating the patient with the fake number :",
+      simulatorSubtitle: "WhatsApp Simulator",
+      directTestMode: "Direct test mode",
+      simPatientLabel: "Simulated patient:",
+      simPatientUnknown: "Unknown patient",
+      clinicName: "Your Clinic",
+      onlineStatus: "online",
+      welcomeMsg: "Welcome message",
+      writeAsPatient: "Write as patient...",
+
+      suggestionSuccess: "Suggestion copied!",
+      suggestionError: "Suggestion error",
+      sendError: "Send error",
+      simSuccess: "Test message sent!",
+      simError: "Simulation error",
+      patient: "Patient",
+      aiBot: "AI Bot",
+      received: "Received",
+      delivered: "Delivered",
+      writeManualReply: "Write a manual reply...",
+      aiTip: "AI is automatically handling this conversation.",
+      enterToSend: "Press Enter to send",
+      selectConvTitle: "Select a conversation",
+      selectConvDesc: "Choose a conversation on the left or start a test in the simulator.",
+      simulatorTitle: "WhatsApp Simulator",
+    },
+
+  
     nav: {
       workspace: "Workspace",
       automation: "Automation",
@@ -420,8 +996,258 @@ export const translations: Record<Language, Translations> = {
       resetPassword: "Reset Password",
       confirm: "Confirm",
     },
+    patientsPage: {
+      title: "Patients",
+      subtitle: "{count} total patients",
+      newPatient: "New patient",
+      successAdd: "Patient added successfully.",
+      errorAdd: "Error creating patient.",
+      firstName: "First Name",
+      lastName: "Last Name",
+      firstNameEx: "E.g. John",
+      lastNameEx: "E.g. Doe",
+      phone: "Phone",
+      email: "Email",
+      emailOptional: "Optional",
+      createPatient: "Create patient",
+      searchPlaceholder: "Search by name, phone...",
+      selected: "{count} selected",
+      message: "Message",
+      campaign: "Campaign",
+      export: "Export",
+      loadingPatients: "Loading patients...",
+      errorLoading: "Could not load the patient list.",
+      patient: "Patient",
+      contact: "Contact",
+      lastVisit: "Last visit",
+      status: "Status",
+      visits: "Visits",
+      noPatientSearch: "No patient found for \"{query}\".",
+      noPatient: "No patients.",
+    },
+    agendaPage: {
+      title: "Medical Agenda & Schedule",
+      subtitleDay: "{date}",
+      subtitleWeek: "Week of {start} to {end}",
+      subtitleMonth: "Month of {month}",
+      subtitleList: "Detailed Consultations List",
+      today: "Today",
+      day: "Day",
+      week: "Week",
+      month: "Month",
+      list: "List",
+      newAppointment: "New Appointment",
+      planAppointment: "Schedule Appointment",
+      selectPatient: "Select existing patient",
+      date: "Date",
+      startTime: "Start Time",
+      treatment: "Treatment / Service",
+      duration: "Estimated Duration",
+      notes: "Notes & Instructions",
+      notesPlaceholder: "E.g. First consultation...",
+      cancel: "Cancel",
+      save: "Save Appointment",
+      statsTotal: "Total Consultations",
+      statsConfirmed: "Confirmed",
+      statsPending: "Pending",
+      statsAi: "Booked by AI",
+      statsRevenue: "Est. Revenue",
+      searchPlaceholder: "Search patient, phone, treatment...",
+      filterAll: "All",
+      filterConfirmed: "Confirmed",
+      filterScheduled: "Scheduled",
+      filterCompleted: "Completed",
+      filterCancelled: "Cancelled",
+      filterNoShow: "🐰 No-Shows",
+      sourceAll: "All Sources",
+      sourceAi: "🤖 Booked by AI",
+      sourceManual: "👤 Manual / Staff",
+      treatmentsAll: "All Treatments",
+      reset: "Reset",
+      errorLoading: "Could not load agenda.",
+      retry: "Retry",
+      syncing: "Syncing medical schedule...",
+      freeSlot: "Free slot — Click to book",
+    },
+    dashboardPage: {
+      hello: "Hello {name} 👋",
+      loadingError: "Loading Error",
+      loadingErrorDesc: "Could not load the dashboard.",
+      startRecovery: "Start Recovery",
+      aiPerformance: "AI Performance",
+      aiPerformanceDesc: "Your virtual assistant manages conversations autonomously, reduces no-shows, and recovers lost revenue with no human intervention.",
+      automationRate: "Automation Rate",
+      recoveredRevenue: "Recovered Revenue",
+      last30days: "Last 30 days",
+      apptsToday: "Appointments Today",
+      confirmedAppts: "{count} confirmed",
+      patientsToRecover: "Patients to Recover",
+      thisMonth: "this month",
+      recentNoShows: "Recent No-Shows",
+      last7days: "Last 7 days",
+      activeConversations: "Active Conversations",
+      needsHuman: "{count} to process",
+      todayAgenda: "Today's Agenda",
+      plannedAppts: "{count} planned appointments",
+      viewAgenda: "View agenda",
+      noApptsToday: "No appointments today",
+      unknownPatient: "Unknown patient",
+      unspecifiedTreatment: "Unspecified treatment",
+      aiPriorities: "AI Priorities",
+      contactFirst: "Patients to contact first",
+      seeAll: "See all",
+      noPriority: "No priority patients",
+      needsFollowup: "Follow-up needed",
+      recoveryFunnel: "Recovery Funnel",
+      noData: "No data",
+      freeSlots: "Free Slots",
+      fillWithWaitlist: "To be filled with waitlist",
+      waitlist: "Waitlist",
+      aiActivity: "AI Activity",
+      last24h: "Last 24 hours",
+      inbox: "Inbox",
+      estimatedImpact: "Estimated Impact",
+      simulationBased: "Simulation based on your local data",
+      potentialRemaining: "Remaining potential to recover",
+      messagesProcessed: "Messages automatically processed this month",
+      apptsCreated: "Appointments created by AI this month",
+    },
+    aiAssistantPage: {
+      title: "AI Assistant & WhatsApp Settings",
+      subtitle: "Custom AI instructions, WhatsApp QR Code, and clinic booking rules.",
+      saveBtn: "Save Changes",
+      saving: "Saving...",
+      successSave: "Instructions, services catalog, and settings successfully saved!",
+      errorSave: "Error saving settings.",
+    },
+    waitlistPage: {
+      title: "Smart Waitlist",
+      subtitle: "Automatically fill cancellations by offering freed slots to waiting patients.",
+    },
+    followupsPage: {
+      title: "Post-Op Follow-ups",
+      subtitle: "The AI automatically checks in on your patients after their procedures.",
+    },
+    recoveryPage: {
+      title: "Patient Recovery",
+      subtitle: "Automatically identify patients your clinic is at risk of losing.",
+      detect: "Detect",
+      launchCampaign: "Launch Campaign",
+      analyzed: "Analyzed Patients",
+      toRecover: "To Recover",
+      contacted: "Contacted",
+      replied: "Replied",
+      recoveredAppts: "Recovered Appts",
+      completed: "Visited Clinic",
+      estimatedValue: "Estimated Value",
+      bookedValue: "Booked Value",
+      recoveredValue: "Recovered Value",
+      funnelTitle: "Recovery Funnel",
+      funnelSubtitle: "Overall Performance",
+      funnelIdentified: "Identified Patients",
+      funnelContacted: "Contacted",
+      funnelReplied: "Replied",
+      funnelBooked: "Appointments Booked",
+      funnelVisited: "Visited Clinic",
+      opportunitiesTitle: "Recovery Opportunities",
+      opportunitiesSubtitle: "{count} opportunities identified",
+      campaigns: "Campaigns",
+      colPatient: "Patient",
+      colType: "Type",
+      colReason: "Reason",
+      colPriority: "Priority",
+      colEstValue: "Est. Value",
+      colStatus: "Status",
+      colDetectedOn: "Detected On",
+      unknownPatient: "Unknown Patient",
+      viewBtn: "View",
+      errorLoading: "Failed to load opportunities.",
+      noOpportunities: "No recovery opportunities. Click \"Detect\" to analyze your patients.",
+      typeInactive: "Inactive Patient",
+      typeInterrupted: "Interrupted Treatment",
+      typePendingQuote: "Pending Quote",
+      typeNoShow: "No-Show",
+      typeCancellation: "Cancellation",
+      typeOverdue: "Overdue Checkup",
+      typeFollowUp: "Follow-up",
+      statusIdentified: "Identified",
+      statusQueued: "Queued",
+      statusContacted: "Contacted",
+      statusResponded: "Responded",
+      statusBooked: "Booked",
+      statusVisited: "Visited",
+      statusNoResponse: "No Response",
+      statusDismissed: "Dismissed",
+      detectionComplete: "Detection complete. {count} opportunities created.",
+      detectionError: "Error during detection.",
+    },
   },
   ar: {
+    conversationsPage: {
+      title: "Inbox & WhatsApp AI Chatbot",
+      subtitle: "Manage conversations and test the WhatsApp AI in real time.",
+      live: "Live 24/7",
+      hideSimulator: "Hide Simulator",
+      openSimulator: "📱 Open Patient Simulator",
+      viewAgenda: "View agenda",
+      searchPlaceholder: "Search by name, phone...",
+      filterAll: "All",
+      filterAi: "AI",
+      filterHuman: "Human Required",
+      loadingConvs: "Loading conversations...",
+      noConvs: "No conversations yet.",
+      humanRequired: "Human Intervention Required",
+      aiHandled: "Handled by AI",
+      patientRecord: "Open patient record",
+      whatsappBusiness: "WhatsApp Business API",
+      loadPrevMsgs: "Load previous messages",
+      loadingMsgs: "Loading...",
+      noMsgsTitle: "No messages",
+      noMsgsDesc: "This conversation is empty or could not be loaded.",
+      typeMsg: "Type a message as the clinic...",
+      whatsappSimulator: "WhatsApp Simulator (Patient Test)",
+      simDesc: "Test the AI in real time. Put yourself in the patient's shoes and send messages to see how the assistant reacts.",
+      online: "online",
+      patientId: "ID:",
+      simNewConv: "Simulate a new patient",
+      quickScenarios: "Quick scenarios to test:",
+      scenario1Label: "📅 Appt",
+      scenario1Text: "Hello, I want to book an appointment for scaling this week.",
+      scenario2Label: "⏱️ Confirm",
+      scenario2Text: "Perfect, 11:30 works for me! I confirm.",
+      scenario3Label: "🚨 Emergency",
+      scenario3Text: "Doctor, I have a terrible toothache since this morning. Can you see me urgently?",
+      scenario4Label: "💰 Prices",
+      scenario4Text: "Hello, what is the price for an implant or whitening?",
+      scenario5Label: "🧑‍⚕️ Doctor",
+      scenario5Text: "I want to talk directly to the doctor about my treatment yesterday.",
+      clearSim: "Clear test conversation",
+      simWarning: "You are simulating the patient with the fake number :",
+      simulatorSubtitle: "WhatsApp Simulator",
+      directTestMode: "Direct test mode",
+      simPatientLabel: "Simulated patient:",
+      simPatientUnknown: "Unknown patient",
+      clinicName: "Your Clinic",
+      onlineStatus: "online",
+      welcomeMsg: "Welcome message",
+      writeAsPatient: "Write as patient...",
+
+      suggestionSuccess: "Suggestion copied!",
+      suggestionError: "Suggestion error",
+      sendError: "Send error",
+      simSuccess: "Test message sent!",
+      simError: "Simulation error",
+      patient: "Patient",
+      aiBot: "AI Bot",
+      received: "Received",
+      delivered: "Delivered",
+      writeManualReply: "Write a manual reply...",
+      aiTip: "AI is automatically handling this conversation.",
+      enterToSend: "Press Enter to send",
+      selectConvTitle: "Select a conversation",
+      selectConvDesc: "Choose a conversation on the left or start a test in the simulator.",
+      simulatorTitle: "WhatsApp Simulator",
+    },
     nav: {
       workspace: "مساحة العمل",
       automation: "الأتمتة والذكاء الاصطناعي",
@@ -558,5 +1384,191 @@ export const translations: Record<Language, Translations> = {
       resetPassword: "إعادة تعيين كلمة المرور",
       confirm: "تأكيد",
     },
+    patientsPage: {
+      title: "المرضى",
+      subtitle: "إجمالي المرضى: {count}",
+      newPatient: "مريض جديد",
+      successAdd: "تمت إضافة المريض بنجاح.",
+      errorAdd: "خطأ أثناء إضافة المريض.",
+      firstName: "الاسم الأول",
+      lastName: "اللقب",
+      firstNameEx: "مثال: أحمد",
+      lastNameEx: "مثال: بن علي",
+      phone: "الهاتف",
+      email: "البريد الإلكتروني",
+      emailOptional: "اختياري",
+      createPatient: "إضافة المريض",
+      searchPlaceholder: "ابحث بالاسم، الهاتف...",
+      selected: "تم تحديد {count}",
+      message: "رسالة",
+      campaign: "حملة",
+      export: "تصدير",
+      loadingPatients: "جاري تحميل المرضى...",
+      errorLoading: "تعذر تحميل قائمة المرضى.",
+      patient: "المريض",
+      contact: "جهة الاتصال",
+      lastVisit: "آخر زيارة",
+      status: "الحالة",
+      visits: "الزيارات",
+      noPatientSearch: "لم يتم العثور على مرضى لـ \"{query}\".",
+      noPatient: "لا يوجد مرضى.",
+    },
+    agendaPage: {
+      title: "جدول المواعيد الطبي",
+      subtitleDay: "{date}",
+      subtitleWeek: "أسبوع من {start} إلى {end}",
+      subtitleMonth: "شهر {month}",
+      subtitleList: "قائمة المواعيد التفصيلية",
+      today: "اليوم",
+      day: "يوم",
+      week: "أسبوع",
+      month: "شهر",
+      list: "قائمة",
+      newAppointment: "موعد جديد",
+      planAppointment: "حجز موعد",
+      selectPatient: "اختر مريض مسجل",
+      date: "التاريخ",
+      startTime: "وقت البدء",
+      treatment: "نوع العلاج / الخدمة",
+      duration: "المدة المتوقعة",
+      notes: "ملاحظات وتعليمات",
+      notesPlaceholder: "مثال: أول زيارة...",
+      cancel: "إلغاء",
+      save: "حفظ الموعد",
+      statsTotal: "إجمالي المواعيد",
+      statsConfirmed: "مؤكدة",
+      statsPending: "قيد الانتظار",
+      statsAi: "حجزت بالذكاء الاصطناعي",
+      statsRevenue: "الإيرادات المتوقعة",
+      searchPlaceholder: "ابحث عن مريض، هاتف، علاج...",
+      filterAll: "الكل",
+      filterConfirmed: "مؤكد",
+      filterScheduled: "مجدول",
+      filterCompleted: "مكتمل",
+      filterCancelled: "ملغى",
+      filterNoShow: "🐰 غياب",
+      sourceAll: "جميع المصادر",
+      sourceAi: "🤖 عبر الذكاء الاصطناعي",
+      sourceManual: "👤 السكرتارية / يدوي",
+      treatmentsAll: "كل العلاجات",
+      reset: "إعادة ضبط",
+      errorLoading: "تعذر تحميل الجدول.",
+      retry: "إعادة المحاولة",
+      syncing: "جاري مزامنة المواعيد...",
+      freeSlot: "موعد متاح — انقر للحجز",
+    },
+    dashboardPage: {
+      hello: "مرحباً {name} 👋",
+      loadingError: "خطأ في التحميل",
+      loadingErrorDesc: "تعذر تحميل لوحة التحكم.",
+      startRecovery: "بدء استرجاع المرضى",
+      aiPerformance: "أداء الذكاء الاصطناعي",
+      aiPerformanceDesc: "مساعدك الافتراضي يدير المحادثات باستقلالية، يقلل من الغيابات، ويسترجع الإيرادات المفقودة دون تدخل بشري.",
+      automationRate: "معدل الأتمتة",
+      recoveredRevenue: "الإيرادات المسترجعة",
+      last30days: "آخر 30 يوم",
+      apptsToday: "مواعيد اليوم",
+      confirmedAppts: "{count} مؤكد",
+      patientsToRecover: "مرضى للاسترجاع",
+      thisMonth: "هذا الشهر",
+      recentNoShows: "غيابات حديثة",
+      last7days: "آخر 7 أيام",
+      activeConversations: "محادثات نشطة",
+      needsHuman: "{count} بانتظار الرد",
+      todayAgenda: "جدول اليوم",
+      plannedAppts: "{count} موعد مجدول",
+      viewAgenda: "عرض الجدول",
+      noApptsToday: "لا توجد مواعيد اليوم",
+      unknownPatient: "مريض غير معروف",
+      unspecifiedTreatment: "علاج غير محدد",
+      aiPriorities: "أولويات الذكاء الاصطناعي",
+      contactFirst: "المرضى الأولوية للاتصال",
+      seeAll: "عرض الكل",
+      noPriority: "لا يوجد مرضى ذوو أولوية",
+      needsFollowup: "بحاجة للمتابعة",
+      recoveryFunnel: "مسار الاسترجاع",
+      noData: "لا توجد بيانات",
+      freeSlots: "مواعيد متاحة",
+      fillWithWaitlist: "للملء من قائمة الانتظار",
+      waitlist: "قائمة الانتظار",
+      aiActivity: "نشاط الذكاء الاصطناعي",
+      last24h: "آخر 24 ساعة",
+      inbox: "صندوق الوارد",
+      estimatedImpact: "التأثير المتوقع",
+      simulationBased: "محاكاة بناءً على بياناتك",
+      potentialRemaining: "الإيرادات المحتملة المتبقية",
+      messagesProcessed: "رسائل تمت معالجتها آلياً هذا الشهر",
+      apptsCreated: "مواعيد أنشأها الذكاء الاصطناعي هذا الشهر",
+    },
+    aiAssistantPage: {
+      title: "مساعد الذكاء الاصطناعي وإعدادات واتساب",
+      subtitle: "تعليمات الذكاء الاصطناعي، رمز الاستجابة السريعة، وقواعد حجز العيادة.",
+      saveBtn: "حفظ التغييرات",
+      saving: "جاري الحفظ...",
+      successSave: "تم حفظ التعليمات والخدمات والإعدادات بنجاح!",
+      errorSave: "حدث خطأ أثناء حفظ الإعدادات.",
+    },
+    waitlistPage: {
+      title: "قائمة الانتظار الذكية",
+      subtitle: "املأ الإلغاءات تلقائياً من خلال عرض المواعيد المتاحة على المرضى المنتظرين.",
+    },
+    followupsPage: {
+      title: "متابعة ما بعد العملية",
+      subtitle: "يقوم الذكاء الاصطناعي بالاطمئنان على المرضى تلقائياً بعد الإجراءات.",
+    },
+    recoveryPage: {
+      title: "استرجاع المرضى",
+      subtitle: "تحديد المرضى الذين قد تفقدهم عيادتك تلقائياً.",
+      detect: "اكتشاف",
+      launchCampaign: "إطلاق حملة",
+      analyzed: "مرضى تم تحليلهم",
+      toRecover: "للاسترجاع",
+      contacted: "تم التواصل",
+      replied: "ردوا",
+      recoveredAppts: "مواعيد مسترجعة",
+      completed: "حضروا للعيادة",
+      estimatedValue: "القيمة المتوقعة",
+      bookedValue: "القيمة المحجوزة",
+      recoveredValue: "القيمة المسترجعة",
+      funnelTitle: "مسار الاسترجاع",
+      funnelSubtitle: "الأداء العام",
+      funnelIdentified: "مرضى محددون",
+      funnelContacted: "تم التواصل",
+      funnelReplied: "ردوا",
+      funnelBooked: "تم الحجز",
+      funnelVisited: "حضروا للعيادة",
+      opportunitiesTitle: "فرص الاسترجاع",
+      opportunitiesSubtitle: "تم تحديد {count} فرصة",
+      campaigns: "حملات",
+      colPatient: "المريض",
+      colType: "النوع",
+      colReason: "السبب",
+      colPriority: "الأولوية",
+      colEstValue: "قيمة متوقعة",
+      colStatus: "الحالة",
+      colDetectedOn: "تاريخ الاكتشاف",
+      unknownPatient: "مريض غير معروف",
+      viewBtn: "عرض",
+      errorLoading: "تعذر تحميل الفرص.",
+      noOpportunities: "لا توجد فرص استرجاع. انقر على \"اكتشاف\" لتحليل مرضاك.",
+      typeInactive: "مريض غير نشط",
+      typeInterrupted: "علاج متوقف",
+      typePendingQuote: "عرض سعر معلق",
+      typeNoShow: "تخلف عن الحضور",
+      typeCancellation: "إلغاء",
+      typeOverdue: "فحص متأخر",
+      typeFollowUp: "متابعة",
+      statusIdentified: "محدد",
+      statusQueued: "في الانتظار",
+      statusContacted: "تم التواصل",
+      statusResponded: "رد",
+      statusBooked: "حجز",
+      statusVisited: "حضر",
+      statusNoResponse: "لا رد",
+      statusDismissed: "مستبعد",
+      detectionComplete: "اكتمل الفحص. تم إنشاء {count} فرصة.",
+      detectionError: "حدث خطأ أثناء الاكتشاف.",
+    },
   },
 };
+

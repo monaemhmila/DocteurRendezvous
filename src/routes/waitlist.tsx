@@ -156,7 +156,7 @@ function WaitlistPage() {
   // Group open offers by patient to avoid repetitive duplicate cards
   const offersByPatient = openOffers.reduce((acc, task) => {
     const p = (typeof task.patientId === "object" && task.patientId ? task.patientId : null) as IPatient | null;
-    const pId = p?._id || p?.id || (typeof task.patientId === "string" ? task.patientId : "unknown");
+    const pId = p?._id || (p as any)?.id || (typeof task.patientId === "string" ? task.patientId : "unknown");
 
     const sourceApptObj = typeof task.sourceAppointmentId === "object" && task.sourceAppointmentId ? (task.sourceAppointmentId as any) : null;
     const sourceApptId = sourceApptObj?._id || sourceApptObj?.id || (typeof task.sourceAppointmentId === "string" ? task.sourceAppointmentId : "");
@@ -328,7 +328,7 @@ function WaitlistPage() {
               filteredWaitlist.map((entry, idx) => {
                 if (!entry) return null;
                 const p = (typeof entry.patientId === "object" && entry.patientId ? entry.patientId : null) as IPatient | null;
-                const pId = p?._id || p?.id || (typeof entry.patientId === "string" ? entry.patientId : "");
+                const pId = p?._id || (p as any)?.id || (typeof entry.patientId === "string" ? entry.patientId : "");
                 const pName = p ? `${p.firstName || ""} ${p.lastName || ""}`.trim() : "Patient";
                 const initials = p ? `${p.firstName?.[0] || ""}${p.lastName?.[0] || ""}`.toUpperCase() : "PA";
 
@@ -399,16 +399,16 @@ function WaitlistPage() {
                               {d === "Monday"
                                 ? "Lun"
                                 : d === "Tuesday"
-                                ? "Mar"
-                                : d === "Wednesday"
-                                ? "Mer"
-                                : d === "Thursday"
-                                ? "Jeu"
-                                : d === "Friday"
-                                ? "Ven"
-                                : d === "Saturday"
-                                ? "Sam"
-                                : d}
+                                  ? "Mar"
+                                  : d === "Wednesday"
+                                    ? "Mer"
+                                    : d === "Thursday"
+                                      ? "Jeu"
+                                      : d === "Friday"
+                                        ? "Ven"
+                                        : d === "Saturday"
+                                          ? "Sam"
+                                          : d}
                             </span>
                           ))}
                         </div>
@@ -828,7 +828,7 @@ function AddWaitlistDialog() {
             >
               <option value="">Sélectionner un patient...</option>
               {patients.map((p, idx) => (
-                <option key={p._id || p.id || `pat-opt-${idx}`} value={p._id || p.id}>
+                <option key={p._id || (p as any).id || `pat-opt-${idx}`} value={p._id || (p as any).id}>
                   {p.firstName} {p.lastName} ({p.phone || "Sans tél"})
                 </option>
               ))}

@@ -1,6 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { PageHeader, SectionCard } from "@/components/shared/ui-kit";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/auth-context";
 
 export const Route = createFileRoute("/settings/integrations")({
   component: IntegrationsSettings,
@@ -12,6 +13,9 @@ const integrations = [
 ] as const;
 
 function IntegrationsSettings() {
+  const { hasPermission } = useAuth();
+  if (!hasPermission("settings")) return <Navigate to="/" />;
+
   return (
     <div className="mx-auto max-w-[800px] space-y-6">
       <PageHeader title="Intégrations" subtitle="Connectez Dental AI à vos outils." />

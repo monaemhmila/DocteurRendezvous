@@ -35,6 +35,13 @@ export interface IPatient {
   notes?: string;
   nextAppointmentAt?: string; // ISO datetime string when serialised
   metrics: IPatientMetrics;
+  dentalChart?: {
+    toothId: number;
+    status: string;
+    notes?: string;
+    updatedAt?: string;
+  }[];
+  specialtyData?: Record<string, any>;
   createdAt: string;
   updatedAt: string;
 }

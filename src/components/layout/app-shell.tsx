@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { AdminPinModal } from "@/components/AdminPinModal";
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -13,6 +14,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <main className="min-w-0 flex-1 px-3 py-5 sm:px-6 sm:py-7">{children}</main>
         </div>
       </div>
+      <AdminPinModal />
     </SidebarProvider>
   );
 }

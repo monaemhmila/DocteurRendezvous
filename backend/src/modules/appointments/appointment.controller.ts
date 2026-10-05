@@ -2,6 +2,7 @@ import { Response } from "express";
 import { AuthRequest } from "../../shared/middleware/requireAuth";
 import { appointmentService } from "./appointment.service";
 import { availabilityService } from "./availability.service";
+import { Tenant } from "../tenants/tenant.model";
 
 import { parsePagination, buildPaginationMeta } from "../../shared/utils/pagination";
 
@@ -24,22 +25,37 @@ export const getAppointments = async (req: AuthRequest, res: Response) => {
       pagination.limit
     );
 
-    const formatted = appointments.map((a: any) => ({
-      _id: a._id.toString(),
-      id: a._id.toString(),
-      patientId: a.patientId ? (a.patientId._id ? a.patientId._id.toString() : a.patientId.toString()) : "",
-      patientName: a.patientId && a.patientId.firstName ? `${a.patientId.firstName} ${a.patientId.lastName}` : "Patient inconnu",
-      doctorId: a.doctorId,
-      date: a.date,
-      startTime: a.startTime || a.time || "00:00",
-      endTime: a.endTime || "00:00",
-      durationMin: a.durationMin,
-      treatment: a.treatment,
-      notes: a.notes,
-      cancellationReason: a.cancellationReason,
-      source: a.source,
-      status: a.status
-    }));
+    const tenantDoc = await Tenant.findById(tenantId).lean();
+    const services = tenantDoc?.settings?.services || [];
+
+    const formatted = appointments.map((a: any) => {
+      let resolvedPrice = typeof a.price === "number" ? a.price : undefined;
+      if (resolvedPrice === undefined && a.treatment) {
+        const match = services.find((s: any) => 
+          s.name?.toLowerCase().trim() === a.treatment?.toLowerCase().trim()
+        );
+        if (match?.price) resolvedPrice = Number(match.price);
+      }
+
+      return {
+        _id: a._id.toString(),
+        id: a._id.toString(),
+        patientId: a.patientId ? (a.patientId._id ? a.patientId._id.toString() : a.patientId.toString()) : "",
+        patientName: a.patientId && a.patientId.firstName ? `${a.patientId.firstName} ${a.patientId.lastName}` : "Patient inconnu",
+        doctorId: a.doctorId,
+        date: a.date,
+        startTime: a.startTime || a.time || "00:00",
+        endTime: a.endTime || "00:00",
+        durationMin: a.durationMin,
+        treatment: a.treatment,
+        price: resolvedPrice,
+        value: resolvedPrice,
+        notes: a.notes,
+        cancellationReason: a.cancellationReason,
+        source: a.source,
+        status: a.status
+      };
+    });
 
     res.json({
       data: formatted,

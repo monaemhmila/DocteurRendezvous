@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -48,6 +48,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAppState } from "@/hooks/use-app-state";
+import { useAuth } from "@/contexts/auth-context";
 
 export const Route = createFileRoute("/settings/team")({
   head: () => ({
@@ -106,6 +107,11 @@ const defaultPermissionsByRole: Record<string, MemberPermissions> = {
 function TeamSettingsPage() {
   const queryClient = useQueryClient();
   const { t } = useAppState();
+  const { hasPermission } = useAuth();
+
+  if (!hasPermission("settings")) {
+    return <Navigate to="/" />;
+  }
 
   // Dialog States
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -223,7 +229,7 @@ function TeamSettingsPage() {
     setFormRole("receptionist");
     setFormStatus("active");
     setFormPassword("");
-    setFormPermissions(defaultPermissionsByRole.receptionist);
+    setFormPermissions(defaultPermissionsByRole['receptionist']!);
   };
 
   const handleOpenAdd = () => {
@@ -242,7 +248,7 @@ function TeamSettingsPage() {
     setFormStatus(member.status || "active");
     setFormPassword("");
     setFormPermissions(
-      member.permissions || defaultPermissionsByRole[member.role] || defaultPermissionsByRole.receptionist
+      member.permissions || defaultPermissionsByRole[member.role] || defaultPermissionsByRole['receptionist']!
     );
   };
 
@@ -402,7 +408,7 @@ function TeamSettingsPage() {
               const initials = `${(member.firstName || "")[0] || ""}${(member.lastName || "")[0] || ""}`.toUpperCase();
               const isInactive = member.status === "inactive";
               const isOwner = member.role === "clinic_owner";
-              const perms: MemberPermissions = member.permissions || defaultPermissionsByRole[member.role] || defaultPermissionsByRole.receptionist;
+              const perms: MemberPermissions = member.permissions || defaultPermissionsByRole[member.role] || defaultPermissionsByRole['receptionist']!;
 
               return (
                 <div
@@ -863,12 +869,11 @@ function TeamSettingsPage() {
               {t.common.cancel}
             </Button>
             <Button
-              onClick={() =>
-                resetPasswordMutation.mutate({
-                  id: resetPasswordMember._id,
-                  password: newPasswordValue || undefined,
-                })
-              }
+              onClick={() => {
+                const payload: { id: string; password?: string } = { id: resetPasswordMember._id };
+                if (newPasswordValue) payload.password = newPasswordValue;
+                resetPasswordMutation.mutate(payload);
+              }}
               disabled={resetPasswordMutation.isPending}
               className="gap-2"
             >

@@ -1,0 +1,8 @@
+{
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "patients": "Patients",
+    "agenda": "Agenda",
+    "settings": "Paramètres"
+  }
+}

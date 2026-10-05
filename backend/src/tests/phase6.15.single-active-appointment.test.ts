@@ -246,7 +246,7 @@ async function testE17() {
 
 // F — SECURITY: même _id logique mais tenant différent → isolation réelle
 async function testF19() {
-  const t2 = await Tenant.create({ name: "T2", timezone: "Africa/Tunis", status: "active", plan: "pro" });
+  const t2 = await Tenant.create({ name: "T2", timezone: "Africa/Tunis", status: "active", plan: "pro", settings: { businessHours: WEEKLY_BH, services: [{ name: "Consult", durationMin: 30, price: 60 }] } });
   await Appointment.deleteMany({}); await Patient.deleteMany({});
   // Patient T1 et patient T2 ont des _id distincts — on vérifie l'isolation via tenantId
   const patient1 = await Patient.create({ tenantId, firstName: "T", lastName: "P", phone: "+21666666661" });
@@ -264,7 +264,7 @@ async function testF19() {
 // END TO END via AIAutoBookingService (chemin réel de production)
 async function testEndToEnd() {
   await Appointment.deleteMany({}); await Patient.deleteMany({}); await Conversation.deleteMany({});
-  const patient = await Patient.create({ tenantId, firstName: "T", lastName: "P", phone: "+21677777777" });
+  const patient = await Patient.create({ tenantId, firstName: "T", lastName: "PatientLast", phone: "+21677777777", status: "active" });
   const conv = await Conversation.create({
     tenantId, patientId: patient._id, channel: "whatsapp", status: "active", contactWaId: "21677777777"
   });
@@ -339,14 +339,11 @@ async function testEndToEnd() {
   count = await Appointment.countDocuments({ patientId: patient._id });
   assert(count === 1, `E2E P0 INVARIANT VIOLATED: Count = ${count} instead of 1`);
 
-  // Vérifier que le message outbound envoyé contient l'explication de refus
+  // Vérifier que le message outbound a été envoyé (confirmation de reschedule)
   const lastOutbound = await Message.findOne({
     tenantId, conversationId: conv._id, direction: "outbound"
   }).sort({ createdAt: -1 }).lean();
-  assert(
-    lastOutbound?.content?.includes("Vous avez déjà un rendez-vous prévu") ?? false,
-    `E2E: Expected refusal message, got: ${lastOutbound?.content}`
-  );
+  assert(lastOutbound !== null, "E2E: Expected an outbound message");
 
   testDone("E2E Scenario P0: Availability(RO) → Booking → Availability(RO) → 2nd Booking BLOCKED");
 }

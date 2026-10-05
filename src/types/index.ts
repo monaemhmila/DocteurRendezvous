@@ -20,8 +20,17 @@ export type RecoveryStage =
   | "booked"
   | "visited";
 
+export interface ToothChart {
+  toothId: number;
+  status: string;
+  surfaces?: Partial<Record<"O" | "V" | "L" | "M" | "D", string>>;
+  notes?: string;
+  updatedAt?: string | Date;
+}
+
 export interface Patient {
   id: string;
+  _id?: string;
   firstName: string;
   lastName: string;
   phone: string;
@@ -43,6 +52,8 @@ export interface Patient {
   notes?: string | undefined;
   preferredTime?: string | undefined;
   estimatedValue?: number | undefined;
+  dentalChart?: ToothChart[];
+  specialtyData?: Record<string, any>;
 }
 
 export type AppointmentStatus =

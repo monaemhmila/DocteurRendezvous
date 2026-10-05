@@ -37,6 +37,7 @@ export interface IAppointment extends Document {
   durationMin: number;
   occupiedSlots: string[]; // Atomic 5-min slice tokens for database-level overlap prevention
   treatment: string;
+  price?: number;
   notes?: string;
   cancellationReason?: string;
   source?: string;
@@ -57,6 +58,7 @@ const AppointmentSchema = new Schema<IAppointment>(
     durationMin: { type: Number, required: true, default: 30 },
     occupiedSlots: { type: [String], required: true, default: [] },
     treatment: { type: String, required: true },
+    price: { type: Number },
     notes: { type: String },
     cancellationReason: { type: String },
     source: { type: String },

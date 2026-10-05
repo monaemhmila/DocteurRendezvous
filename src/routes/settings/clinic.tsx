@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -20,6 +20,7 @@ import {
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { PageHeader, SectionCard } from "@/components/shared/ui-kit";
+import { PlanUsageWidget } from "@/components/shared/plan-usage-widget";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { useAppState } from "@/hooks/use-app-state";
+import { useAdmin } from "@/contexts/admin-context";
+import { useAuth } from "@/contexts/auth-context";
+
 
 const defaultBusinessHours: Record<string, Array<{start: string, end: string}>> = {
   monday: [{ start: "08:30", end: "12:30" }, { start: "14:00", end: "18:30" }],
@@ -61,6 +65,12 @@ export const Route = createFileRoute("/settings/clinic")({
 function ClinicSettingsPage() {
   const queryClient = useQueryClient();
   const { t, isRTL } = useAppState();
+  const { isAdminUnlocked } = useAdmin();
+  const { hasPermission } = useAuth();
+
+  if (!hasPermission("settings")) {
+    return <Navigate to="/" />;
+  }
 
   // Form State
   const [name, setName] = useState("");
@@ -72,6 +82,7 @@ function ClinicSettingsPage() {
   const [noShowPolicyEnabled, setNoShowPolicyEnabled] = useState(false);
   const [noShowMaxAllowed, setNoShowMaxAllowed] = useState(2);
   const [noShowRejectionMessage, setNoShowRejectionMessage] = useState("Suite à plusieurs rendez-vous non honorés, la prise de rendez-vous automatique est suspendue. Merci d'appeler le secrétariat.");
+  const [adminPin, setAdminPin] = useState("1234");
 
   // Fetch Current Tenant
   const { data: tenant, isLoading, isError } = useQuery<any>({
@@ -87,6 +98,11 @@ function ClinicSettingsPage() {
       setPhone(tenant.phone || "");
       setEmail(tenant.email || "");
       setAddress(tenant.address || "");
+      
+      if (tenant.settings?.adminPin) {
+        setAdminPin(tenant.settings.adminPin);
+      }
+      
       if (tenant.settings?.businessHours && typeof tenant.settings.businessHours === "object") {
         setBusinessHours(tenant.settings.businessHours);
       } else {
@@ -122,6 +138,7 @@ function ClinicSettingsPage() {
       address,
       settings: {
         ...tenant?.settings, // Preserve other settings like aiConfig
+        adminPin,
         businessHours,
         noShowPolicy: {
           enabled: noShowPolicyEnabled,
@@ -205,6 +222,9 @@ function ClinicSettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Plan Usage Widget ─────────────────────────────── */}
+      <PlanUsageWidget />
 
       <form onSubmit={handleSave} className="space-y-6">
         {/* General Information Card */}
@@ -337,7 +357,7 @@ function ClinicSettingsPage() {
                                 value={slot.start}
                                 onChange={(e) => {
                                   const newSlots = [...daySlots];
-                                  newSlots[idx].start = e.target.value;
+                                  if (newSlots[idx]) newSlots[idx] = { ...newSlots[idx], start: e.target.value };
                                   setBusinessHours(prev => ({ ...prev, [key]: newSlots }));
                                 }}
                                 className="w-28 h-8 text-xs"
@@ -348,7 +368,7 @@ function ClinicSettingsPage() {
                                 value={slot.end}
                                 onChange={(e) => {
                                   const newSlots = [...daySlots];
-                                  newSlots[idx].end = e.target.value;
+                                  if (newSlots[idx]) newSlots[idx] = { ...newSlots[idx], end: e.target.value };
                                   setBusinessHours(prev => ({ ...prev, [key]: newSlots }));
                                 }}
                                 className="w-28 h-8 text-xs"
@@ -435,6 +455,34 @@ function ClinicSettingsPage() {
             )}
           </div>
         </SectionCard>
+
+        {/* Admin / Stealth Mode Configuration */}
+        {isAdminUnlocked && (
+          <SectionCard
+            title="Configuration Mode Furtif (Super Admin)"
+            description="Ces paramètres sont invisibles pour les utilisateurs normaux."
+            className="border-primary/50 shadow-sm"
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="admin-pin" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <ShieldCheck className="size-3.5 text-primary" />
+                  Code PIN Médecin
+                </Label>
+                <Input
+                  id="admin-pin"
+                  type="password"
+                  value={adminPin}
+                  onChange={(e) => setAdminPin(e.target.value)}
+                  placeholder="1234"
+                  className="h-10 bg-surface text-sm"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">Sert à déverrouiller l'interface.</p>
+              </div>
+
+            </div>
+          </SectionCard>
+        )}
 
         {/* Bottom Save Bar */}
         <div className="flex items-center justify-end gap-3 pt-2">

@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { Appointment } from "./appointment.model";
 import { Tenant } from "../tenants/tenant.model";
 import { User } from "../users/user.model";
@@ -209,7 +210,7 @@ export const availabilityService = {
 
     // 4. Check for overlapping appointments
     let query = Appointment.findOne({
-      tenantId,
+      tenantId: new mongoose.Types.ObjectId(tenantId),
       doctorId,
       date,
       status: { $nin: ["cancelled", "no_show"] },
@@ -233,8 +234,9 @@ export const availabilityService = {
     date: string;
     durationMin: number;
     timePreference?: string;
+    excludePatientId?: string;
   }): Promise<GetAvailableSlotsResult> => {
-    const { tenantId, date, durationMin, timePreference } = params;
+    const { tenantId, date, durationMin, timePreference, excludePatientId } = params;
 
     // 1. SINGLE SOURCE OF TRUTH — use resolveDaySchedule() exclusively.
     // This guarantees that business hours are computed identically here
@@ -244,7 +246,7 @@ export const availabilityService = {
 
     const { tenant, weekdayFr, weekdayEn, dayBH, businessHoursStr, todayIso, currentMins } = schedule;
 
-    // 2. Resolve Doctor deterministically
+    // 2. Resolve Doctor deterministically (Phase 6 strict rule)
     const owners = await User.find({ tenantId, role: "clinic_owner" }).select("_id").lean();
     let doctorId: string;
 
@@ -255,19 +257,14 @@ export const availabilityService = {
       if (dentists.length > 0) {
         doctorId = dentists[0]._id.toString();
       } else {
-        const anyUser = await User.findOne({ tenantId }).select("_id").lean();
-        if (anyUser) {
-          doctorId = anyUser._id.toString();
-        } else {
-          return {
-            status: "CLOSED",
-            slots: [],
-            date,
-            weekdayFr,
-            weekdayEn,
-            error: "no_doctor_configured",
-          };
-        }
+        return {
+          status: "CLOSED",
+          slots: [],
+          date,
+          weekdayFr,
+          weekdayEn,
+          error: "no_doctor_configured", // Strictly refuse booking if no owner/dentist
+        };
       }
     }
 
@@ -301,14 +298,20 @@ export const availabilityService = {
       };
     }
 
-    // 4. Fetch all existing appointments for that doctor on that date
-    // We only care about active appointments (not cancelled/no_show)
-    const existingAppointments = await Appointment.find({
-      tenantId,
-      doctorId,
-      date,
-      status: { $nin: ["cancelled", "no_show"] },
-    }).lean();
+      // 4. Fetch all existing appointments for that doctor on that date
+      // We only care about active appointments (not cancelled/no_show)
+      const query: any = {
+        tenantId: new mongoose.Types.ObjectId(tenantId),
+        doctorId,
+        date,
+        status: { $nin: ["cancelled", "no_show"] },
+      };
+      
+      if (excludePatientId) {
+        query.patientId = { $ne: excludePatientId }; // Mongoose handles string to ObjectId cast here
+      }
+
+      const existingAppointments = await Appointment.find(query).lean();
 
     // 5. Filter candidate slots using the strict overlap logic
     let availableSlots = candidateSlots.filter((slot) => {

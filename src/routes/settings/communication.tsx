@@ -1,12 +1,16 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { PageHeader, SectionCard } from "@/components/shared/ui-kit";
 import { Switch } from "@/components/ui/switch";
+import { useAuth } from "@/contexts/auth-context";
 
 export const Route = createFileRoute("/settings/communication")({
   component: CommunicationSettings,
 });
 
 function CommunicationSettings() {
+  const { hasPermission } = useAuth();
+  if (!hasPermission("settings")) return <Navigate to="/" />;
+
   return (
     <div className="mx-auto max-w-[800px] space-y-6">
       <PageHeader title="Canaux de communication" />

@@ -10,6 +10,8 @@ import {
   deleteTenant,
   updateTenantSettings,
   testAIKey,
+  getPlanUsage,
+  getTenantPlanUsage,
 } from "./tenant.controller";
 import { requireAuth, requireRole } from "../../shared/middleware/requireAuth";
 
@@ -23,6 +25,9 @@ router.put("/current", requireRole("clinic_owner") as any, updateCurrentTenant a
 router.put("/settings", requireRole("clinic_owner") as any, updateTenantSettings as any);
 router.post("/test-ai-key", requireRole("clinic_owner") as any, testAIKey as any);
 
+// Plan usage — current tenant
+router.get("/plan-usage", getPlanUsage as any);
+
 // Routes reserved for super_admin
 router.post("/", createTenant as any);
 router.get("/", getTenants as any);
@@ -30,5 +35,7 @@ router.put("/:id", updateTenant as any);
 router.patch("/:id/status", updateTenantStatus as any);
 router.post("/:id/reset-password", resetTenantPassword as any);
 router.delete("/:id", deleteTenant as any);
+router.get("/:id/plan-usage", getTenantPlanUsage as any);
 
 export default router;
+

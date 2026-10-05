@@ -3,6 +3,7 @@ import { AuthRequest } from "../../shared/middleware/requireAuth";
 import { Recovery } from "../recovery/recovery.model";
 import { WaitlistEntry } from "../waitlist/waitlist.model";
 import { Appointment } from "../appointments/appointment.model";
+import { Patient } from "../patients/patient.model";
 
 export const getAnalyticsOverview = async (req: AuthRequest, res: Response) => {
   try {
@@ -12,13 +13,22 @@ export const getAnalyticsOverview = async (req: AuthRequest, res: Response) => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+    // Filter out dummy patient used for doctor reservations (phone: 00000000)
+    const dummyPatient = await Patient.findOne({ tenantId, phone: "00000000" }).select('_id');
+    const dummyPatientId = dummyPatient ? dummyPatient._id : null;
+
+    const baseQuery: any = { tenantId };
+    if (dummyPatientId) {
+      baseQuery.patientId = { $ne: dummyPatientId };
+    }
+
     // 1. Recovery Rate
     const totalRecoveries30d = await Recovery.countDocuments({
-      tenantId,
+      ...baseQuery,
       createdAt: { $gte: thirtyDaysAgo }
     });
     const visitedRecoveries30d = await Recovery.countDocuments({
-      tenantId,
+      ...baseQuery,
       status: "visited",
       createdAt: { $gte: thirtyDaysAgo }
     });
@@ -26,12 +36,12 @@ export const getAnalyticsOverview = async (req: AuthRequest, res: Response) => {
 
     // 2. No-Show Recovery Rate
     const totalNoShowRecoveries30d = await Recovery.countDocuments({
-      tenantId,
+      ...baseQuery,
       type: "no_show",
       createdAt: { $gte: thirtyDaysAgo }
     });
     const visitedNoShowRecoveries30d = await Recovery.countDocuments({
-      tenantId,
+      ...baseQuery,
       type: "no_show",
       status: "visited",
       createdAt: { $gte: thirtyDaysAgo }
@@ -40,12 +50,12 @@ export const getAnalyticsOverview = async (req: AuthRequest, res: Response) => {
 
     // 3. Cancellation Recovery Rate
     const totalCancellationRecoveries30d = await Recovery.countDocuments({
-      tenantId,
+      ...baseQuery,
       type: "cancellation",
       createdAt: { $gte: thirtyDaysAgo }
     });
     const visitedCancellationRecoveries30d = await Recovery.countDocuments({
-      tenantId,
+      ...baseQuery,
       type: "cancellation",
       status: "visited",
       createdAt: { $gte: thirtyDaysAgo }
@@ -54,21 +64,21 @@ export const getAnalyticsOverview = async (req: AuthRequest, res: Response) => {
 
     // 4. Waitlist Conversion Rate (Waitlist Fill Rate)
     const terminalWaitlist30d = await WaitlistEntry.countDocuments({
-      tenantId,
+      ...baseQuery,
       status: { $in: ["fulfilled", "cancelled", "expired"] },
       updatedAt: { $gte: thirtyDaysAgo }
     });
     const fulfilledWaitlist30d = await WaitlistEntry.countDocuments({
-      tenantId,
+      ...baseQuery,
       status: "fulfilled",
       updatedAt: { $gte: thirtyDaysAgo }
     });
     const waitlistConversionRate = terminalWaitlist30d > 0 ? (fulfilledWaitlist30d / terminalWaitlist30d) * 100 : 0;
 
     // Additional metric useful for the UI: total recovered revenue
-    const allRecoveries = await Recovery.find({ tenantId, status: "visited" });
+    const allRecoveries = await Recovery.find({ ...baseQuery, status: "visited" });
     const recoveredRevenue = allRecoveries.reduce((sum, r) => sum + (r.recoveredValue || r.bookedValue || 0), 0);
-    const estimatedValuePending = (await Recovery.find({ tenantId, status: { $nin: ["visited", "no_response", "dismissed"] } }))
+    const estimatedValuePending = (await Recovery.find({ ...baseQuery, status: { $nin: ["visited", "no_response", "dismissed"] } }))
       .reduce((sum, r) => sum + (r.estimatedValue || 0), 0);
 
     res.json({

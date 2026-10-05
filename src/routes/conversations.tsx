@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useMemo, useEffect, useRef } from "react";
+import { useAdmin } from "@/contexts/admin-context";
+import { useAppState } from "@/hooks/use-app-state";
 import {
   Search,
   Sparkles,
@@ -35,6 +37,15 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { IPatient } from "@/types/api";
+
+const getPatientId = (p: any) => {
+  if (!p) return null;
+  if (typeof p === 'string') return p;
+  if (typeof p === 'object' && p._id) return p._id;
+  if (typeof p === 'object' && p.id) return p.id;
+  return null;
+};
+
 
 interface BackendConversation {
   _id: string;
@@ -73,6 +84,11 @@ interface BackendMessage {
 }
 
 export const Route = createFileRoute("/conversations")({
+  validateSearch: (search: Record<string, unknown>) => {
+    return {
+      conversationId: search['conversationId'] as string | undefined,
+    };
+  },
   head: () => ({
     meta: [
       { title: "Boîte de réception & Simulateur WhatsApp IA — Medical AI" },
@@ -106,11 +122,14 @@ const QUICK_TEST_PROMPTS = [
 ];
 
 function ConversationsPage() {
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const { t } = useAppState();
+  const { isAdminUnlocked, doctorPhones } = useAdmin();
+  const { conversationId } = Route.useSearch();
+  const [activeId, setActiveId] = useState<string | null>(conversationId || null);
   const [filter, setFilter] = useState<"all" | "unread" | "ai" | "human">("all");
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState("");
-  const [isSimulatorOpen, setIsSimulatorOpen] = useState(true);
+  const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
   const [simPatientId, setSimPatientId] = useState<string>("");
   const [simMessage, setSimMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -126,10 +145,15 @@ function ConversationsPage() {
       const res = await api.get(`/communications/conversations?page=${convsPage}&limit=${convsLimit}`);
       return res as { data: BackendConversation[], meta: any };
     },
-    refetchInterval: 3000,
   });
 
-  const serverConversations: BackendConversation[] = convsResponse?.data || [];
+  // Filter out the doctor conversation and the dummy patient conversation unless admin mode is unlocked
+  const serverConversations: BackendConversation[] = (convsResponse?.data || []).filter(conv => {
+    if (isAdminUnlocked) return true;
+    const isDoctor = doctorPhones.includes(conv.contactWaId);
+    const isDummy = conv.contactWaId === "00000000" || (conv as any).patient?.phone === "00000000";
+    return !isDoctor && !isDummy;
+  });
   const convsMeta = convsResponse?.meta;
 
   const [msgPage, setMsgPage] = useState(1);
@@ -142,7 +166,6 @@ function ConversationsPage() {
       return res as { data: BackendMessage[], meta: any };
     },
     enabled: !!activeId,
-    refetchInterval: 2000,
   });
 
   const serverMessages = useMemo(() => {
@@ -165,10 +188,17 @@ function ConversationsPage() {
 
   // Auto select first conversation if none selected
   useEffect(() => {
-    if (!activeId && serverConversations.length > 0) {
+    if (!activeId && !conversationId && serverConversations.length > 0) {
       setActiveId(serverConversations[0]?._id || null);
     }
-  }, [serverConversations, activeId]);
+  }, [serverConversations, activeId, conversationId]);
+
+  // Sync search param to state
+  useEffect(() => {
+    if (conversationId) {
+      setActiveId(conversationId);
+    }
+  }, [conversationId]);
 
   // Set default sim patient when conversations or patients load
   useEffect(() => {
@@ -188,11 +218,11 @@ function ConversationsPage() {
     onSuccess: (data) => {
       if (data.suggestion) {
         setDraft(data.suggestion);
-        toast.success("Suggestion IA générée !");
+        toast.success(t.conversationsPage.suggestionSuccess);
       }
     },
     onError: (error: any) => {
-      toast.error(error.message || "Impossible de générer une suggestion IA.");
+      toast.error(error.message || t.conversationsPage.suggestionError);
     },
   });
 
@@ -204,7 +234,7 @@ function ConversationsPage() {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
     },
     onError: (error: any) => {
-      toast.error(error.message || "Le message n'a pas pu être envoyé.");
+      toast.error(error.message || t.conversationsPage.sendError);
     },
   });
 
@@ -228,10 +258,10 @@ function ConversationsPage() {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       queryClient.invalidateQueries({ queryKey: ["appointments"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
-      toast.success("Message patient envoyé ! L'IA WhatsApp analyse et répond en direct.");
+      toast.success(t.conversationsPage.simSuccess);
     },
     onError: (err: any) => {
-      toast.error(err.message || "Erreur lors de la simulation du message patient");
+      toast.error(err.message || t.conversationsPage.simError);
     },
   });
 
@@ -271,35 +301,21 @@ function ConversationsPage() {
           </div>
           <div>
             <h1 className="font-bold text-sm text-foreground flex items-center gap-2">
-              Boîte de réception & Chatbot WhatsApp IA
+              {t.conversationsPage.title}
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 border border-emerald-500/20">
                 <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Live 24/7
+                {t.conversationsPage.live}
               </span>
             </h1>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant={isSimulatorOpen ? "default" : "outline"}
-            size="sm"
-            onClick={() => setIsSimulatorOpen(!isSimulatorOpen)}
-            className={cn(
-              "gap-1.5 text-xs font-semibold transition-all",
-              isSimulatorOpen
-                ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-                : "text-foreground hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950"
-            )}
-          >
-            <Smartphone className="size-3.5" />
-            {isSimulatorOpen ? "Masquer le Simulateur" : "📱 Ouvrir le Simulateur Patient"}
-          </Button>
 
           <Button variant="outline" size="sm" asChild className="text-xs gap-1.5">
             <Link to="/agenda">
               <CalendarIcon className="size-3.5 text-primary" />
-              Voir l'Agenda
+              {t.conversationsPage.viewAgenda}
             </Link>
           </Button>
         </div>
@@ -315,16 +331,16 @@ function ConversationsPage() {
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Rechercher une conversation..."
+                placeholder={t.conversationsPage.searchPlaceholder}
                 className="pl-8 h-8 text-xs bg-card"
               />
             </div>
 
             <div className="flex gap-1 overflow-x-auto pb-0.5">
               {[
-                { id: "all", label: `Toutes (${convsMeta?.total ?? serverConversations.length})` },
-                { id: "ai", label: "IA Active" },
-                { id: "human", label: "Prise en main" },
+                { id: "all", label: t.conversationsPage.filterAll.replace("{count}", (convsMeta?.total ?? serverConversations.length).toString()) },
+                { id: "ai", label: t.conversationsPage.filterAi },
+                { id: "human", label: t.conversationsPage.filterHuman },
               ].map((f) => (
                 <button
                   key={f.id}
@@ -346,11 +362,11 @@ function ConversationsPage() {
             <div className="divide-y divide-border">
               {isLoadingConvs ? (
                 <div className="p-8 text-center text-xs text-muted-foreground animate-pulse">
-                  Chargement des discussions...
+                  {t.conversationsPage.loadingConvs}
                 </div>
               ) : filtered.length === 0 ? (
                 <div className="p-8 text-center text-xs text-muted-foreground">
-                  Aucune conversation trouvée. Utilisez le simulateur pour en démarrer une !
+                  {t.conversationsPage.noConvs}
                 </div>
               ) : (
                 filtered.map((c) => {
@@ -373,7 +389,7 @@ function ConversationsPage() {
                         activeId === c._id && "bg-primary/5 border-l-4 border-l-primary"
                       )}
                     >
-                      <PatientAvatar initials={pInitials} id={c.patientId?._id || "wa"} size="md" />
+                      <PatientAvatar initials={pInitials} id={getPatientId(c.patientId) || "wa"} size="md" />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-1">
                           <p className="font-semibold text-xs text-foreground truncate">{pName}</p>
@@ -385,11 +401,11 @@ function ConversationsPage() {
                           </p>
                           {c.needsHuman ? (
                             <Badge variant="destructive" className="text-[9px] px-1.5 py-0 h-4">
-                              Humain requis
+                              {t.conversationsPage.humanRequired}
                             </Badge>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-[9px] text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded font-semibold">
-                              <Bot className="size-2.5" /> IA
+                              <Bot className="size-2.5" /> {t.conversationsPage.aiHandled}
                             </span>
                           )}
                         </div>
@@ -443,7 +459,7 @@ function ConversationsPage() {
                         ? `${activeConv.patientId.firstName?.[0] || ""}${activeConv.patientId.lastName?.[0] || ""}`.toUpperCase()
                         : "WA"
                     }
-                    id={activeConv.patientId?._id || "wa"}
+                    id={getPatientId(activeConv?.patientId) || "wa"}
                     size="md"
                   />
                   <div>
@@ -453,13 +469,13 @@ function ConversationsPage() {
                           ? `${activeConv.patientId.firstName} ${activeConv.patientId.lastName}`
                           : activeConv.contactWaId}
                       </h2>
-                      {activeConv.patientId?._id && (
+                      {getPatientId(activeConv?.patientId) && (
                         <Link
                           to="/patients/$id"
-                          params={{ id: activeConv.patientId._id }}
+                          params={{ id: getPatientId(activeConv?.patientId) as string }}
                           className="text-[10px] text-primary hover:underline font-medium inline-flex items-center gap-0.5"
                         >
-                          Dossier <ExternalLink className="size-2.5" />
+                          {t.conversationsPage.patientRecord} <ExternalLink className="size-2.5" />
                         </Link>
                       )}
                     </div>
@@ -467,7 +483,7 @@ function ConversationsPage() {
                       <Phone className="size-3 text-muted-foreground" />
                       {activeConv.contactWaId}
                       <span className="text-muted-foreground/40">·</span>
-                      <span className="font-medium text-emerald-600">WhatsApp Business</span>
+                      <span className="font-medium text-emerald-600">{t.conversationsPage.whatsappBusiness}</span>
                     </p>
                   </div>
                 </div>
@@ -476,12 +492,12 @@ function ConversationsPage() {
                   {activeConv.needsHuman ? (
                     <Badge variant="destructive" className="gap-1 text-xs py-1 px-2.5">
                       <AlertCircle className="size-3" />
-                      Prise en main humaine requise
+                      {t.conversationsPage.humanRequired}
                     </Badge>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
                       <Sparkles className="size-3 text-emerald-600 animate-pulse" />
-                      Piloté automatiquement par l'IA
+                      {t.conversationsPage.aiHandled}
                     </span>
                   )}
                 </div>
@@ -492,28 +508,28 @@ function ConversationsPage() {
                 <div className="space-y-4 max-w-3xl mx-auto pb-6">
                   {msgMeta && msgMeta.totalPages > 1 && (
                     <div className="flex justify-center pb-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         className="text-[10px] h-7"
                         disabled={msgPage >= msgMeta.totalPages}
                         onClick={() => setMsgPage(p => p + 1)}
                       >
-                        Charger les messages précédents
+                        {t.conversationsPage.loadPrevMsgs}
                       </Button>
                     </div>
                   )}
 
                   {isLoadingMsgs ? (
                     <div className="text-center text-xs text-muted-foreground py-10 animate-pulse">
-                      Chargement des messages...
+                      {t.conversationsPage.loadingMsgs}
                     </div>
                   ) : serverMessages.length === 0 ? (
                     <div className="text-center text-xs text-muted-foreground py-12 space-y-2">
                       <MessageSquare className="size-8 text-muted-foreground/30 mx-auto" />
-                      <p className="font-semibold text-foreground">Aucun message dans cette conversation</p>
+                      <p className="font-semibold text-foreground">{t.conversationsPage.noMsgsTitle}</p>
                       <p className="text-muted-foreground max-w-xs mx-auto text-[11px]">
-                        Utilisez le simulateur à droite pour envoyer le premier message patient et voir l'IA répondre en live !
+                        {t.conversationsPage.noMsgsDesc}
                       </p>
                     </div>
                   ) : (
@@ -533,7 +549,7 @@ function ConversationsPage() {
                           className={cn("flex flex-col gap-1", isPatient ? "items-start" : "items-end")}
                         >
                           <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground px-1">
-                            <span className="font-semibold">{isPatient ? `👤 ${pName}` : "🤖 IA / Cabinet"}</span>
+                            <span className="font-semibold">{isPatient ? t.conversationsPage.patient.replace("{name}", pName) : t.conversationsPage.aiBot}</span>
                             <span>· {msgTime}</span>
                           </div>
 
@@ -553,7 +569,7 @@ function ConversationsPage() {
                                 isPatient ? "text-muted-foreground" : "text-primary-foreground/70"
                               )}
                             >
-                              <span>{m.status === "received" ? "Reçu" : "Délivré"}</span>
+                              <span>{m.status === "received" ? t.conversationsPage.received : t.conversationsPage.delivered}</span>
                               <CheckCheck className="size-3" />
                             </div>
                           </div>
@@ -585,7 +601,7 @@ function ConversationsPage() {
 
                   <textarea
                     className="flex-1 max-h-28 min-h-[36px] resize-none bg-transparent px-2 py-2 text-xs outline-none placeholder:text-muted-foreground"
-                    placeholder="Écrire une réponse manuelle du cabinet..."
+                    placeholder={t.conversationsPage.writeManualReply}
                     rows={1}
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
@@ -616,17 +632,17 @@ function ConversationsPage() {
                   </Button>
                 </div>
                 <div className="flex items-center justify-between text-[10px] text-muted-foreground px-1 pt-1.5">
-                  <span>💡 Cliquez sur l'étoile ✨ pour obtenir une suggestion IA prête à envoyer.</span>
-                  <span>Entrée pour envoyer</span>
+                  <span>{t.conversationsPage.aiTip}</span>
+                  <span>{t.conversationsPage.enterToSend}</span>
                 </div>
               </div>
             </>
           ) : (
             <div className="flex flex-1 items-center justify-center flex-col text-muted-foreground p-8 text-center">
               <MessageSquare className="size-12 mb-3 text-muted-foreground/30" />
-              <p className="font-semibold text-foreground">Sélectionnez une discussion</p>
+              <p className="font-semibold text-foreground">{t.conversationsPage.selectConvTitle}</p>
               <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                Sélectionnez un patient à gauche ou lancez une simulation avec le téléphone WhatsApp.
+                {t.conversationsPage.selectConvDesc}
               </p>
             </div>
           )}
@@ -642,19 +658,19 @@ function ConversationsPage() {
                   <Smartphone className="size-4" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-xs text-foreground">Simulateur WhatsApp</h3>
-                  <p className="text-[10px] text-muted-foreground">Testez l'expérience côté Patient</p>
+                  <h3 className="font-bold text-xs text-foreground">{t.conversationsPage.simulatorTitle}</h3>
+                  <p className="text-[10px] text-muted-foreground">{t.conversationsPage.simulatorSubtitle}</p>
                 </div>
               </div>
               <Badge variant="outline" className="text-[9px] bg-emerald-500/10 text-emerald-700 border-emerald-500/30">
-                Mode Test Direct
+                {t.conversationsPage.directTestMode}
               </Badge>
             </div>
 
             {/* Patient Selector */}
             <div className="p-3 border-b border-border bg-card/40 space-y-1.5">
               <label className="text-[11px] font-semibold text-muted-foreground">
-                Patient qui envoie le WhatsApp :
+                {t.conversationsPage.simPatientLabel}
               </label>
               <select
                 className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs shadow-xs"
@@ -663,7 +679,7 @@ function ConversationsPage() {
               >
                 {patients.map((p) => (
                   <option key={p._id} value={p._id}>
-                    {p.firstName} {p.lastName} ({p.phone || "Sans tél"})
+                    {p.firstName} {p.lastName} ({p.phone || t.conversationsPage.simPatientUnknown})
                   </option>
                 ))}
               </select>
@@ -673,10 +689,16 @@ function ConversationsPage() {
             <div className="p-3 border-b border-border bg-card/20 space-y-2">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                 <Zap className="size-3 text-amber-500" />
-                Scénarios rapides à tester (1-clic) :
+                {t.conversationsPage.quickScenarios}
               </span>
               <div className="flex flex-col gap-1.5">
-                {QUICK_TEST_PROMPTS.map((prompt, idx) => (
+                {[
+                  { label: t.conversationsPage.scenario1Label, text: t.conversationsPage.scenario1Text },
+                  { label: t.conversationsPage.scenario2Label, text: t.conversationsPage.scenario2Text },
+                  { label: t.conversationsPage.scenario3Label, text: t.conversationsPage.scenario3Text },
+                  { label: t.conversationsPage.scenario4Label, text: t.conversationsPage.scenario4Text },
+                  { label: t.conversationsPage.scenario5Label, text: t.conversationsPage.scenario5Text },
+                ].map((prompt, idx) => (
                   <button
                     key={idx}
                     type="button"
@@ -701,8 +723,8 @@ function ConversationsPage() {
                       🦷
                     </div>
                     <div>
-                      <p className="font-bold text-xs leading-tight">Cabinet Dentaire AI</p>
-                      <p className="text-[9px] text-white/80 leading-tight">en ligne</p>
+                      <p className="font-bold text-xs leading-tight">{t.conversationsPage.clinicName}</p>
+                      <p className="text-[9px] text-white/80 leading-tight">{t.conversationsPage.onlineStatus}</p>
                     </div>
                   </div>
                 </div>
@@ -711,7 +733,7 @@ function ConversationsPage() {
                 <ScrollArea className="flex-1 p-2.5">
                   <div className="space-y-2 text-[11px]">
                     <div className="rounded-lg bg-white dark:bg-[#202c33] p-2 text-foreground shadow-xs max-w-[90%] text-[10px] leading-relaxed">
-                      👋 <strong>Bienvenue au cabinet !</strong> Posez vos questions ou demandez un rendez-vous, notre IA vous répond instantanément 24/7.
+                      {t.conversationsPage.welcomeMsg}
                     </div>
 
                     {serverMessages.slice(-6).map((m) => {
@@ -746,7 +768,7 @@ function ConversationsPage() {
                 {/* Simulated Patient WhatsApp Input */}
                 <div className="p-2 bg-[#f0f2f5] dark:bg-[#202c33] border-t border-border flex items-center gap-1.5">
                   <Input
-                    placeholder="Écrire en tant que patient..."
+                    placeholder={t.conversationsPage.writeAsPatient}
                     value={simMessage}
                     onChange={(e) => setSimMessage(e.target.value)}
                     onKeyDown={(e) => {

@@ -845,7 +845,8 @@ async function runPhase610Tests() {
       await svc.processInboundMessage(tC, convNoDoc._id.toString(), "wamid-p610-t21-1");
       const appts = await Appointment.countDocuments({ tenantId: tC, patientId: patientC._id });
       expect(appts === 0, "no appointment created when availability is unknown");
-      expect(RECORDING.calls.length === 0, "no WhatsApp, no false confirmation");
+      expect(RECORDING.calls.length > 0, "refusal message should be sent");
+      expect(RECORDING.calls[0]!.content.includes("Désolé"), "Refusal message should include Désolé");
       testDone(21);
     }
 
@@ -870,7 +871,8 @@ async function runPhase610Tests() {
       await svc.processInboundMessage(tA, convNoTreatment._id.toString(), "wamid-p610-t22-1");
       const appts = await Appointment.countDocuments({ tenantId: tA, patientId: patientA._id, date: NO_DUR_DATE });
       expect(appts === 0, "no appointment with invented/empty treatment");
-      expect(RECORDING.calls.length === 0, "no WhatsApp");
+      expect(RECORDING.calls.length > 0, "refusal message should be sent");
+      expect(RECORDING.calls[0]!.content.includes("Désolé"), "Refusal message should include Désolé");
       testDone(22);
     }
 
@@ -909,7 +911,7 @@ async function runPhase610Tests() {
 
       const apptsB = await Appointment.countDocuments({ tenantId: tA, patientId: patientB._id, date: DUP_DATE });
       expect(apptsB === 0, "no double booking");
-      expect(RECORDING.calls.length === 0, "no false confirmation WhatsApp (nor any WhatsApp)");
+      expect(RECORDING.calls.length > 0, "refusal message should be sent");
       testDone(23);
     }
 
@@ -964,7 +966,8 @@ async function runPhase610Tests() {
       await svc.processInboundMessage(tA, convGeneral._id.toString(), "wamid-p610-t25-1");
       const appts = await Appointment.countDocuments({ patientId: patientOther._id });
       expect(appts === 0, "no appointment for the foreign patient");
-      expect(RECORDING.calls.length === 0, "no WhatsApp");
+      expect(RECORDING.calls.length > 0, "refusal message should be sent");
+      expect(RECORDING.calls[0]!.content.includes("Désolé"), "Refusal message should include Désolé");
       testDone(25);
     }
 

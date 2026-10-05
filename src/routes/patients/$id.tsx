@@ -11,6 +11,14 @@ import {
   SectionCard,
   EmptyState,
 } from "@/components/shared/ui-kit";
+import { DentalChart } from "@/components/patients/DentalChart";
+import { DermaChart } from "@/components/patients/DermaChart";
+import { CardioChart } from "@/components/patients/CardioChart";
+import { OphthaChart } from "@/components/patients/OphthaChart";
+import { PediaChart } from "@/components/patients/PediaChart";
+import { GynecoChart } from "@/components/patients/GynecoChart";
+import { GeneralChart } from "@/components/patients/GeneralChart";
+import { PrescriptionGenerator } from "@/components/patients/PrescriptionGenerator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,6 +44,7 @@ import {
 import { toast } from "sonner";
 import {
   ChevronLeft,
+  ChevronRight,
   Calendar,
   Clock,
   Phone,
@@ -63,6 +72,7 @@ import {
   Send,
   Tag,
   ShieldAlert,
+  Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { relativeDay } from "@/lib/format";
@@ -148,6 +158,11 @@ function PatientProfilePage() {
 
   const appointments = appointmentsResponse?.data || [];
   const appointmentsMeta = appointmentsResponse?.meta;
+
+  const { data: currentTenant } = useQuery({
+    queryKey: ["currentTenant"],
+    queryFn: () => api.get("/tenants/current"),
+  });
 
   const { data: opportunities = [], isLoading: isLoadingRecovery } = useQuery<IRecovery[]>({
     queryKey: ["recovery", "patient", id],
@@ -355,7 +370,7 @@ function PatientProfilePage() {
               <div>
                 <h1 className="text-xl font-bold tracking-tight text-foreground">{patientFullName}</h1>
                 <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                  <PatientStatusBadge status={p.status} />
+                  <PatientStatusBadge status={p.status as any} />
                   {p.gender && <Badge variant="outline" className="text-[10px] capitalize">{p.gender === "male" ? "Homme" : p.gender === "female" ? "Femme" : p.gender}</Badge>}
                   {patientAge !== null && <Badge variant="secondary" className="text-[10px]">{patientAge} ans</Badge>}
                   {p.language && <Badge variant="outline" className="text-[10px] uppercase font-mono">{p.language}</Badge>}
@@ -480,6 +495,44 @@ function PatientProfilePage() {
               <TabsTrigger value="medical" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
                 <HeartPulse className="size-4 mr-2" /> Dossier & Notes
               </TabsTrigger>
+              <TabsTrigger value="prescriptions" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
+                <FileText className="size-4 mr-2" /> Ordonnances
+              </TabsTrigger>
+              {currentTenant?.specialty?.toLowerCase().includes("dent") && (
+                <TabsTrigger value="odontogram" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
+                  <User className="size-4 mr-2" /> Schéma Dentaire
+                </TabsTrigger>
+              )}
+              {currentTenant?.specialty?.toLowerCase().includes("derma") && (
+                <TabsTrigger value="dermachart" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
+                  <User className="size-4 mr-2" /> Cartographie Cutanée
+                </TabsTrigger>
+              )}
+              {currentTenant?.specialty?.toLowerCase().includes("cardio") && (
+                <TabsTrigger value="cardiochart" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
+                  <HeartPulse className="size-4 mr-2" /> Bilan Cardio
+                </TabsTrigger>
+              )}
+              {currentTenant?.specialty?.toLowerCase().includes("opht") && (
+                <TabsTrigger value="ophthachart" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
+                  <Eye className="size-4 mr-2" /> Bilan Visuel
+                </TabsTrigger>
+              )}
+              {(currentTenant?.specialty?.toLowerCase().includes("pédiat") || currentTenant?.specialty?.toLowerCase().includes("pediat")) && (
+                <TabsTrigger value="pediachart" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
+                  <User className="size-4 mr-2" /> Croissance
+                </TabsTrigger>
+              )}
+              {currentTenant?.specialty?.toLowerCase().includes("gyn") && (
+                <TabsTrigger value="gynecochart" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
+                  <HeartPulse className="size-4 mr-2" /> Suivi Gynéco
+                </TabsTrigger>
+              )}
+              {!["dent", "derma", "cardio", "opht", "pédiat", "pediat", "gyn"].some(s => currentTenant?.specialty?.toLowerCase().includes(s)) && (
+                <TabsTrigger value="generalchart" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
+                  <Activity className="size-4 mr-2" /> Biométrie & Constantes
+                </TabsTrigger>
+              )}
               <TabsTrigger value="recovery" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
                 <Zap className="size-4 mr-2" /> IA & Relances ({opportunities.length})
               </TabsTrigger>
@@ -529,7 +582,7 @@ function PatientProfilePage() {
                 icon={Calendar}
                 title="Aucun rendez-vous dans cette vue"
                 description="Aucun rendez-vous ne correspond au filtre sélectionné pour ce patient."
-                actions={
+                action={
                   <Button size="sm" onClick={() => setIsBookApptOpen(true)} className="gap-1.5 text-xs">
                     <CalendarPlus className="size-3.5" />
                     Programmer un rendez-vous
@@ -794,7 +847,7 @@ function PatientProfilePage() {
                      <div>
                         <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Première visite</p>
                         <p className="text-sm font-bold text-foreground mt-0.5">
-                           {pastAppointments.length > 0 ? pastAppointments[pastAppointments.length - 1].date : "Aucune visite"}
+                           {pastAppointments.length > 0 ? pastAppointments[pastAppointments.length - 1]?.date : "Aucune visite"}
                         </p>
                      </div>
                   </div>
@@ -828,6 +881,88 @@ function PatientProfilePage() {
           </div>
         </TabsContent>
 
+        {/* ── TAB: Prescriptions ───────────────────── */}
+        <TabsContent value="prescriptions" className="space-y-4 m-0">
+          <PrescriptionGenerator patient={p as any} tenant={currentTenant} />
+        </TabsContent>
+
+        {/* ── TAB: Odontogram (Conditional) ───────────────────── */}
+        {currentTenant?.specialty?.toLowerCase().includes("dent") && (
+          <TabsContent value="odontogram" className="space-y-4 m-0">
+            <DentalChart
+              patient={p as any}
+              onUpdate={(data) => updatePatientMutation.mutate(data as any)}
+              isUpdating={updatePatientMutation.isPending}
+            />
+          </TabsContent>
+        )}
+
+        {/* ── TAB: DermaChart (Conditional) ───────────────────── */}
+        {currentTenant?.specialty?.toLowerCase().includes("derma") && (
+          <TabsContent value="dermachart" className="space-y-4 m-0">
+            <DermaChart
+              patient={p as any}
+              onUpdate={(data) => updatePatientMutation.mutate(data as any)}
+              isUpdating={updatePatientMutation.isPending}
+            />
+          </TabsContent>
+        )}
+
+        {/* ── TAB: CardioChart (Conditional) ───────────────────── */}
+        {currentTenant?.specialty?.toLowerCase().includes("cardio") && (
+          <TabsContent value="cardiochart" className="space-y-4 m-0">
+            <CardioChart
+              patient={p as any}
+              onUpdate={(data) => updatePatientMutation.mutate(data as any)}
+              isUpdating={updatePatientMutation.isPending}
+            />
+          </TabsContent>
+        )}
+
+        {/* ── TAB: OphthaChart (Conditional) ───────────────────── */}
+        {currentTenant?.specialty?.toLowerCase().includes("opht") && (
+          <TabsContent value="ophthachart" className="space-y-4 m-0">
+            <OphthaChart
+              patient={p as any}
+              onUpdate={(data) => updatePatientMutation.mutate(data as any)}
+              isUpdating={updatePatientMutation.isPending}
+            />
+          </TabsContent>
+        )}
+
+        {/* ── TAB: PediaChart (Conditional) ───────────────────── */}
+        {(currentTenant?.specialty?.toLowerCase().includes("pédiat") || currentTenant?.specialty?.toLowerCase().includes("pediat")) && (
+          <TabsContent value="pediachart" className="space-y-4 m-0">
+            <PediaChart
+              patient={p as any}
+              onUpdate={(data) => updatePatientMutation.mutate(data as any)}
+              isUpdating={updatePatientMutation.isPending}
+            />
+          </TabsContent>
+        )}
+
+        {/* ── TAB: GynecoChart (Conditional) ───────────────────── */}
+        {currentTenant?.specialty?.toLowerCase().includes("gyn") && (
+          <TabsContent value="gynecochart" className="space-y-4 m-0">
+            <GynecoChart
+              patient={p as any}
+              onUpdate={(data) => updatePatientMutation.mutate(data as any)}
+              isUpdating={updatePatientMutation.isPending}
+            />
+          </TabsContent>
+        )}
+
+        {/* ── TAB: GeneralChart (Conditional) ───────────────────── */}
+        {!["dent", "derma", "cardio", "opht", "pédiat", "pediat", "gyn"].some(s => currentTenant?.specialty?.toLowerCase().includes(s)) && (
+          <TabsContent value="generalchart" className="space-y-4 m-0">
+            <GeneralChart
+              patient={p as any}
+              onUpdate={(data) => updatePatientMutation.mutate(data as any)}
+              isUpdating={updatePatientMutation.isPending}
+            />
+          </TabsContent>
+        )}
+
         {/* ── TAB 3: AI Recovery & Relances ───────────────────── */}
         <TabsContent value="recovery" className="space-y-4 m-0">
           <SectionCard
@@ -845,7 +980,7 @@ function PatientProfilePage() {
                 icon={Zap}
                 title="Aucune opportunité de relance"
                 description="Ce patient est parfaitement à jour dans ses soins ou aucun désistement n'a été constaté."
-                actions={
+                action={
                   <Button size="sm" onClick={() => setIsCreateRecoveryOpen(true)} className="gap-1.5 text-xs">
                     <Zap className="size-3.5 text-primary" />
                     Créer une relance manuelle
@@ -855,7 +990,7 @@ function PatientProfilePage() {
             ) : (
               <div className="divide-y divide-border -mx-5 -mb-5">
                 {opportunities.map((opp) => (
-                  <div key={opp._id || opp.id} className="p-4 space-y-3 hover:bg-muted/20 transition-colors">
+                  <div key={opp._id || (opp as any).id} className="p-4 space-y-3 hover:bg-muted/20 transition-colors">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-sm text-foreground capitalize">
@@ -962,7 +1097,7 @@ function PatientProfilePage() {
                 icon={ListOrdered}
                 title="Aucune demande d'attente active"
                 description="Ce patient n'est actuellement pas inscrit sur la liste d'attente pour un désistement."
-                actions={
+                action={
                   <Button size="sm" onClick={() => setIsAddWaitlistOpen(true)} className="gap-1.5 text-xs">
                     <Plus className="size-3.5" />
                     Inscrire en liste d'attente
@@ -1111,7 +1246,7 @@ function BookAppointmentDialog({
 
   const calculateEndTime = (start: string, duration: number) => {
     const [h, m] = start.split(":").map(Number);
-    const totalMinutes = h * 60 + m + duration;
+    const totalMinutes = (h || 0) * 60 + (m || 0) + duration;
     const endH = Math.floor(totalMinutes / 60) % 24;
     const endM = totalMinutes % 60;
     return `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}`;
@@ -1268,7 +1403,7 @@ function EditPatientDialog({
       status: status as any,
       language,
       dateOfBirth: dateOfBirth ? (new Date(dateOfBirth) as any) : undefined,
-    });
+    } as Partial<IPatient>);
   };
 
   return (
@@ -1335,6 +1470,7 @@ function EditPatientDialog({
                 onChange={(e) => setLanguage(e.target.value)}
               >
                 <option value="fr">Français</option>
+                <option value="arabizi">Tunisien (Arabizi)</option>
                 <option value="ar">Arabe</option>
                 <option value="en">Anglais</option>
               </select>

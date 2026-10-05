@@ -16,7 +16,7 @@ function assertAppointmentTransition(currentStatus: string, nextStatus: string):
   if (currentStatus === nextStatus) return;
 
   const transitions: Record<string, string[]> = {
-    scheduled: ["confirmed", "cancelled", "no_show"],
+    scheduled: ["confirmed", "completed", "cancelled", "no_show"],
     confirmed: ["completed", "cancelled", "no_show"],
     completed: [],
     cancelled: [],
@@ -80,9 +80,52 @@ export const reminderService = {
           const treatment = appt.treatment || "Consultation dentaire";
 
           const isArabic = patient.language === "ar";
-          const reminderText = isArabic
-            ? `عسلامة ${patientName} 👋\nنذكروك بموعدك غدوة *${appt.date}* مع *${appt.startTime}* في ${clinicName} (${treatment}).\n\n✅ لتأكيد حضورك، الرجاء الرد بـ *نعم* أو *نأكد*. وإذا عندك التزام وتحب تبدل الموعد، تنجم تطلب تأجيله مباشرة من هنا.`
-            : `Bonjour ${patientName} 👋\nNous vous rappelons votre rendez-vous demain *${appt.date}* à *${appt.startTime}* au ${clinicName} (${treatment}).\n\n✅ Répondez *OUI* pour confirmer votre présence, ou écrivez-nous pour modifier votre créneau si vous avez un empêchement.`;
+          const isFrench = patient.language === "fr";
+          const mainPatient = await Patient.findOne({ tenantId: appt.tenantId, phone: patient.phone }).sort({ createdAt: 1 }).lean();
+          const isMainPatient = mainPatient ? mainPatient._id.toString() === patient._id.toString() : true;
+          const greetingName = mainPatient && mainPatient.firstName && mainPatient.firstName.toLowerCase() !== "patient"
+            ? `${mainPatient.firstName} ${mainPatient.lastName || ""}`.trim()
+            : patientName;
+
+          const rdvFr = isMainPatient ? "votre rendez-vous" : `le rendez-vous de ${patientName}`;
+          const rdvAr = isMainPatient ? "بموعدك" : `بموعد ${patientName}`;
+          const rdvTn = isMainPatient ? "b rendez-vous mte3ek" : `b rendez-vous mte3 ${patientName}`;
+          
+          let reminderTextBody = "";
+          let btnYes = "";
+          let btnNo = "";
+
+          if (isArabic) {
+            reminderTextBody = `عسلامة ${greetingName} 👋\nنذكروك ${rdvAr} غدوة *${appt.date}* مع *${appt.startTime}* في ${clinicName} (${treatment}).\n\nهل تؤكد حضورك؟`;
+            btnYes = "نعم، أؤكد";
+            btnNo = "لا، إلغاء";
+          } else if (isFrench) {
+            reminderTextBody = `Bonjour ${greetingName} 👋\nNous vous rappelons ${rdvFr} de demain le *${appt.date}* à *${appt.startTime}* au ${clinicName} (${treatment}).\n\nPouvez-vous nous confirmer votre présence ?`;
+            btnYes = "OUI, je confirme";
+            btnNo = "NON, annuler";
+          } else {
+            // Default to Tunisian Arabizi
+            reminderTextBody = `Nhebou nfakrouk ${rdvTn} ghodwa *${appt.date}* m3a *${appt.startTime}* fi ${clinicName} (${treatment}).\n\nT2akedli brabi eli enty jey(a)?`;
+            btnYes = "OUI, je confirme"; // We keep French buttons for Arabizi as they are widely understood and standard
+            btnNo = "NON, annuler";
+          }
+
+          const interactivePayload = {
+            type: "button",
+            body: { text: reminderTextBody },
+            action: {
+              buttons: [
+                {
+                  type: "reply",
+                  reply: { id: "confirm_yes", title: btnYes }
+                },
+                {
+                  type: "reply",
+                  reply: { id: "confirm_no", title: btnNo }
+                }
+              ]
+            }
+          };
 
           let conv = await Conversation.findOne({
             tenantId: appt.tenantId,
@@ -103,8 +146,8 @@ export const reminderService = {
           const sendResult = await messagingProvider.sendMessage(
             {
               to: cleanPhone,
-              type: "text",
-              content: reminderText,
+              type: "interactive",
+              interactive: interactivePayload,
             },
             tenant as any
           );
@@ -115,8 +158,9 @@ export const reminderService = {
             patientId: patient._id,
             direction: "outbound",
             status: "sent",
-            content: reminderText,
+            content: reminderTextBody,
             providerMessageId: sendResult.providerMessageId || `reminder_${appt._id}_${Date.now()}`,
+            appointmentId: appt._id,
           });
 
           await Appointment.findByIdAndUpdate(appt._id, {
@@ -127,6 +171,12 @@ export const reminderService = {
           console.log(`[Reminder Service] 24h Reminder sent to ${cleanPhone} for appointment on ${appt.date} at ${appt.startTime}`);
         } catch (err: any) {
           console.error(`[Reminder Service] Error sending reminder for appointment ${appt._id}:`, err.message);
+          
+          // CRITICAL FIX: If it fails (e.g. Meta 24h window closed, parameter value invalid), 
+          // we MUST mark it as processed to prevent infinite retry loops in the background worker.
+          await Appointment.findByIdAndUpdate(appt._id, {
+            $set: { reminderSentAt: new Date(), notes: (appt.notes || "") + "\n[Reminder failed to send]" },
+          });
         }
       }
     } catch (err: any) {
@@ -303,6 +353,18 @@ export const appointmentService = {
 
     const appointmentData = { ...data, doctorId };
 
+    // Resolve price from tenant services if not explicitly provided
+    if (appointmentData.price === undefined || appointmentData.price === null || isNaN(Number(appointmentData.price))) {
+      const tenant = await Tenant.findById(tenantId).lean();
+      const services = tenant?.settings?.services || [];
+      const match = services.find((s: any) => 
+        s.name?.toLowerCase().trim() === appointmentData.treatment?.toLowerCase().trim()
+      );
+      if (match?.price) {
+        appointmentData.price = Number(match.price);
+      }
+    }
+
     // Compute occupied atomic slots
     if (appointmentData.startTime && appointmentData.endTime) {
       appointmentData.occupiedSlots = computeOccupiedSlots(appointmentData.startTime, appointmentData.endTime);
@@ -319,12 +381,23 @@ export const appointmentService = {
       );
     }
 
-    // P0 — Patient Single Active Upcoming Appointment Rule (1 per day)
-    await appointmentService.assertNoActiveUpcomingAppointment(tenantId, data.patientId.toString(), undefined, data.date);
+    // P0 — Patient Single Active Upcoming Appointment Rule (Global)
+    await appointmentService.assertNoActiveUpcomingAppointment(tenantId, data.patientId.toString(), undefined);
 
     const appointment = new Appointment({ ...appointmentData, tenantId });
     try {
-      return await appointment.save();
+      const savedAppt = await appointment.save();
+      
+      // Update patient lastVisit only for past or today's appointments (not future bookings)
+      const todayStr = new Date().toISOString().slice(0, 10);
+      if ((savedAppt.status === "confirmed" || savedAppt.status === "scheduled") && savedAppt.date <= todayStr) {
+        await Patient.findOneAndUpdate(
+          { _id: savedAppt.patientId, tenantId },
+          { $set: { "metrics.lastVisit": new Date(savedAppt.date) } }
+        );
+      }
+      
+      return savedAppt;
     } catch (err: any) {
       // Catch MongoDB Duplicate Key Error (11000)
       if (err.code === 11000) {
@@ -491,10 +564,17 @@ export const appointmentService = {
           const clinicName = tenant.name || "notre cabinet dentaire";
           const treatment = updated.treatment || "Consultation dentaire";
           const isArabic = patient.language === "ar";
+          const isFrench = patient.language === "fr";
+          const isEnglish = patient.language === "en";
 
-          const confirmationText = isArabic
-            ? `عسلامة ${patientName} 👋\nتم تأكيد موعدك بنجاح: ${updated.date} من ${updated.startTime} إلى ${updated.endTime} (${treatment}) في ${clinicName}. نراكم قريباً!`
-            : `Bonjour ${patientName} 👋\nVotre rendez-vous a bien été confirmé : ${updated.date} de ${updated.startTime} à ${updated.endTime} (${treatment}) au ${clinicName}. À bientôt !`;
+          let confirmationText = `Mrigel ${patientName}! 👋\nRendez-vous mte3ek m'akéd: nhar ${updated.date} men ${updated.startTime} l ${updated.endTime} fi ${clinicName}. Nestanew fik!`;
+          if (isArabic) {
+            confirmationText = `عسلامة ${patientName} 👋\nتم تأكيد موعدك بنجاح: ${updated.date} من ${updated.startTime} إلى ${updated.endTime} (${treatment}) في ${clinicName}. نراكم قريباً!`;
+          } else if (isFrench) {
+            confirmationText = `Parfait ${patientName} ! 👋\nVotre rendez-vous est confirmé pour le ${updated.date} de ${updated.startTime} à ${updated.endTime} (${treatment}) au ${clinicName}. À très bientôt !`;
+          } else if (isEnglish) {
+            confirmationText = `Hello ${patientName} 👋\nYour appointment is confirmed for ${updated.date} from ${updated.startTime} to ${updated.endTime} (${treatment}) at ${clinicName}. See you soon!`;
+          }
 
           const { OutboxEvent } = await import("../jobs/outbox-event.model");
           
@@ -530,6 +610,19 @@ export const appointmentService = {
  */
 async function handleStatusChange(appointment: any, tenantId: string) {
   const status = appointment.status;
+  
+  if (status === "confirmed" || status === "scheduled") {
+    if (appointment.patientId) {
+      // Update lastVisit only for past or today appointments
+      const todayStr2 = new Date().toISOString().slice(0, 10);
+      if (appointment.date <= todayStr2) {
+        await Patient.findOneAndUpdate(
+          { _id: appointment.patientId, tenantId },
+          { $set: { "metrics.lastVisit": new Date(appointment.date) } }
+        );
+      }
+    }
+  }
   
   if (status === "no_show") {
     // 1. Increment patient metrics noShowCount
@@ -576,7 +669,7 @@ async function handleStatusChange(appointment: any, tenantId: string) {
 
           const messageText = isArabic
             ? `عسلامة ${patientName} 👋\nلاحظنا غيابك اليوم عن موعدك (${treatment}) في ${clinicName}.\nنتمنى أن المانع خير ! إذا تحب تبرمج موعد جديد، تنجم تجاوبنا مباشرة هنا ونقترحوا عليك أقرب أوقات شاغرة.`
-            : `Bonjour ${patientName} 👋\nNous avons constaté votre absence à votre rendez-vous (${treatment}) au ${clinicName}.\nNous espérons que tout va bien ! Souhaitez-vous reprogrammer votre consultation ? Vous pouvez nous répondre directement ici pour choisir un nouveau créneau.`;
+            : `Lahi4na eli ma jit'ch l rendez-vous mte3ek fi ${clinicName}. Nchalah labes! T7eb t3awed te5ou rendez-vous e5er? Tnajem t9oulenna houni lwa9t li yse3dek.`;
 
           // Send via Meta provider (best effort)
           if (tenant) {

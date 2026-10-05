@@ -1,16 +1,23 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { PageHeader, SectionCard, StatCard } from "@/components/shared/ui-kit";
 import { TrendingUp, Wallet, ArrowUpRight, ArrowDownRight, ArrowRight, Loader2 } from "lucide-react";
 import { money, relativeDay } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useAdmin } from "@/contexts/admin-context";
 
 export const Route = createFileRoute("/revenue")({
   component: RevenuePage,
 });
 
 function RevenuePage() {
+  const { isAdminUnlocked } = useAdmin();
+
+  if (!isAdminUnlocked) {
+    return <Navigate to="/" />;
+  }
+
   const { data: stats, isLoading: isLoadingStats, isError: isErrorStats } = useQuery<any>({
     queryKey: ["recovery-stats"],
     queryFn: () => api.get("/recovery/stats"),

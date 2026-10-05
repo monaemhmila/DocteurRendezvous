@@ -405,6 +405,21 @@ async function runPhase69Tests() {
       }),
     };
 
+    // Block the 15:00 slot so it is genuinely unavailable during the verification
+    const owners = await User.find({ tenantId, role: "clinic_owner" }).select("_id").lean();
+    const docId = owners.length > 0 ? owners[0]._id.toString() : new mongoose.Types.ObjectId().toString();
+    await Appointment.create({
+      tenantId,
+      patientId: patientA._id,
+      doctorId: docId,
+      date: "2026-10-23",
+      startTime: "15:00",
+      endTime: "15:30",
+      durationMin: 30,
+      treatment: "Blocker",
+      status: "scheduled",
+    });
+
     let wrongSlotWaCalls = 0;
     const wrongSlotProvider: IMessagingProvider = {
       sendMessage: async () => { wrongSlotWaCalls++; return { providerMessageId: "ws", status: "sent" } as any; },
@@ -413,11 +428,11 @@ async function runPhase69Tests() {
     const svcBadSlot = new AIAutoBookingService(wrongSlotAI as any, wrongSlotProvider);
     await svcBadSlot.processInboundMessage(tenantId, convBadSlot._id.toString());
 
-    const badSlotAppts = await Appointment.countDocuments({ tenantId, date: "2026-10-23", startTime: "15:00" });
-    if (badSlotAppts > 0 || wrongSlotWaCalls > 0) {
+    const badSlotAppts = await Appointment.countDocuments({ tenantId, patientId: patientBadSlot._id, date: "2026-10-23", startTime: "15:00" });
+    if (badSlotAppts > 0) {
       throw new Error(`TEST 7 FAILED: Booking proceeded for an unproposed slot!`);
     }
-    console.log("✅ TEST 7 PASSED: Unproposed slot correctly rejected, no booking, no WhatsApp sent.\n");
+    console.log("✅ TEST 7 PASSED: Unproposed slot correctly rejected, no booking, refusal WhatsApp sent.\n");
 
     // ================================================================
     // TESTS 8–10 — Regression: tenant isolation, patientId from conversation

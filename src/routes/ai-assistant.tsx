@@ -1,5 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
+import { useAdmin } from "@/contexts/admin-context";
+import { useAuth } from "@/contexts/auth-context";
 import {
   Sparkles,
   Languages,
@@ -118,6 +120,12 @@ export const Route = createFileRoute("/ai-assistant")({
 
 function AIAssistantPage() {
   const queryClient = useQueryClient();
+  const { isAdminUnlocked } = useAdmin();
+  const { hasPermission } = useAuth();
+
+  if (!hasPermission("aiConfig")) {
+    return <Navigate to="/" />;
+  }
 
   // State
   const [mode, setMode] = useState<"auto" | "approval">("auto");
@@ -262,7 +270,7 @@ function AIAssistantPage() {
         actions={
           <div className="flex items-center gap-3">
             <Button asChild variant="outline" size="sm" className="gap-2">
-              <Link to="/conversations">
+              <Link to="/conversations" search={{ conversationId: undefined }}>
                 <Bot className="size-4 text-emerald-600" />
                 Ouvrir le Simulateur
               </Link>
@@ -400,16 +408,18 @@ function AIAssistantPage() {
                               </div>
 
                               {/* Price input */}
-                              <div className="flex items-center gap-1 bg-muted/40 px-2 py-1 rounded-md border text-xs w-24">
-                                <Input
-                                  type="number"
-                                  value={item.price ?? ""}
-                                  onChange={(e) => handleUpdateService(item.id, "price", e.target.value ? Number(e.target.value) : undefined)}
-                                  placeholder="0"
-                                  className="h-6 w-12 p-0 border-0 text-right bg-transparent text-xs font-semibold focus-visible:ring-0"
-                                />
-                                <span className="text-muted-foreground font-medium">DT</span>
-                              </div>
+                              {isAdminUnlocked && (
+                                <div className="flex items-center gap-1 bg-muted/40 px-2 py-1 rounded-md border text-xs w-24">
+                                  <Input
+                                    type="number"
+                                    value={item.price ?? ""}
+                                    onChange={(e) => handleUpdateService(item.id, "price", e.target.value ? Number(e.target.value) : undefined)}
+                                    placeholder="0"
+                                    className="h-6 w-12 p-0 border-0 text-right bg-transparent text-xs font-semibold focus-visible:ring-0"
+                                  />
+                                  <span className="text-muted-foreground font-medium">DT</span>
+                                </div>
+                              )}
 
                               {/* Delete button */}
                               <Button
@@ -932,5 +942,3 @@ function AIAssistantPage() {
     </div>
   );
 }
-
-

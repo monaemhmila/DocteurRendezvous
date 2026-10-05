@@ -6,6 +6,50 @@ import { Patient } from "../patients/patient.model";
 import { Appointment } from "../appointments/appointment.model";
 import { z } from "zod";
 import { AuthRequest } from "../../shared/middleware/requireAuth";
+import { getPlanLimits, getQuotaPercent, FEATURE_LABELS, PlanFeatureKey } from "../../shared/plan-limits";
+
+const getDefaultServices = (specialty: string) => {
+  const norm = specialty.toLowerCase().trim();
+  if (norm.includes("dent")) {
+    return [
+      { id: "s1", name: "Consultation Dentaire", durationMin: 30, price: 60, description: "Consultation de routine" },
+      { id: "s2", name: "Détartrage", durationMin: 30, price: 80, description: "Nettoyage complet" },
+      { id: "s3", name: "Soin Carie / Composite", durationMin: 45, price: 120, description: "Soin de carie standard" },
+      { id: "s4", name: "Extraction simple", durationMin: 45, price: 100 },
+      { id: "s5", name: "Urgence Dentaire", durationMin: 30, price: 80 },
+    ];
+  } else if (norm.includes("derma")) {
+    return [
+      { id: "s1", name: "Consultation Dermatologique", durationMin: 20, price: 60 },
+      { id: "s2", name: "Séance de Laser", durationMin: 45, price: 150 },
+      { id: "s3", name: "Retrait grain de beauté", durationMin: 30, price: 120 },
+    ];
+  } else if (norm.includes("gyn")) {
+    return [
+      { id: "s1", name: "Consultation Gynécologique", durationMin: 30, price: 70 },
+      { id: "s2", name: "Suivi de grossesse", durationMin: 30, price: 60 },
+      { id: "s3", name: "Échographie", durationMin: 30, price: 90 },
+    ];
+  } else if (norm.includes("cardio")) {
+    return [
+      { id: "s1", name: "Consultation Cardiologique", durationMin: 30, price: 80 },
+      { id: "s2", name: "ECG", durationMin: 20, price: 100 },
+      { id: "s3", name: "Échographie cardiaque", durationMin: 45, price: 150 },
+    ];
+  } else if (norm.includes("péd") || norm.includes("ped")) {
+    return [
+      { id: "s1", name: "Consultation Pédiatrique", durationMin: 30, price: 60 },
+      { id: "s2", name: "Vaccination", durationMin: 15, price: 40 },
+    ];
+  } else {
+    // Default / Médecine Générale
+    return [
+      { id: "s1", name: "Consultation Générale", durationMin: 20, price: 50 },
+      { id: "s2", name: "Visite de contrôle", durationMin: 15, price: 40 },
+      { id: "s3", name: "Certificat Médical", durationMin: 15, price: 40 },
+    ];
+  }
+};
 
 function toTenantPublicDTO(tenant: any) {
   const obj = tenant.toObject ? tenant.toObject() : { ...tenant };
@@ -49,6 +93,7 @@ const updateTenantSchema = z.object({
   suspensionReason: z.string().optional(),
   ownerName: z.string().optional(),
   ownerEmail: z.string().email().optional(),
+  settings: z.any().optional(),
 });
 
 export const createTenant = async (req: AuthRequest, res: Response) => {
@@ -73,6 +118,9 @@ export const createTenant = async (req: AuthRequest, res: Response) => {
       address: data.address || "",
       status: "active",
       plan: data.plan || "pro",
+      settings: {
+        services: getDefaultServices(data.specialty || "Générale"),
+      },
     });
 
     // 2. Setup Password
@@ -170,13 +218,31 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
     }
 
     if (data.name) tenant.name = data.name;
-    if (data.specialty !== undefined) tenant.specialty = data.specialty;
+    if (data.specialty !== undefined) {
+      const newSpecialty = data.specialty.trim();
+      // If specialty changed or services are empty, re-inject defaults
+      if (tenant.specialty !== newSpecialty || !tenant.settings?.services || tenant.settings.services.length === 0) {
+        tenant.settings = tenant.settings || {};
+        if (!tenant.settings.services || tenant.settings.services.length === 0) {
+          tenant.settings.services = getDefaultServices(newSpecialty);
+          tenant.markModified("settings");
+        }
+      }
+      tenant.specialty = newSpecialty;
+    }
     if (data.email !== undefined) tenant.email = data.email;
     if (data.phone !== undefined) tenant.phone = data.phone;
     if (data.address !== undefined) tenant.address = data.address;
     if (data.plan !== undefined) tenant.plan = data.plan;
     if (data.status !== undefined) tenant.status = data.status;
     if (data.suspensionReason !== undefined) tenant.suspensionReason = data.suspensionReason;
+    if (data.settings !== undefined) {
+      tenant.settings = {
+        ...(tenant.settings || {}),
+        ...data.settings,
+      };
+      tenant.markModified("settings");
+    }
 
     await tenant.save();
 
@@ -327,7 +393,18 @@ export const updateCurrentTenant = async (req: AuthRequest, res: Response) => {
     const { name, specialty, email, phone, address, settings } = req.body;
 
     if (name !== undefined) tenant.name = name.trim();
-    if (specialty !== undefined) tenant.specialty = specialty.trim();
+    if (specialty !== undefined) {
+      const newSpecialty = specialty.trim();
+      // If specialty changed or services are empty, re-inject defaults
+      if (tenant.specialty !== newSpecialty || !tenant.settings?.services || tenant.settings.services.length === 0) {
+        tenant.settings = tenant.settings || {};
+        if (!tenant.settings.services || tenant.settings.services.length === 0) {
+          tenant.settings.services = getDefaultServices(newSpecialty);
+          tenant.markModified("settings");
+        }
+      }
+      tenant.specialty = newSpecialty;
+    }
     if (email !== undefined) tenant.email = email.trim().toLowerCase();
     if (phone !== undefined) tenant.phone = phone.trim();
     if (address !== undefined) tenant.address = address.trim();
@@ -479,6 +556,117 @@ export const testAIKey = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+/**
+ * GET /tenants/plan-usage
+ * Returns real-time quota consumption vs plan limits for the current tenant.
+ */
+export const getPlanUsage = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return res.status(403).json({ error: "NO_TENANT_CONTEXT" });
 
+    const tenant = await Tenant.findById(tenantId).select("plan status name");
+    if (!tenant || tenant.status !== "active") {
+      return res.status(403).json({ error: "TENANT_SUSPENDED" });
+    }
 
+    const limits = getPlanLimits(tenant.plan);
+
+    // First day of current month for monthly quotas
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [patientCount, userCount, appointmentCount] = await Promise.all([
+      Patient.countDocuments({ tenantId }),
+      User.countDocuments({ tenantId }),
+      Appointment.countDocuments({ tenantId, createdAt: { $gte: monthStart } }),
+    ]);
+
+    const quotas = {
+      patients: {
+        current: patientCount,
+        max: limits.maxPatients,
+        percent: getQuotaPercent(patientCount, limits.maxPatients),
+        exceeded: limits.maxPatients !== -1 && patientCount >= limits.maxPatients,
+      },
+      users: {
+        current: userCount,
+        max: limits.maxUsers,
+        percent: getQuotaPercent(userCount, limits.maxUsers),
+        exceeded: limits.maxUsers !== -1 && userCount >= limits.maxUsers,
+      },
+      appointmentsThisMonth: {
+        current: appointmentCount,
+        max: limits.maxAppointmentsPerMonth,
+        percent: getQuotaPercent(appointmentCount, limits.maxAppointmentsPerMonth),
+        exceeded: limits.maxAppointmentsPerMonth !== -1 && appointmentCount >= limits.maxAppointmentsPerMonth,
+      },
+    };
+
+    // Feature flags
+    const featureKeys = [
+      "aiEnabled", "aiAutoBooking", "waitlistEnabled", "recoveryEnabled",
+      "analyticsEnabled", "multiDoctorEnabled", "customBrandingEnabled",
+      "exportEnabled", "noShowPolicyEnabled", "whatsappEnabled", "prioritySupport",
+    ] as PlanFeatureKey[];
+
+    const features = featureKeys.map((key) => ({
+      key,
+      label: FEATURE_LABELS[key],
+      enabled: !!(limits[key as keyof typeof limits]),
+    }));
+
+    res.json({
+      plan: tenant.plan || "pro",
+      limits,
+      quotas,
+      features,
+    });
+  } catch (error) {
+    console.error("getPlanUsage error:", error);
+    res.status(500).json({ error: "Erreur interne" });
+  }
+};
+
+/**
+ * GET /tenants/:id/plan-usage  (super_admin only)
+ * Returns quota consumption for any tenant.
+ */
+export const getTenantPlanUsage = async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.user?.role !== "super_admin") {
+      return res.status(403).json({ error: "Acces reserve au Super Admin" });
+    }
+
+    const { id } = req.params;
+    const tenant = await Tenant.findById(id).select("plan status name");
+    if (!tenant) return res.status(404).json({ error: "Cabinet introuvable" });
+
+    const limits = getPlanLimits(tenant.plan);
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [patientCount, userCount, appointmentCount] = await Promise.all([
+      Patient.countDocuments({ tenantId: id }),
+      User.countDocuments({ tenantId: id }),
+      Appointment.countDocuments({ tenantId: id, createdAt: { $gte: monthStart } }),
+    ]);
+
+    res.json({
+      tenantId: id,
+      tenantName: tenant.name,
+      plan: tenant.plan || "pro",
+      limits,
+      usage: {
+        patients: { current: patientCount, max: limits.maxPatients, percent: getQuotaPercent(patientCount, limits.maxPatients) },
+        users: { current: userCount, max: limits.maxUsers, percent: getQuotaPercent(userCount, limits.maxUsers) },
+        appointmentsThisMonth: { current: appointmentCount, max: limits.maxAppointmentsPerMonth, percent: getQuotaPercent(appointmentCount, limits.maxAppointmentsPerMonth) },
+      },
+    });
+  } catch (error) {
+    console.error("getTenantPlanUsage error:", error);
+    res.status(500).json({ error: "Erreur interne" });
+  }
+};
 

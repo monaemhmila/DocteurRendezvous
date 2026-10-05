@@ -12,6 +12,14 @@ export interface AuthUser {
   tenantId?: string;
   tenantName?: string;
   initials: string;
+  permissions?: {
+    appointments: boolean;
+    patients: boolean;
+    conversations: boolean;
+    aiConfig: boolean;
+    analytics: boolean;
+    settings: boolean;
+  };
 }
 
 interface AuthContextValue {
@@ -22,6 +30,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<AuthUser>;
   logout: () => void;
   isSuperAdmin: boolean;
+  hasPermission: (key: keyof NonNullable<AuthUser["permissions"]>) => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -39,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Reject old mock tokens — force re-login with real backend
       if (storedToken.startsWith("mock_token_")) {
         localStorage.removeItem("auth_token");
+        localStorage.removeItem("refresh_token");
         localStorage.removeItem("auth_user");
         setIsLoading(false);
         return;
@@ -48,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(JSON.parse(storedUser));
       } catch {
         localStorage.removeItem("auth_token");
+        localStorage.removeItem("refresh_token");
         localStorage.removeItem("auth_user");
       }
     }
@@ -56,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1"}/auth/login`, {
+      const res = await fetch(`${import.meta.env['VITE_API_URL'] || "http://localhost:5000/api/v1"}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -71,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(data.token);
       setUser(data.user);
       localStorage.setItem("auth_token", data.token);
+      localStorage.setItem("refresh_token", data.refreshToken);
       localStorage.setItem("auth_user", JSON.stringify(data.user));
       
       return data.user;
@@ -83,7 +95,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setUser(null);
     localStorage.removeItem("auth_token");
+    localStorage.removeItem("refresh_token");
     localStorage.removeItem("auth_user");
+  };
+
+  const hasPermission = (key: keyof NonNullable<AuthUser["permissions"]>) => {
+    if (!user) return false;
+    if (user.role === "clinic_owner" || user.role === "super_admin") return true;
+    if (user.permissions) return !!user.permissions[key];
+    return true; // fallback
   };
 
   return (
@@ -96,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         isSuperAdmin: user?.role === "super_admin",
+        hasPermission,
       }}
     >
       {children}

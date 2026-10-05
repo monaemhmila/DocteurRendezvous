@@ -41,24 +41,35 @@ export const login = async (req: Request, res: Response) => {
 
     const initials = `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase();
 
-    const token = jwt.sign(
+    const accessToken = jwt.sign(
       {
         id: user._id.toString(),
         tenantId: user.tenantId ? user.tenantId.toString() : "",
         role: user.role,
       },
       process.env.JWT_SECRET!,
-      { expiresIn: "1d" }
+      { expiresIn: "15m" } // Short-lived access token
+    );
+
+    const refreshToken = jwt.sign(
+      {
+        id: user._id.toString(),
+        tokenVersion: user.tokenVersion || 0,
+      },
+      process.env.JWT_SECRET!,
+      { expiresIn: "7d" } // Long-lived refresh token
     );
 
     res.json({
-      token,
+      token: accessToken,
+      refreshToken,
       user: {
         id: user._id,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
+        permissions: user.permissions,
         tenantId: user.tenantId,
         tenantName,
         initials,
@@ -103,3 +114,73 @@ export const registerDemo = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Internal server error" });
   }
 }
+
+export const refreshToken = async (req: Request, res: Response) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken) {
+    return res.status(401).json({ error: "Refresh token missing" });
+  }
+  
+  try {
+    const payload = jwt.verify(refreshToken, process.env.JWT_SECRET!) as any;
+    const user = await User.findById(payload.id);
+    
+    if (!user) {
+      return res.status(401).json({ error: "User not found" });
+    }
+    
+    if (user.tokenVersion !== payload.tokenVersion) {
+      return res.status(401).json({ error: "Token invalid or expired" });
+    }
+    
+    let tenantName: string | undefined;
+    if (user.tenantId) {
+      const tenant = await Tenant.findById(user.tenantId);
+      if (tenant) {
+        if (tenant.status === "suspended") {
+          return res.status(403).json({ error: "Accès suspendu" });
+        }
+        tenantName = tenant.name;
+      }
+    }
+
+    const accessToken = jwt.sign(
+      {
+        id: user._id.toString(),
+        tenantId: user.tenantId ? user.tenantId.toString() : "",
+        role: user.role,
+      },
+      process.env.JWT_SECRET!,
+      { expiresIn: "15m" }
+    );
+    
+    const newRefreshToken = jwt.sign(
+      {
+        id: user._id.toString(),
+        tokenVersion: user.tokenVersion || 0,
+      },
+      process.env.JWT_SECRET!,
+      { expiresIn: "7d" }
+    );
+    
+    const initials = `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase();
+
+    res.json({
+      token: accessToken,
+      refreshToken: newRefreshToken,
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        permissions: user.permissions,
+        tenantId: user.tenantId,
+        tenantName,
+        initials,
+      },
+    });
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid refresh token" });
+  }
+};

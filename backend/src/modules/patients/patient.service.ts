@@ -3,7 +3,8 @@ import { PaginationParams, PaginatedResult, buildPaginationMeta } from "../../sh
 
 export const patientService = {
   getPatients: async (tenantId: string, pagination: PaginationParams): Promise<PaginatedResult<any>> => {
-    const filter = { tenantId };
+    // Exclude auto-created placeholder patients (status="lead") — they have no confirmed identity yet
+    const filter: any = { tenantId, status: { $ne: "lead" } };
     const [data, total] = await Promise.all([
       Patient.find(filter)
         .sort({ createdAt: -1, _id: -1 })

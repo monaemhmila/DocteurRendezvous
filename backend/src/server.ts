@@ -14,6 +14,7 @@ import waitlistRoutes from "./modules/waitlist/waitlist.routes";
 import userRoutes from "./modules/users/user.routes";
 import communicationRoutes from "./modules/communications/communication.routes";
 import aiRoutes from "./modules/ai/ai.routes";
+import sseRoutes from "./modules/communications/sse.routes";
 
 dotenv.config();
 
@@ -58,6 +59,7 @@ app.use("/api/v1/waitlist", waitlistRoutes);
 app.use("/api/v1/users", userRoutes);
 app.use("/api/v1/communications", communicationRoutes);
 app.use("/api/v1/ai", aiRoutes);
+app.use("/api/v1/notifications", sseRoutes);
 
 // Health check
 app.get("/health", (req: Request, res: express.Response) => {
@@ -72,24 +74,30 @@ app.use((req: Request, res: express.Response) => {
 import bcrypt from "bcrypt";
 import { User } from "./modules/users/user.model";
 
-async function ensureSuperAdmin() {
+async function ensureDemoAccounts() {
   try {
-    const email = (process.env.SUPER_ADMIN_EMAIL || "admin@medical-ai.com").toLowerCase().trim();
-    const existing = await User.findOne({ email });
-    if (!existing) {
-      const password = process.env.SUPER_ADMIN_PASSWORD || "admin123";
-      const passwordHash = await bcrypt.hash(password, 10);
-      await User.create({
-        email,
-        passwordHash,
-        firstName: "Super",
-        lastName: "Admin",
-        role: "super_admin",
-      });
-      console.log(`👑 Super Admin account ensured: ${email}`);
+    const adminEmail = (process.env.SUPER_ADMIN_EMAIL || "admin@medical-ai.com").toLowerCase().trim();
+    if (!(await User.findOne({ email: adminEmail }))) {
+      const passwordHash = await bcrypt.hash(process.env.SUPER_ADMIN_PASSWORD || "admin123", 10);
+      await User.create({ email: adminEmail, passwordHash, firstName: "Super", lastName: "Admin", role: "super_admin" });
+      console.log(`👑 Super Admin account ensured: ${adminEmail}`);
+    }
+
+    const demoEmails = ["demo@dentaire-tunis.com", "demo@cabinet-cardio.com"];
+    for (const email of demoEmails) {
+      if (!(await User.findOne({ email }))) {
+        console.log(`⚠️ Demo account missing for ${email}, but auto-seed is DISABLED to prevent data loss.`);
+        // If a demo user is missing, it's safest to re-run the whole seed script
+        // to restore tenants, users, and patients properly.
+        // const seedScript = require("./scripts/seed-database");
+        // if (seedScript && seedScript.seed) {
+        //    await seedScript.seed();
+        // }
+        break; // Seed handles all accounts
+      }
     }
   } catch (err) {
-    console.error("Failed to ensure super admin:", err);
+    console.error("Failed to ensure demo accounts:", err);
   }
 }
 
@@ -102,9 +110,12 @@ const startServer = async () => {
   }
 
   await connectDB();
-  await ensureSuperAdmin();
+  await ensureDemoAccounts();
   const { reminderService } = await import("./modules/appointments/appointment.service");
   const { Appointment } = await import("./modules/appointments/appointment.model");
+  const { WorkerService } = await import("./modules/jobs/worker.service");
+  const workerService = new WorkerService();
+  workerService.start();
   await Appointment.syncIndexes();
   reminderService.startBackgroundWorker();
 

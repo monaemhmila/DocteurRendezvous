@@ -16,6 +16,7 @@
 // ─── Weekday tables ──────────────────────────────────────────────────────────
 const WEEKDAYS_FR = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"] as const;
 const WEEKDAYS_EN = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
+const WEEKDAYS_TUN = ["a7ad", "ethnin", "thletha", "erb3a", "khmis", "jem3a", "sebt"] as const;
 const MONTHS_FR = [
   "janvier", "février", "mars", "avril", "mai", "juin",
   "juillet", "août", "septembre", "octobre", "novembre", "décembre",
@@ -85,6 +86,10 @@ export function getWeekdayFr(dateIso: string): string {
   return WEEKDAYS_FR[isoDateToWeekdayIndex(dateIso)];
 }
 
+export function getWeekdayTun(dateIso: string): string {
+  return WEEKDAYS_TUN[isoDateToWeekdayIndex(dateIso)];
+}
+
 export function getWeekdayEn(dateIso: string): string {
   return WEEKDAYS_EN[isoDateToWeekdayIndex(dateIso)];
 }
@@ -132,6 +137,9 @@ export interface TemporalContext {
 
   /** The IANA timezone used */
   timezone: string;
+
+  /** A full string representation of the next 30 days with Tunisian and French weekday names */
+  next30DaysCalendar: string;
 }
 
 /**
@@ -148,6 +156,14 @@ export function buildTemporalContext(tz?: string, now?: Date): TemporalContext {
   const tomorrow = addDays(currentDate, 1);
   const dayAfterTomorrow = addDays(currentDate, 2);
 
+  let next30DaysCalendar = "";
+  for (let i = 0; i < 31; i++) {
+    const d = addDays(currentDate, i);
+    const wFr = getWeekdayFr(d);
+    const wTun = getWeekdayTun(d);
+    next30DaysCalendar += `- ${d} : ${wFr} (Tunisian: ${wTun})\n`;
+  }
+
   return {
     currentDateTime: `${currentDate}T${currentTime}`,
     currentDate,
@@ -161,6 +177,7 @@ export function buildTemporalContext(tz?: string, now?: Date): TemporalContext {
     dayAfterTomorrowWeekdayFr: getWeekdayFr(dayAfterTomorrow),
     dayAfterTomorrowWeekdayEn: getWeekdayEn(dayAfterTomorrow),
     timezone,
+    next30DaysCalendar
   };
 }
 

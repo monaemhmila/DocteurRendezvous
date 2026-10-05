@@ -38,6 +38,9 @@ export const getPatients = async (req: AuthRequest, res: Response) => {
         lastVisit: p.metrics?.lastVisit,
         revenue: p.metrics?.revenue ?? 0,
       },
+      specialtyData: p.specialtyData || {},
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
     }));
 
     res.json({
@@ -73,6 +76,10 @@ export const getPatientById = async (req: AuthRequest, res: Response) => {
       notes: patient.notes,
       nextAppointmentAt: patient.nextAppointmentAt,
       metrics: patient.metrics,
+      dentalChart: patient.dentalChart || [],
+      specialtyData: patient.specialtyData || {},
+      createdAt: patient.createdAt,
+      updatedAt: patient.updatedAt,
     });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch patient" });

@@ -35,6 +35,12 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
 
     const activeConversationsCount = await Conversation.countDocuments({ tenantId, status: "active" });
     const needsHumanCount = await Conversation.countDocuments({ tenantId, needsHuman: true });
+    
+    // Taux d'automatisation = Conversations actives GÉRÉES par l'IA / Conversations totales
+    let automationRate = 100;
+    if (activeConversationsCount > 0) {
+      automationRate = Math.round(((activeConversationsCount - needsHumanCount) / activeConversationsCount) * 100);
+    }
 
     // Phase 4.1.4 Additions
     const noShowsToday = await Appointment.countDocuments({ tenantId, date: today, status: 'no_show' });
@@ -64,6 +70,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
       recoveredValue: recoveredValue || 0,
       activeConversations: activeConversationsCount,
       needsHuman: needsHumanCount,
+      automationRate,
       noShowsToday,
       noShowsThisWeek,
       activeFollowUps,

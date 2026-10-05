@@ -46,8 +46,9 @@ import {
   getWeekdayFr,
   formatDateFr,
 } from "./temporal.utils";
+import { detectLanguageFromText } from "./ai.utils";
 
-const MAX_MESSAGES = 20;
+const MAX_MESSAGES = 6;
 
 export interface AIActionProposal {
   type: string;
@@ -60,12 +61,20 @@ export interface AIActionProposal {
     durationMin: number;
     treatment: string;
   };
+  patientInfo?: {
+    firstName: string;
+    lastName: string;
+  };
 }
 
 export interface AISuggestionResult {
   suggestion: string;
   intent?: string;
   patientInfo?: {
+    firstName?: string;
+    lastName?: string;
+  };
+  extractedPatient?: {
     firstName?: string;
     lastName?: string;
   };
@@ -93,6 +102,7 @@ export interface AISuggestionResult {
    * "reply" was extracted. Only structured replies may be auto-sent to a patient.
    */
   structured: boolean;
+  detectedLang?: "fr" | "ar" | "arabizi" | "en";
 }
 
 /**
@@ -205,7 +215,7 @@ export class AIService {
         _id: patientIdObj,
         tenantId: tenantIdObj,
       })
-        .select("firstName lastName language status metrics")
+        .select("firstName lastName language status metrics notes tags")
         .lean();
 
       if (patient) {
@@ -220,63 +230,102 @@ export class AIService {
         if (patient.firstName !== undefined) aiContext.firstName = patient.firstName;
         if (patient.lastName !== undefined) aiContext.lastName = patient.lastName;
         if (patient.language !== undefined) aiContext.language = patient.language;
+        if (patient.notes !== undefined) aiContext.medicalNotes = patient.notes;
+        if (patient.tags && patient.tags.length > 0) aiContext.patientTags = patient.tags;
         aiContext.isNewPatient = isPlaceholder;
         aiContext.patientNoShowCount = patient.metrics?.noShowCount || 0;
 
-        // Fetch Next Appointments for the conversation patient themselves
+        // Phase 4 - Affichage des rendez-vous: single query for all authorized patients
         const now = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-        const appointments = await Appointment.find({
-          tenantId: tenantIdObj,
-          patientId: patientIdObj,
-          date: { $gte: now },
-          status: { $in: ["scheduled", "confirmed"] }
-        }).sort({ date: 1, startTime: 1 }).lean();
-
-        if (appointments.length > 0) {
-          aiContext.appointments = appointments.map(appt => ({
-            id: appt._id.toString(),
-            date: appt.date,
-            startTime: appt.startTime,
-            endTime: appt.endTime,
-            treatment: appt.treatment,
-            status: appt.status,
-          }));
-        }
-
-        // ── Fetch family appointments (other patients linked to the same phone) ───
         const convoPhone = (conversation as any).contactWaId;
+        const authorizedPatientIds: mongoose.Types.ObjectId[] = [patientIdObj];
+        
         if (convoPhone) {
-          // Find all patients that share this phone number in this tenant
           const familyPatients = await Patient.find({
             tenantId: tenantIdObj,
             phone: convoPhone,
-            _id: { $ne: patientIdObj }, // exclude the main patient
-          }).select("_id firstName lastName").lean();
+            _id: { $ne: patientIdObj },
+          }).select("_id firstName lastName notes tags").lean();
+          familyPatients.forEach(p => authorizedPatientIds.push(new mongoose.Types.ObjectId(p._id.toString())));
+          // Store family medical data keyed by patient ID for later use
+          (conversation as any).__familyPatientData = familyPatients.reduce((acc: any, p: any) => {
+            acc[p._id.toString()] = { firstName: p.firstName, lastName: p.lastName, notes: p.notes, tags: p.tags };
+            return acc;
+          }, {});
+        }
 
-          if (familyPatients.length > 0) {
-            const familyPatientIds = familyPatients.map(p => p._id);
-            const familyAppts = await Appointment.find({
-              tenantId: tenantIdObj,
-              patientId: { $in: familyPatientIds },
-              date: { $gte: now },
-              status: { $in: ["scheduled", "confirmed"] },
-            }).sort({ date: 1, startTime: 1 }).lean();
+        const allAppointments = await Appointment.find({
+          tenantId: tenantIdObj,
+          status: { $in: ["scheduled", "confirmed"] },
+          patientId: { $in: authorizedPatientIds },
+          date: { $gte: now },
+        })
+          .sort({ date: 1, startTime: 1 })
+          .populate("patientId", "firstName lastName phone")
+          .lean();
 
-            if (familyAppts.length > 0) {
-              const patientMap = new Map(familyPatients.map(p => [p._id.toString(), p]));
-              aiContext.familyAppointments = familyAppts.map(fa => {
-                const fp = patientMap.get(fa.patientId.toString());
-                const name = fp ? `${(fp as any).firstName} ${(fp as any).lastName}`.trim() : "Membre de la famille";
-                return {
-                  appointmentId: fa._id.toString(),
-                  patientId: fa.patientId.toString(),
-                  patientName: name,
-                  date: fa.date,
-                  startTime: fa.startTime,
-                  endTime: fa.endTime,
-                  treatment: fa.treatment,
-                  status: fa.status,
-                };
+        const mainAppointments = [];
+        const familyAppointments = [];
+
+        for (const appt of allAppointments) {
+          const p = appt.patientId as any;
+          const isMainPatient = p && p._id.toString() === patientIdObj.toString();
+          
+          if (isMainPatient) {
+            mainAppointments.push({
+              id: appt._id.toString(),
+              date: appt.date,
+              startTime: appt.startTime,
+              endTime: appt.endTime,
+              treatment: appt.treatment,
+              status: appt.status,
+            });
+          } else {
+            const name = p ? `${p.firstName || ""} ${p.lastName || ""}`.trim() : "Membre de la famille";
+            const familyMedData = (conversation as any).__familyPatientData?.[p?._id?.toString() ?? ""];
+            familyAppointments.push({
+              appointmentId: appt._id.toString(),
+              patientId: p ? p._id.toString() : "",
+              patientName: name || "Membre de la famille",
+              date: appt.date,
+              startTime: appt.startTime,
+              endTime: appt.endTime,
+              treatment: appt.treatment,
+              status: appt.status,
+              ...(familyMedData?.notes ? { medicalNotes: familyMedData.notes } : {}),
+              ...(familyMedData?.tags?.length > 0 ? { tags: familyMedData.tags } : {}),
+            });
+          }
+        }
+
+        if (mainAppointments.length > 0) aiContext.appointments = mainAppointments;
+        if (familyAppointments.length > 0) aiContext.familyAppointments = familyAppointments;
+
+        // Merge dossier-only family members AFTER the appointment loop so we never lose data.
+        // For each known family patient: if already in familyAppointments (via appointment),
+        // ensure their tags are present. If not present at all, add a dossier-only entry.
+        const familyData = (conversation as any).__familyPatientData ?? {};
+        if (Object.keys(familyData).length > 0) {
+          if (!aiContext.familyAppointments) aiContext.familyAppointments = [];
+          for (const [patientId, data] of Object.entries(familyData) as [string, any][]) {
+            const existing = aiContext.familyAppointments.find((fa: any) => fa.patientId === patientId);
+            if (existing) {
+              // Already there from appointment — make sure tags are merged in
+              if (!existing.tags && data.tags && data.tags.length > 0) existing.tags = data.tags;
+              if (!existing.medicalNotes && data.notes) existing.medicalNotes = data.notes;
+            } else if (data.notes || (data.tags && data.tags.length > 0)) {
+              // Not in the list at all — add dossier-only entry
+              aiContext.familyAppointments.push({
+                appointmentId: "dossier-only-" + patientId,
+                patientId,
+                patientName: `${data.firstName || ""} ${data.lastName || ""}`.trim() || "Membre de la famille",
+                date: "",
+                startTime: "",
+                endTime: "",
+                treatment: "",
+                status: "no_appointment",
+                ...(data.notes ? { medicalNotes: data.notes } : {}),
+                ...(data.tags && data.tags.length > 0 ? { tags: data.tags } : {}),
               });
             }
           }
@@ -322,6 +371,7 @@ export class AIService {
       aiContext.pendingBookingContext = {
         date: conversation.pendingBookingContext.date,
         proposedSlots: conversation.pendingBookingContext.proposedSlots,
+        ...(conversation.pendingBookingContext.targetPatientInfo ? { targetPatientInfo: conversation.pendingBookingContext.targetPatientInfo } : {}),
       };
     }
 
@@ -357,6 +407,7 @@ export class AIService {
     let patientInfo: { firstName?: string; lastName?: string } | undefined;
     let action: AIActionProposal | null = null;
     let proposedSlots: Array<{ startTime: string; endTime: string }> | undefined;
+    let detectedLangResult: "fr" | "ar" | "arabizi" | "en" | undefined;
     let needsHumanEscalation = false;
     let structured = false;
 
@@ -397,12 +448,12 @@ export class AIService {
           // slotsResult.weekdayFr (built from the same logic) will always match.
           const requestedWeekdayFr = getWeekdayFr(scheduling.date);
 
-          const slotsResult = await availabilityService.getAvailableSlots({
-            tenantId,
-            date: scheduling.date,
-            durationMin: scheduling.durationMin,
-            timePreference: scheduling.timePreference,
-          });
+            const slotsResult = await availabilityService.getAvailableSlots({
+              tenantId,
+              date: scheduling.date,
+              durationMin: scheduling.durationMin,
+              timePreference: scheduling.timePreference,
+            });
 
           // businessHoursStr comes from the SAME resolveDaySchedule() call inside getAvailableSlots().
           // We NEVER recompute it from rawBH here — that was the P0 divergence source (Phase 6.14).
@@ -425,14 +476,14 @@ export class AIService {
             });
 
             if (nextDay) {
-              systemUpdate = `[SYSTEM] Le cabinet est FERMÉ le ${requestedDateFr} (${slotsResult.weekdayFr ?? requestedWeekdayFr}). Le prochain jour d'ouverture avec des créneaux disponibles est le ${nextDay.dateFr} (${nextDay.weekdayFr}). RÈGLE STRICTE: Expliquez que le cabinet est fermé ce jour-là. Proposez le ${nextDay.weekdayFr} ${nextDay.dateFr} et demandez au patient si cette date lui convient. NE PROPOSEZ PAS ENCORE D'HORAIRES PRÉCIS pour le ${nextDay.weekdayFr} sans son accord.`;
+              systemUpdate = `[SYSTEM] Le cabinet est FERMÉ le ${requestedDateFr} (${slotsResult.weekdayFr ?? requestedWeekdayFr}). Le prochain jour d'ouverture avec des créneaux disponibles est le ${nextDay.dateFr} (${nextDay.weekdayFr}). RÈGLE STRICTE: Expliquez DANS LA LANGUE DU PATIENT que le cabinet est fermé ce jour-là. Proposez le ${nextDay.weekdayFr} ${nextDay.dateFr} et demandez au patient si cette date lui convient. NE PROPOSEZ PAS ENCORE D'HORAIRES PRÉCIS pour le ${nextDay.weekdayFr} sans son accord.`;
             } else {
-              systemUpdate = `[SYSTEM] Le cabinet est FERMÉ le ${requestedDateFr} (${slotsResult.weekdayFr ?? requestedWeekdayFr}). Informez le patient que le cabinet est fermé ce jour-là et proposez de vérifier les disponibilités lors de la prochaine réouverture.`;
+              systemUpdate = `[SYSTEM] Le cabinet est FERMÉ le ${requestedDateFr} (${slotsResult.weekdayFr ?? requestedWeekdayFr}). Informez le patient DANS SA LANGUE que le cabinet est fermé ce jour-là et proposez de vérifier les disponibilités lors de la prochaine réouverture.`;
             }
           } else if (slotsResult.status === "OPEN_WITH_AVAILABILITY" && slotsResult.slots && slotsResult.slots.length > 0) {
             proposedSlots = slotsResult.slots;
             const slotsStr = slotsResult.slots.map((s) => `${s.startTime.replace(":", "h")}`).join(", ");
-            systemUpdate = `[SYSTEM] Date: ${requestedDateFr}.${hoursDisplay} Créneaux disponibles: ${slotsStr}. Formulez une réponse claire présentant ces créneaux. N'inventez aucun autre horaire.`;
+            systemUpdate = `[SYSTEM] Date: ${requestedDateFr}.${hoursDisplay} Créneaux disponibles: ${slotsStr}. Formulez une réponse claire DANS LA LANGUE DU PATIENT (Tunisien ou Français) présentant ces créneaux. N'inventez aucun autre horaire. Ne dites pas "Pour le mardi", traduisez naturellement.`;
           } else if (slotsResult.status === "OPEN_FULL" || (slotsResult.slots && slotsResult.slots.length === 0)) {
             proposedSlots = undefined;
             const nextDay = await availabilityService.findNextBookableDay({
@@ -442,15 +493,33 @@ export class AIService {
             });
 
             if (nextDay) {
-              systemUpdate = `[SYSTEM] Le planning est COMPLET le ${requestedDateFr} (${slotsResult.weekdayFr ?? requestedWeekdayFr}).${hoursDisplay} Le prochain jour avec des créneaux disponibles est le ${nextDay.dateFr} (${nextDay.weekdayFr}). RÈGLE STRICTE: Expliquez poliment que le planning est complet pour ce jour. Mentionnez que le prochain jour ouvert avec disponibilités est le ${nextDay.weekdayFr} ${nextDay.dateFr} et demandez si le patient souhaite voir les créneaux pour cette date. NE PROPOSEZ PAS ENCORE D'HORAIRES PRÉCIS pour le ${nextDay.weekdayFr} sans son accord.`;
+              systemUpdate = `[SYSTEM] Le planning est COMPLET le ${requestedDateFr} (${slotsResult.weekdayFr ?? requestedWeekdayFr}).${hoursDisplay} Le prochain jour avec des créneaux disponibles est le ${nextDay.dateFr} (${nextDay.weekdayFr}). RÈGLE STRICTE: Expliquez poliment DANS LA LANGUE DU PATIENT que le planning est complet pour ce jour. Mentionnez que le prochain jour ouvert avec disponibilités est le ${nextDay.weekdayFr} ${nextDay.dateFr} et demandez si le patient souhaite voir les créneaux pour cette date. NE PROPOSEZ PAS ENCORE D'HORAIRES PRÉCIS pour le ${nextDay.weekdayFr} sans son accord.`;
             } else {
-              systemUpdate = `[SYSTEM] Le planning est COMPLET le ${requestedDateFr} (${slotsResult.weekdayFr ?? requestedWeekdayFr}).${hoursDisplay} Aucun créneau disponible dans les prochains jours. Demandez au patient s'il souhaite être mis sur liste d'attente.`;
+              systemUpdate = `[SYSTEM] Le planning est COMPLET le ${requestedDateFr} (${slotsResult.weekdayFr ?? requestedWeekdayFr}).${hoursDisplay} Aucun créneau disponible dans les prochains jours. Demandez au patient DANS SA LANGUE s'il souhaite être mis sur liste d'attente.`;
             }
           }
 
+          // Detect patient language from their messages for PASS 2 hard lock
+          const inboundTexts = messages
+            .filter((m: any) => m.direction === "inbound")
+            .map((m: any) => m.content || "")
+            .join(" ");
+          const detectedLangStr = detectLanguageFromText(inboundTexts, aiContext.language);
+          detectedLangResult = detectedLangStr;
+          const langLockMap: Record<string, string> = {
+            fr: "FRANÇAIS UNIQUEMENT (aucun mot tunisien ou arabe)",
+            arabizi: "ARABIZI TUNISIEN UNIQUEMENT (caractères latins, aucune phrase française)",
+            ar: "ARABE TUNISIEN EN ÉCRITURE ARABE UNIQUEMENT",
+            en: "ANGLAIS UNIQUEMENT",
+          };
+          const langLock = langLockMap[detectedLangStr] ?? "FRANÇAIS UNIQUEMENT";
+          const langConstraint = `\n🔴 CONTRAINTE ABSOLUE DE LANGUE (détectée par le backend) : réponds en ${langLock}. Cette contrainte prime sur tout le reste.`;
+
+
+
           // Add the Pass 1 response and the System Update to messages
           aiMessages.push({ role: "assistant", content: rawResponse });
-          aiMessages.push({ role: "system", content: systemUpdate });
+          aiMessages.push({ role: "system", content: systemUpdate + langConstraint });
 
           // Call AI Provider (PASS 2)
           rawResponse = await this.provider.generateCompletion(aiMessages);
@@ -519,6 +588,7 @@ export class AIService {
       action,
       needsHumanEscalation,
       structured,
+      detectedLang: detectedLangResult,
     };
   }
 }

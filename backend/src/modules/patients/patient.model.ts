@@ -19,6 +19,14 @@ export interface IPatient extends Document {
     lastVisit?: Date;
     revenue: number;
   };
+  dentalChart?: {
+    toothId: number;
+    status: string;
+    surfaces?: Record<string, string>;
+    notes?: string;
+    updatedAt: Date;
+  }[];
+  specialtyData?: Record<string, any>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -47,6 +55,16 @@ const PatientSchema = new Schema<IPatient>(
       lastVisit: { type: Date },
       revenue: { type: Number, default: 0 },
     },
+    dentalChart: [
+      {
+        toothId: { type: Number, required: true },
+        status: { type: String, required: true },
+        surfaces: { type: Schema.Types.Mixed },
+        notes: { type: String },
+        updatedAt: { type: Date, default: Date.now },
+      }
+    ],
+    specialtyData: { type: Schema.Types.Mixed, default: {} },
   },
   { timestamps: true }
 );

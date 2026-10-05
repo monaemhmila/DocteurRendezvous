@@ -15,9 +15,10 @@ const MONTHS = [
 
 const DAYS = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 
-export function parseISO(iso: string): Date {
+export function parseISO(iso: string | null | undefined): Date {
+  if (!iso) return new Date("");
   const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, (m ?? 1) - 1, d ?? 1, 12, 0, 0, 0);
+  return new Date(y || 2026, (m || 1) - 1, d || 1, 12, 0, 0, 0);
 }
 
 export function formatDate(iso: string | null | undefined): string {
@@ -26,28 +27,38 @@ export function formatDate(iso: string | null | undefined): string {
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-export function formatShortDate(iso: string): string {
+export function formatShortDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
   const d = parseISO(iso);
   return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
-export function formatWeekday(iso: string): string {
-  return DAYS[parseISO(iso).getDay()];
+export function formatWeekday(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return DAYS[parseISO(iso).getDay()] || "—";
 }
 
-export function formatLongDate(iso: string): string {
+export function formatLongDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
   return `${formatWeekday(iso)} ${formatDate(iso)}`;
 }
 
-export function relativeDay(iso: string): string {
-  const today = new Date();
-  today.setHours(12, 0, 0, 0);
-  const diff = Math.round((parseISO(iso).getTime() - today.getTime()) / 86_400_000);
-  if (diff === 0) return "Aujourd'hui";
-  if (diff === 1) return "Demain";
-  if (diff === -1) return "Hier";
-  if (diff > 1) return `Dans ${diff} jours`;
-  return `Il y a ${Math.abs(diff)} jours`;
+export function relativeDay(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const parsed = parseISO(iso);
+    if (isNaN(parsed.getTime())) return "—";
+    const diff = Math.round((parsed.getTime() - today.getTime()) / 86_400_000);
+    if (diff === 0) return "Aujourd'hui";
+    if (diff === 1) return "Demain";
+    if (diff === -1) return "Hier";
+    if (diff > 1) return `Dans ${diff} jours`;
+    return `Il y a ${Math.abs(diff)} jours`;
+  } catch (e) {
+    return "—";
+  }
 }
 
 export function monthsSince(iso: string | null): number | null {

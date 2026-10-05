@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useAdmin } from "@/contexts/admin-context";
 import {
   Activity,
   BarChart3,
@@ -17,6 +18,7 @@ import {
   UserCog,
   Users,
   Wallet,
+  ListTodo,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -35,13 +37,16 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const { t } = useAppState();
+  const { setShowPinModal, lockAdmin, isAdminUnlocked } = useAdmin();
+  const [clickCount, setClickCount] = useState(0);
 
   const { data: tenant } = useQuery<any>({
     queryKey: ["currentTenant"],
@@ -59,50 +64,79 @@ export function AppSidebar() {
         label: t.nav.workspace,
         items: [
           { title: t.nav.dashboard, url: "/", icon: LayoutDashboard },
-          { title: t.nav.agenda, url: "/agenda", icon: CalendarDays },
-          { title: t.nav.patients, url: "/patients", icon: Users },
-          { title: t.nav.conversations, url: "/conversations", icon: MessagesSquare },
+          hasPermission("appointments") && { title: t.nav.agenda, url: "/agenda", icon: CalendarDays },
+          hasPermission("patients") && { title: t.nav.patients, url: "/patients", icon: Users },
+          hasPermission("conversations") && { title: t.nav.conversations, url: "/conversations", icon: MessagesSquare },
           { title: t.nav.recovery, url: "/recovery", icon: HeartPulse },
-        ],
+        ].filter(Boolean) as any[],
       },
       {
         label: t.nav.automation,
         items: [
-          { title: t.nav.aiAssistant, url: "/ai-assistant", icon: Sparkles },
-          { title: t.nav.followups, url: "/follow-ups", icon: Repeat2 },
-          { title: t.nav.waitlist, url: "/waitlist", icon: ListOrdered },
-          { title: t.nav.noShows, url: "/no-shows", icon: Inbox },
-        ],
+          hasPermission("aiConfig") && { title: t.nav.aiAssistant, url: "/ai-assistant", icon: Sparkles },
+          hasPermission("appointments") && { title: t.nav.followups, url: "/follow-ups", icon: Repeat2 },
+          hasPermission("appointments") && { title: t.nav.waitlist, url: "/waitlist", icon: ListOrdered },
+          hasPermission("appointments") && { title: t.nav.noShows, url: "/no-shows", icon: Inbox },
+        ].filter(Boolean) as any[],
       },
       {
         label: t.nav.insights,
         items: [
-          { title: t.nav.analytics, url: "/analytics", icon: BarChart3 },
-          { title: t.nav.revenue, url: "/revenue", icon: Wallet },
-        ],
+          hasPermission("analytics") && { title: t.nav.analytics, url: "/analytics", icon: BarChart3 },
+          isAdminUnlocked && { title: t.nav.revenue, url: "/revenue", icon: Wallet },
+        ].filter(Boolean) as any[],
       },
       {
         label: t.nav.settings,
         items: [
-          { title: t.nav.clinic, url: "/settings/clinic", icon: Stethoscope },
-          { title: t.nav.team, url: "/settings/team", icon: UserCog },
-          { title: t.nav.aiSettings, url: "/settings/ai", icon: Cog },
-          { title: t.nav.communication, url: "/settings/communication", icon: Activity },
-          { title: t.nav.integrations, url: "/settings/integrations", icon: Plug },
-        ],
+          hasPermission("settings") && { title: t.nav.clinic, url: "/settings/clinic", icon: Stethoscope },
+          hasPermission("settings") && { title: t.nav.team, url: "/settings/team", icon: UserCog },
+          hasPermission("aiConfig") && { title: t.nav.aiSettings, url: "/settings/ai", icon: Cog },
+          hasPermission("settings") && { title: t.nav.communication, url: "/settings/communication", icon: Activity },
+          isAdminUnlocked && { title: "Catalogue (Soins)", url: "/settings/catalog", icon: ListTodo },
+          hasPermission("settings") && { title: t.nav.integrations, url: "/settings/integrations", icon: Plug },
+        ].filter(Boolean) as any[],
       },
-    ],
-    [t],
+    ].filter(g => g.items.length > 0),
+    [t, isAdminUnlocked, user]
   );
 
   const isActive = (url: string) =>
     url === "/" ? pathname === "/" : pathname.startsWith(url);
 
+  const handleSecretClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (isAdminUnlocked) {
+      lockAdmin();
+      setClickCount(0);
+      return;
+    }
+    
+    setClickCount((prev) => {
+      const newCount = prev + 1;
+      if (newCount >= 5) {
+        setShowPinModal(true);
+        return 0;
+      }
+      return newCount;
+    });
+
+    // Reset click count after 1.5s
+    setTimeout(() => {
+      setClickCount(0);
+    }, 1500);
+  };
+
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="px-3 py-4">
         <Link to="/" className="flex items-center gap-2.5">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+          <span 
+            onClick={handleSecretClick}
+            className="flex size-8 shrink-0 cursor-default items-center justify-center rounded-lg bg-primary text-primary-foreground select-none"
+          >
             <Sparkles className="size-4" />
           </span>
           {!collapsed && (

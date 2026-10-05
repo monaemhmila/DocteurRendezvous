@@ -7,6 +7,7 @@ import {
   HeadContent,
   Scripts,
   useNavigate,
+  Navigate,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
@@ -15,8 +16,12 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AppShell } from "@/components/layout/app-shell";
 import { SuperAdminShell } from "@/components/layout/super-admin-shell";
 import { Toaster } from "@/components/ui/sonner";
+import { NotificationsListener } from "@/components/NotificationsListener";
 import { AppStateProvider } from "@/hooks/use-app-state";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
+import { ThemeProvider } from "@/contexts/theme-context";
+import { I18nextProvider } from "react-i18next";
+import i18n from "../i18n";
 
 function NotFoundComponent() {
   return (
@@ -123,9 +128,13 @@ function AppRouter() {
   useEffect(() => {
     if (isLoading) return;
 
-    // Not authenticated → always go to login
-    if (!isAuthenticated && pathname !== "/login") {
-      navigate({ to: "/login" });
+    // Not authenticated → always go to login or landing
+    if (!isAuthenticated && pathname !== "/login" && pathname !== "/landing") {
+      if (pathname === "/") {
+        navigate({ to: "/landing" });
+      } else {
+        navigate({ to: "/login" });
+      }
       return;
     }
 
@@ -159,8 +168,11 @@ function AppRouter() {
     );
   }
 
-  // Not authenticated: show login (no shell)
+  // Not authenticated: show login or landing (no shell)
   if (!isAuthenticated) {
+    if (pathname === "/") {
+      return <Navigate to="/landing" />;
+    }
     return <Outlet />;
   }
 
@@ -175,23 +187,34 @@ function AppRouter() {
 
   // Clinic / cabinet staff: full app shell
   return (
-    <AppShell>
-      <Outlet />
-    </AppShell>
+    <>
+      <NotificationsListener />
+      <AppShell>
+        <Outlet />
+      </AppShell>
+    </>
   );
 }
+
+import { AdminProvider } from "@/contexts/admin-context";
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <AppStateProvider>
-          <AppRouter />
-          <Toaster position="top-right" />
-        </AppStateProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <AppStateProvider>
+              <AdminProvider>
+                <AppRouter />
+                <Toaster position="top-right" />
+              </AdminProvider>
+            </AppStateProvider>
+          </AuthProvider>
+        </QueryClientProvider>
+      </I18nextProvider>
+    </ThemeProvider>
   );
 }

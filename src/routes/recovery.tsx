@@ -14,6 +14,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { relativeDay } from "@/lib/format";
 
+import { useAppState } from "@/hooks/use-app-state";
+
 export const Route = createFileRoute("/recovery")({
   head: () => ({
     meta: [
@@ -51,11 +53,17 @@ const statusLabel: Record<string, string> = {
 
 function RecoveryPage() {
   const queryClient = useQueryClient();
+  const { t } = useAppState();
 
-  const { data: opportunities = [], isLoading, isError } = useQuery<any[]>({
+  const { data: rawOpportunities = [], isLoading, isError } = useQuery<any[]>({
     queryKey: ["recovery"],
     queryFn: () => api.get("/recovery"),
   });
+
+  // Filter out dummy patients used for doctor reservations
+  const opportunities = rawOpportunities.filter(
+    (opp: any) => opp.patientId?.phone !== "00000000"
+  );
 
   const { data: stats } = useQuery<any>({
     queryKey: ["recovery-stats"],
@@ -67,9 +75,9 @@ function RecoveryPage() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["recovery"] });
       queryClient.invalidateQueries({ queryKey: ["recovery-stats"] });
-      toast.success(`Détection terminée. ${data.createdCount || 0} opportunités créées.`);
+      toast.success(t.recoveryPage.detectionComplete.replace("{count}", data.createdCount || 0));
     },
-    onError: () => toast.error("Erreur lors de la détection."),
+    onError: () => toast.error(t.recoveryPage.detectionError),
   });
 
   const summary = stats || {
@@ -82,20 +90,42 @@ function RecoveryPage() {
   };
 
   const funnel = [
-    { stage: "Patients identifiés", value: summary.toRecover },
-    { stage: "Contactés", value: summary.contacted },
-    { stage: "Ont répondu", value: summary.replied },
-    { stage: "Rendez-vous pris", value: summary.booked },
-    { stage: "Venus au cabinet", value: summary.completed },
+    { stage: t.recoveryPage.funnelIdentified, value: summary.toRecover },
+    { stage: t.recoveryPage.funnelContacted, value: summary.contacted },
+    { stage: t.recoveryPage.funnelReplied, value: summary.replied },
+    { stage: t.recoveryPage.funnelBooked, value: summary.booked },
+    { stage: t.recoveryPage.funnelVisited, value: summary.completed },
   ];
 
   const maxFunnel = funnel[0]?.value || 1;
 
+  /* Dynamically map using translation values */
+  const typeLabel: Record<string, string> = {
+    inactive_patient: t.recoveryPage.typeInactive,
+    interrupted_treatment: t.recoveryPage.typeInterrupted,
+    pending_quote: t.recoveryPage.typePendingQuote,
+    no_show: t.recoveryPage.typeNoShow,
+    cancellation: t.recoveryPage.typeCancellation,
+    overdue_checkup: t.recoveryPage.typeOverdue,
+    follow_up_required: t.recoveryPage.typeFollowUp,
+  };
+
+  const statusLabel: Record<string, string> = {
+    identified: t.recoveryPage.statusIdentified,
+    queued: t.recoveryPage.statusQueued,
+    contacted: t.recoveryPage.statusContacted,
+    responded: t.recoveryPage.statusResponded,
+    booked: t.recoveryPage.statusBooked,
+    visited: t.recoveryPage.statusVisited,
+    no_response: t.recoveryPage.statusNoResponse,
+    dismissed: t.recoveryPage.statusDismissed,
+  };
+
   return (
     <div className="mx-auto max-w-[1400px] space-y-6">
       <PageHeader
-        title="Patient Recovery"
-        subtitle="Identifiez automatiquement les patients que votre cabinet risque de perdre."
+        title={t.recoveryPage.title}
+        subtitle={t.recoveryPage.subtitle}
         actions={
           <div className="flex gap-2">
             <Button
@@ -108,11 +138,11 @@ function RecoveryPage() {
               ) : (
                 <RefreshCw className="mr-2 size-4" />
               )}
-              Détecter
+              {t.recoveryPage.detect}
             </Button>
             <Button>
               <Play className="mr-2 size-4" />
-              Lancer une campagne
+              {t.recoveryPage.launchCampaign}
             </Button>
           </div>
         }
@@ -120,12 +150,12 @@ function RecoveryPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
         {[
-          { label: "Patients analysés", value: summary.analyzed },
-          { label: "À récupérer", value: summary.toRecover },
-          { label: "Contactés", value: summary.contacted },
-          { label: "Ont répondu", value: summary.replied },
-          { label: "RDV récupérés", value: summary.booked },
-          { label: "Venus au cabinet", value: summary.completed },
+          { label: t.recoveryPage.analyzed, value: summary.analyzed },
+          { label: t.recoveryPage.toRecover, value: summary.toRecover },
+          { label: t.recoveryPage.contacted, value: summary.contacted },
+          { label: t.recoveryPage.replied, value: summary.replied },
+          { label: t.recoveryPage.recoveredAppts, value: summary.booked },
+          { label: t.recoveryPage.completed, value: summary.completed },
         ].map((stat) => (
           <div key={stat.label} className="panel p-4 text-center">
             <p className="num text-2xl font-semibold text-foreground">{stat.value}</p>
@@ -138,20 +168,20 @@ function RecoveryPage() {
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="panel p-4 text-center">
             <p className="num text-2xl font-semibold text-foreground">{stats.financials.estimatedValue} DT</p>
-            <p className="mt-1 text-xs text-muted-foreground">Valeur estimée</p>
+            <p className="mt-1 text-xs text-muted-foreground">{t.recoveryPage.estimatedValue}</p>
           </div>
           <div className="panel p-4 text-center">
             <p className="num text-2xl font-semibold text-foreground">{stats.financials.bookedValue} DT</p>
-            <p className="mt-1 text-xs text-muted-foreground">Valeur réservée</p>
+            <p className="mt-1 text-xs text-muted-foreground">{t.recoveryPage.bookedValue}</p>
           </div>
           <div className="panel p-4 text-center">
             <p className="num text-2xl font-semibold text-accent">{stats.financials.recoveredValue} DT</p>
-            <p className="mt-1 text-xs text-muted-foreground">Valeur récupérée</p>
+            <p className="mt-1 text-xs text-muted-foreground">{t.recoveryPage.recoveredValue}</p>
           </div>
         </div>
       )}
 
-      <SectionCard title="Entonnoir de récupération" description="Performance globale">
+      <SectionCard title={t.recoveryPage.funnelTitle} description={t.recoveryPage.funnelSubtitle}>
         <div className="grid gap-6 md:grid-cols-5">
           {funnel.map((s, i) => (
             <div key={s.stage} className="relative">
@@ -176,14 +206,14 @@ function RecoveryPage() {
       </SectionCard>
 
       <SectionCard
-        title="Opportunités de récupération"
-        description={`${opportunities.length} opportunités identifiées`}
+        title={t.recoveryPage.opportunitiesTitle}
+        description={t.recoveryPage.opportunitiesSubtitle.replace("{count}", opportunities.length.toString())}
         bodyClassName="p-0"
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm">
               <Megaphone className="mr-2 size-3.5" />
-              Campagnes
+              {t.recoveryPage.campaigns}
             </Button>
           </div>
         }
@@ -192,13 +222,13 @@ function RecoveryPage() {
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="px-5 py-3 font-medium text-muted-foreground">Patient</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Type</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Raison</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Priorité</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Valeur est.</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Statut</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Détecté le</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">{t.recoveryPage.colPatient}</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">{t.recoveryPage.colType}</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">{t.recoveryPage.colReason}</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">{t.recoveryPage.colPriority}</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">{t.recoveryPage.colEstValue}</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">{t.recoveryPage.colStatus}</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">{t.recoveryPage.colDetectedOn}</th>
                 <th className="px-5 py-3"></th>
               </tr>
             </thead>
@@ -207,7 +237,7 @@ function RecoveryPage() {
                 const patient = opp.patientId;
                 const patientName = patient
                   ? `${patient.firstName} ${patient.lastName}`
-                  : "Patient inconnu";
+                  : t.recoveryPage.unknownPatient;
                 const patientInitials = patient
                   ? `${patient.firstName?.[0] || ""}${patient.lastName?.[0] || ""}`
                   : "??";
@@ -256,7 +286,7 @@ function RecoveryPage() {
                     <td className="px-5 py-3 text-right">
                       <Button variant="ghost" size="sm" asChild>
                         <Link to="/patients/$id" params={{ id: String(patientId) }}>
-                          Voir
+                          {t.recoveryPage.viewBtn}
                         </Link>
                       </Button>
                     </td>
@@ -266,14 +296,14 @@ function RecoveryPage() {
               {isError && (
                 <tr>
                   <td colSpan={8} className="px-5 py-8 text-center text-destructive">
-                    Impossible de charger les opportunités.
+                    {t.recoveryPage.errorLoading}
                   </td>
                 </tr>
               )}
               {!isLoading && !isError && opportunities.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-5 py-8 text-center text-muted-foreground">
-                    Aucune opportunité de récupération. Cliquez sur "Détecter" pour analyser vos patients.
+                    {t.recoveryPage.noOpportunities}
                   </td>
                 </tr>
               )}
@@ -281,7 +311,7 @@ function RecoveryPage() {
                 <tr>
                   <td colSpan={8} className="px-5 py-8 text-center text-muted-foreground">
                     <Loader2 className="inline mr-2 size-4 animate-spin" />
-                    Chargement...
+                    {t.common.loading}
                   </td>
                 </tr>
               )}

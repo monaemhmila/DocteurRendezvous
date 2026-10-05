@@ -8,8 +8,11 @@ import mongoose, { Document, Schema } from "mongoose";
 export interface IPendingBookingContext {
   date: string;                                            // YYYY-MM-DD
   durationMin: number;                                     // duration used when generating slots
+  treatment?: string;                                      // specific treatment discussed
   proposedSlots: Array<{ startTime: string; endTime: string }>; // slots sent to the patient
   proposedAt: Date;                                        // when the proposal was sent
+  expiresAt: Date;                                         // when this context expires (e.g. 15 mins later)
+  version: number;                                         // context version to avoid race conditions
   /** "booking" = new appointment, "reschedule" = modifying an existing one */
   mode?: "booking" | "reschedule";
   /** appointmentId (or patientId) of the appointment being rescheduled */
@@ -25,7 +28,7 @@ export interface IConversation extends Document {
   patientId?: mongoose.Types.ObjectId;
   channel: "whatsapp"; // Locked to whatsapp per requirements
   contactWaId: string; // The external WhatsApp ID (phone number with country code from Meta)
-  status: "active" | "archived";
+  status: "active" | "archived" | "internal";
   lastMessageAt: Date;
   /**
    * Set by aiAutoBookingService when the AI proposes slots to the patient.
@@ -44,7 +47,7 @@ export interface IConversation extends Document {
    * Stores the patient's booking request when their name is missing.
    * Used to resume the booking once the patient provides their identity.
    */
-  pendingBookingIntent?: {
+    pendingBookingIntent?: {
     date: string;
     startTime: string;
     durationMin: number;
@@ -54,6 +57,14 @@ export interface IConversation extends Document {
     targetPatientInfo?: { firstName: string; lastName: string };
     /** Phase 6.17.1: true while waiting for confirmation of ambiguous family vs self */
     awaitingTargetConfirmation?: boolean;
+    /** Phase 6.17.2: true while waiting for the target patient's identity */
+    awaitingTargetIdentity?: boolean;
+  };
+  pendingActionConfirmation?: {
+    type: "cancel_appointment" | "confirm_appointment_status" | "reschedule_appointment";
+    appointmentId: string;
+    appointmentSummary: string;
+    actionData?: any;
   };
   createdAt: Date;
   updatedAt: Date;
@@ -65,14 +76,17 @@ const ConversationSchema = new Schema<IConversation>(
     patientId: { type: Schema.Types.ObjectId, ref: "Patient", required: false, index: true },
     channel: { type: String, enum: ["whatsapp"], default: "whatsapp", required: true },
     contactWaId: { type: String, required: true },
-    status: { type: String, enum: ["active", "archived"], default: "active" },
+    status: { type: String, enum: ["active", "archived", "internal"], default: "active" },
     lastMessageAt: { type: Date, default: Date.now },
     // Tracks which slots were proposed to the patient for the next booking validation
     pendingBookingContext: {
       date: { type: String },
       durationMin: { type: Number },
+      treatment: { type: String },
       proposedSlots: [{ startTime: String, endTime: String }],
       proposedAt: { type: Date },
+      expiresAt: { type: Date },
+      version: { type: Number },
       mode: { type: String },
       targetAppointmentId: { type: String },
       targetPatientId: { type: String },
@@ -94,9 +108,16 @@ const ConversationSchema = new Schema<IConversation>(
         lastName: { type: String },
       },
       awaitingTargetConfirmation: { type: Boolean },
+      awaitingTargetIdentity: { type: Boolean },
     },
     // Flagged when the AI requests a human takeover (see interface comment)
     needsHuman: { type: Boolean, default: false },
+    pendingActionConfirmation: {
+      type: { type: String, enum: ["cancel_appointment", "confirm_appointment_status", "reschedule_appointment"] },
+      appointmentId: { type: String },
+      appointmentSummary: { type: String },
+      actionData: { type: Schema.Types.Mixed },
+    },
   },
   { timestamps: true }
 );
@@ -117,6 +138,9 @@ export interface IMessage extends Document {
   status: "sent" | "delivered" | "read" | "failed" | "received";
   content: string;
   providerMessageId: string; // wamid
+  quotedProviderMessageId?: string; // If the user replied to a specific message, the wamid of that message
+  appointmentId?: mongoose.Types.ObjectId; // For outbound reminders, the ID of the appointment being reminded
+  idempotencyKey?: string; // Ensures an AI reply is never sent twice for the same inbound message
   error?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -135,6 +159,9 @@ const MessageSchema = new Schema<IMessage>(
     },
     content: { type: String, required: true },
     providerMessageId: { type: String, required: true },
+    quotedProviderMessageId: { type: String, required: false },
+    appointmentId: { type: Schema.Types.ObjectId, ref: "Appointment", required: false },
+    idempotencyKey: { type: String, required: false },
     error: { type: String },
   },
   { timestamps: true }
@@ -144,5 +171,6 @@ const MessageSchema = new Schema<IMessage>(
 // This protects against race conditions when Meta sends the same webhook payload multiple times.
 MessageSchema.index({ providerMessageId: 1 }, { unique: true });
 MessageSchema.index({ tenantId: 1, conversationId: 1 });
+MessageSchema.index({ idempotencyKey: 1 }, { unique: true, sparse: true });
 
 export const Message = mongoose.model<IMessage>("Message", MessageSchema);

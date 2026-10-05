@@ -1,8 +1,18 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Language, translations, Translations } from "@/lib/i18n";
 
+export type Notification = {
+  id: string;
+  title: string;
+  detail?: string;
+  time: string;
+  read: boolean;
+  link?: string;
+};
+
 interface AppState {
-  notifications: [];
+  notifications: Notification[];
+  addNotification: (n: Omit<Notification, "id" | "read">) => void;
   markAllNotificationsRead: () => void;
   unreadNotifications: number;
   language: Language;
@@ -53,17 +63,29 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const t = useMemo(() => translations[language] || translations.fr, [language]);
   const isRTL = language === "ar";
 
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const unreadNotifications = notifications.filter(n => !n.read).length;
+
+  const addNotification = (n: Omit<Notification, "id" | "read">) => {
+    setNotifications(prev => [{ ...n, id: crypto.randomUUID(), read: false }, ...prev]);
+  };
+
+  const markAllNotificationsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
   const value = useMemo<AppState>(
     () => ({
-      notifications: [],
-      markAllNotificationsRead: () => undefined,
-      unreadNotifications: 0,
+      notifications,
+      addNotification,
+      markAllNotificationsRead,
+      unreadNotifications,
       language,
       setLanguage,
       t,
       isRTL,
     }),
-    [language, t, isRTL],
+    [notifications, unreadNotifications, language, t, isRTL],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

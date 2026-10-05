@@ -15,6 +15,7 @@ import { Route as AiAssistantRouteImport } from './routes/ai-assistant'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as ConversationsRouteImport } from './routes/conversations'
 import { Route as FollowUpsRouteImport } from './routes/follow-ups'
+import { Route as LandingRouteImport } from './routes/landing'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as NoShowsRouteImport } from './routes/no-shows'
 import { Route as RecoveryRouteImport } from './routes/recovery'
@@ -24,6 +25,7 @@ import { Route as WaitlistRouteImport } from './routes/waitlist'
 import { Route as PatientsIndexRouteImport } from './routes/patients/index'
 import { Route as PatientsIdRouteImport } from './routes/patients/$id'
 import { Route as SettingsAiRouteImport } from './routes/settings/ai'
+import { Route as SettingsCatalogRouteImport } from './routes/settings/catalog'
 import { Route as SettingsClinicRouteImport } from './routes/settings/clinic'
 import { Route as SettingsCommunicationRouteImport } from './routes/settings/communication'
 import { Route as SettingsIntegrationsRouteImport } from './routes/settings/integrations'
@@ -60,6 +62,11 @@ const ConversationsRoute = ConversationsRouteImport.update({
 const FollowUpsRoute = FollowUpsRouteImport.update({
   id: '/follow-ups',
   path: '/follow-ups',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LandingRoute = LandingRouteImport.update({
+  id: '/landing',
+  path: '/landing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -107,6 +114,11 @@ const SettingsAiRoute = SettingsAiRouteImport.update({
   path: '/settings/ai',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsCatalogRoute = SettingsCatalogRouteImport.update({
+  id: '/settings/catalog',
+  path: '/settings/catalog',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsClinicRoute = SettingsClinicRouteImport.update({
   id: '/settings/clinic',
   path: '/settings/clinic',
@@ -150,6 +162,7 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AnalyticsRoute
   '/conversations': typeof ConversationsRoute
   '/follow-ups': typeof FollowUpsRoute
+  '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/no-shows': typeof NoShowsRoute
   '/recovery': typeof RecoveryRoute
@@ -158,6 +171,7 @@ export interface FileRoutesByFullPath {
   '/waitlist': typeof WaitlistRoute
   '/patients/$id': typeof PatientsIdRoute
   '/settings/ai': typeof SettingsAiRoute
+  '/settings/catalog': typeof SettingsCatalogRoute
   '/settings/clinic': typeof SettingsClinicRoute
   '/settings/communication': typeof SettingsCommunicationRoute
   '/settings/integrations': typeof SettingsIntegrationsRoute
@@ -174,6 +188,7 @@ export interface FileRoutesByTo {
   '/analytics': typeof AnalyticsRoute
   '/conversations': typeof ConversationsRoute
   '/follow-ups': typeof FollowUpsRoute
+  '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/no-shows': typeof NoShowsRoute
   '/recovery': typeof RecoveryRoute
@@ -181,6 +196,7 @@ export interface FileRoutesByTo {
   '/waitlist': typeof WaitlistRoute
   '/patients/$id': typeof PatientsIdRoute
   '/settings/ai': typeof SettingsAiRoute
+  '/settings/catalog': typeof SettingsCatalogRoute
   '/settings/clinic': typeof SettingsClinicRoute
   '/settings/communication': typeof SettingsCommunicationRoute
   '/settings/integrations': typeof SettingsIntegrationsRoute
@@ -198,6 +214,7 @@ export interface FileRoutesById {
   '/analytics': typeof AnalyticsRoute
   '/conversations': typeof ConversationsRoute
   '/follow-ups': typeof FollowUpsRoute
+  '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/no-shows': typeof NoShowsRoute
   '/recovery': typeof RecoveryRoute
@@ -206,6 +223,7 @@ export interface FileRoutesById {
   '/waitlist': typeof WaitlistRoute
   '/patients/$id': typeof PatientsIdRoute
   '/settings/ai': typeof SettingsAiRoute
+  '/settings/catalog': typeof SettingsCatalogRoute
   '/settings/clinic': typeof SettingsClinicRoute
   '/settings/communication': typeof SettingsCommunicationRoute
   '/settings/integrations': typeof SettingsIntegrationsRoute
@@ -224,6 +242,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/conversations'
     | '/follow-ups'
+    | '/landing'
     | '/login'
     | '/no-shows'
     | '/recovery'
@@ -232,6 +251,7 @@ export interface FileRouteTypes {
     | '/waitlist'
     | '/patients/$id'
     | '/settings/ai'
+    | '/settings/catalog'
     | '/settings/clinic'
     | '/settings/communication'
     | '/settings/integrations'
@@ -248,6 +268,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/conversations'
     | '/follow-ups'
+    | '/landing'
     | '/login'
     | '/no-shows'
     | '/recovery'
@@ -255,6 +276,7 @@ export interface FileRouteTypes {
     | '/waitlist'
     | '/patients/$id'
     | '/settings/ai'
+    | '/settings/catalog'
     | '/settings/clinic'
     | '/settings/communication'
     | '/settings/integrations'
@@ -271,6 +293,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/conversations'
     | '/follow-ups'
+    | '/landing'
     | '/login'
     | '/no-shows'
     | '/recovery'
@@ -279,6 +302,7 @@ export interface FileRouteTypes {
     | '/waitlist'
     | '/patients/$id'
     | '/settings/ai'
+    | '/settings/catalog'
     | '/settings/clinic'
     | '/settings/communication'
     | '/settings/integrations'
@@ -296,6 +320,7 @@ export interface RootRouteChildren {
   AnalyticsRoute: typeof AnalyticsRoute
   ConversationsRoute: typeof ConversationsRoute
   FollowUpsRoute: typeof FollowUpsRoute
+  LandingRoute: typeof LandingRoute
   LoginRoute: typeof LoginRoute
   NoShowsRoute: typeof NoShowsRoute
   RecoveryRoute: typeof RecoveryRoute
@@ -304,6 +329,7 @@ export interface RootRouteChildren {
   WaitlistRoute: typeof WaitlistRoute
   PatientsIdRoute: typeof PatientsIdRoute
   SettingsAiRoute: typeof SettingsAiRoute
+  SettingsCatalogRoute: typeof SettingsCatalogRoute
   SettingsClinicRoute: typeof SettingsClinicRoute
   SettingsCommunicationRoute: typeof SettingsCommunicationRoute
   SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute
@@ -353,6 +379,13 @@ declare module '@tanstack/react-router' {
       path: '/follow-ups'
       fullPath: '/follow-ups'
       preLoaderRoute: typeof FollowUpsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/landing': {
+      id: '/landing'
+      path: '/landing'
+      fullPath: '/landing'
+      preLoaderRoute: typeof LandingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -416,6 +449,13 @@ declare module '@tanstack/react-router' {
       path: '/settings/ai'
       fullPath: '/settings/ai'
       preLoaderRoute: typeof SettingsAiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/catalog': {
+      id: '/settings/catalog'
+      path: '/settings/catalog'
+      fullPath: '/settings/catalog'
+      preLoaderRoute: typeof SettingsCatalogRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings/clinic': {
@@ -493,6 +533,7 @@ const rootRouteChildren: RootRouteChildren = {
   AnalyticsRoute: AnalyticsRoute,
   ConversationsRoute: ConversationsRoute,
   FollowUpsRoute: FollowUpsRoute,
+  LandingRoute: LandingRoute,
   LoginRoute: LoginRoute,
   NoShowsRoute: NoShowsRoute,
   RecoveryRoute: RecoveryRoute,
@@ -501,6 +542,7 @@ const rootRouteChildren: RootRouteChildren = {
   WaitlistRoute: WaitlistRoute,
   PatientsIdRoute: PatientsIdRoute,
   SettingsAiRoute: SettingsAiRoute,
+  SettingsCatalogRoute: SettingsCatalogRoute,
   SettingsClinicRoute: SettingsClinicRoute,
   SettingsCommunicationRoute: SettingsCommunicationRoute,
   SettingsIntegrationsRoute: SettingsIntegrationsRoute,

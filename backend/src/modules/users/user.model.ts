@@ -21,6 +21,7 @@ export interface IUser extends Document {
   status: "active" | "inactive";
   role: "super_admin" | "clinic_owner" | "receptionist" | "dentist" | "assistant";
   permissions?: IUserPermissions;
+  tokenVersion: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,6 +56,7 @@ const UserSchema = new Schema<IUser>(
         settings: false,
       },
     },
+    tokenVersion: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
