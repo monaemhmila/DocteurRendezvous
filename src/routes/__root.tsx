@@ -21,6 +21,7 @@ import { AppStateProvider } from "@/hooks/use-app-state";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
 import { ThemeProvider } from "@/contexts/theme-context";
 import { I18nextProvider } from "react-i18next";
+import { Analytics, AnalyticsNoScript } from "@/components/Analytics";
 import i18n from "../i18n";
 
 function NotFoundComponent() {
@@ -85,16 +86,28 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Medical AI — Récupération patients" },
+      { title: "Sanovia AI — Logiciel médical intelligent pour cabinets et cliniques" },
       {
         name: "description",
         content:
-          "Plateforme IA pour cabinets médicaux : récupération patients, agenda, conversations WhatsApp et analytics.",
+          "Gérez vos rendez-vous, patients, équipe et échanges WhatsApp avec Sanovia AI, une plateforme SaaS médicale sécurisée et assistée par IA.",
       },
       { property: "og:type", content: "website" },
+      { property: "og:url", content: "https://sanovia-ai.com/" },
+      { property: "og:title", content: "Sanovia AI — Logiciel médical intelligent pour cabinets et cliniques" },
+      { property: "og:description", content: "Gérez vos rendez-vous, patients, équipe et échanges WhatsApp avec Sanovia AI, une plateforme SaaS médicale sécurisée et assistée par IA." },
+      { property: "og:image", content: "https://sanovia-ai.com/og-image.jpg" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Sanovia AI — Logiciel médical intelligent" },
+      { name: "twitter:description", content: "Plateforme SaaS médicale sécurisée et assistée par IA." },
+      { name: "twitter:image", content: "https://sanovia-ai.com/og-image.jpg" },
     ],
     links: [
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      { rel: "preconnect", href: "https://www.googletagmanager.com" },
+      { rel: "preconnect", href: "https://connect.facebook.net" },
+      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap" },
       { rel: "stylesheet", href: appCss },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
     ],
@@ -106,12 +119,30 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function RootShell({ children }: { children: ReactNode }) {
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Sanovia AI",
+    "operatingSystem": "Web",
+    "applicationCategory": "HealthApplication",
+    "offers": {
+      "@type": "Offer",
+      "price": "49",
+      "priceCurrency": "EUR"
+    },
+    "description": "Logiciel SaaS de gestion de cabinet médical assisté par IA. Dossiers patients, agenda intelligent, assistant WhatsApp.",
+    "url": "https://sanovia-ai.com"
+  };
+
   return (
     <html lang="fr">
       <head>
         <HeadContent />
+        <Analytics />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
       </head>
       <body>
+        <AnalyticsNoScript />
         {children}
         <Scripts />
       </body>
@@ -128,8 +159,21 @@ function AppRouter() {
   useEffect(() => {
     if (isLoading) return;
 
+    // Manage robots noindex for private pages dynamically
+    let meta = document.querySelector('meta[name="robots"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'robots');
+      document.head.appendChild(meta);
+    }
+    if (pathname === '/tarifs' || pathname === '/landing' || pathname === '/securite' || pathname === '/assistant-whatsapp' || pathname === '/fonctionnalites' || pathname.startsWith('/solutions/') || pathname === '/' || pathname.startsWith('/fr') || pathname.startsWith('/en') || pathname.startsWith('/ar')) {
+       meta.setAttribute('content', 'index, follow');
+    } else {
+       meta.setAttribute('content', 'noindex');
+    }
+
     // Not authenticated → always go to login or landing
-    if (!isAuthenticated && pathname !== "/login" && pathname !== "/landing") {
+    if (!isAuthenticated && pathname !== "/tarifs" && pathname !== "/login" && pathname !== "/landing" && pathname !== "/securite" && pathname !== "/assistant-whatsapp" && pathname !== "/fonctionnalites" && !pathname.startsWith("/solutions/")) {
       if (pathname === "/") {
         navigate({ to: "/landing" });
       } else {

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useAppState } from "@/hooks/use-app-state";
 import { AlertTriangle, Check, CircleDot, Crown, Eye, Grid2X2, Layers3, ScanLine, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
 
 type Surface = "O" | "V" | "L" | "M" | "D";
@@ -150,6 +151,7 @@ function DentalTooth({
 }
 
 export function DentalChart({ patient, onUpdate, isUpdating }: { patient: Patient; onUpdate: (data: Partial<Patient>) => void; isUpdating: boolean }) {
+  const { language } = useAppState();
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
   const [activeSurface, setActiveSurface] = useState<Surface | null>("O");
   const [editingTooth, setEditingTooth] = useState<ToothChart | null>(null);
@@ -204,7 +206,7 @@ export function DentalChart({ patient, onUpdate, isUpdating }: { patient: Patien
   };
 
   return (
-    <SectionCard title="Odontogramme clinique" description="Arcade FDI interactive, surfaces dentaires, actes globaux et suivi des restaurations.">
+    <SectionCard title={language === "ar" ? "مخطط الأسنان السريري" : language === "en" ? "Clinical Odontogram" : "Odontogramme clinique"} description={language === "ar" ? "قوس FDI تفاعلي، الأسطح السنية، الإجراءات الشاملة وتتبع الترميمات." : language === "en" ? "Interactive FDI arch, dental surfaces, global acts and restoration tracking." : "Arcade FDI interactive, surfaces dentaires, actes globaux et suivi des restaurations."}>
       <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl shadow-slate-200 dark:border-slate-800 dark:bg-[#07101d] dark:text-white dark:shadow-slate-950/20 sm:p-7">
         <div className="pointer-events-none absolute inset-0 opacity-60 [background-image:linear-gradient(rgba(45,212,191,.05)_1px,transparent_1px),linear-gradient(90deg,rgba(45,212,191,.05)_1px,transparent_1px)] [background-size:32px_32px]" />
         <div className="pointer-events-none absolute -right-40 -top-40 size-96 rounded-full bg-cyan-500/10 blur-3xl" />
@@ -214,42 +216,41 @@ export function DentalChart({ patient, onUpdate, isUpdating }: { patient: Patien
         <div className="relative flex flex-col justify-between gap-5 border-b border-slate-200 pb-6 dark:border-white/10 sm:flex-row sm:items-start">
           <div>
             <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-cyan-600 dark:text-cyan-200/70">
-              <CircleDot className="size-3 text-emerald-500 dark:text-emerald-300" /> Dental intelligence layer <span className="text-slate-400 dark:text-slate-600">/</span> FDI 11–48
+              <CircleDot className="size-3 text-emerald-500 dark:text-emerald-300" />{language === "ar" ? "طبقة الذكاء السني" : language === "en" ? "Dental intelligence layer" : "Dental intelligence layer"}<span className="text-slate-400 dark:text-slate-600">/</span> FDI 11–48
             </div>
-            <h3 className="text-2xl font-black tracking-[-.04em] sm:text-3xl">Dental command center</h3>
+            <h3 className="text-2xl font-black tracking-[-.04em] sm:text-3xl">{language === "ar" ? "مركز التحكم السني" : language === "en" ? "Dental command center" : "Dental command center"}</h3>
             <p className="mt-2 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-              <Eye className="size-4" /> Patient : <strong className="text-slate-700 dark:text-slate-200">{patient.firstName} {patient.lastName}</strong>
+              <Eye className="size-4" />{language === "ar" ? "المريض: " : language === "en" ? "Patient: " : "Patient : "}<strong className="text-slate-700 dark:text-slate-200">{patient.firstName} {patient.lastName}</strong>
             </p>
           </div>
           <div className="flex items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-cyan-700 dark:border-cyan-200/15 dark:bg-cyan-300/10 dark:text-cyan-100">
-            <ScanLine className="size-4" /> Mode 3D clinique
-          </div>
+            <ScanLine className="size-4" />{language === "ar" ? "الوضع السريري ثلاثي الأبعاد" : language === "en" ? "3D Clinical mode" : "Mode 3D clinique"}</div>
         </div>
 
         {/* KPIs */}
         <div className="relative grid gap-3 py-6 sm:grid-cols-2 xl:grid-cols-4">
-          <OverviewCard icon={Grid2X2} label="Dents documentées" value={`${documented.length}`} helper="sur 32 dents FDI" tone="cyan" />
-          <OverviewCard icon={ShieldCheck} label="Dents saines" value={`${32 - documented.length}`} helper="sans anomalie enregistrée" tone="emerald" />
-          <OverviewCard icon={AlertTriangle} label="Lésions / actes" value={`${(counts.caries || 0) + (counts.filled || 0)}`} helper="caries et restaurations" tone="rose" />
-          <OverviewCard icon={Crown} label="Prothèses / implants" value={`${(counts.crown || 0) + (counts.implant || 0)}`} helper="suivi prothétique" tone="violet" />
+          <OverviewCard icon={Grid2X2} label={language === "ar" ? "الأسنان الموثقة" : language === "en" ? "Documented teeth" : "Dents documentées"} value={`${documented.length}`} helper={language === "ar" ? "من أصل 32 سن FDI" : language === "en" ? "out of 32 FDI teeth" : "sur 32 dents FDI"} tone="cyan" />
+          <OverviewCard icon={ShieldCheck} label={language === "ar" ? "الأسنان السليمة" : language === "en" ? "Healthy teeth" : "Dents saines"} value={`${32 - documented.length}`} helper={language === "ar" ? "بدون شذوذ مسجل" : language === "en" ? "without recorded anomaly" : "sans anomalie enregistrée"} tone="emerald" />
+          <OverviewCard icon={AlertTriangle} label={language === "ar" ? "الآفات / الإجراءات" : language === "en" ? "Lesions / acts" : "Lésions / actes"} value={`${(counts.caries || 0) + (counts.filled || 0)}`} helper={language === "ar" ? "تسوس وترميمات" : language === "en" ? "cavities and restorations" : "caries et restaurations"} tone="rose" />
+          <OverviewCard icon={Crown} label={language === "ar" ? "التعويضات / الزرعات" : language === "en" ? "Prosthetics / implants" : "Prothèses / implants"} value={`${(counts.crown || 0) + (counts.implant || 0)}`} helper={language === "ar" ? "متابعة تعويضية" : language === "en" ? "prosthetic follow-up" : "suivi prothétique"} tone="violet" />
         </div>
 
         {/* Arch */}
         <div className="relative rounded-[2rem] border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[.035] sm:p-7">
           <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
             <div>
-              <h4 className="flex items-center gap-2 font-black"><Layers3 className="size-4 text-cyan-600 dark:text-cyan-200" /> Arcade dentaire 3D</h4>
-              <p className="mt-1 text-xs text-slate-500">Cliquez sur une dent pour ouvrir ses faces et son état clinique.</p>
+              <h4 className="flex items-center gap-2 font-black"><Layers3 className="size-4 text-cyan-600 dark:text-cyan-200" />{language === "ar" ? "القوس السني ثلاثي الأبعاد" : language === "en" ? "3D Dental arch" : "Arcade dentaire 3D"}</h4>
+              <p className="mt-1 text-xs text-slate-500">{language === "ar" ? "انقر على سن لفتح أسطحه وحالته السريرية." : language === "en" ? "Click on a tooth to open its surfaces and clinical state." : "Cliquez sur une dent pour ouvrir ses faces et son état clinique."}</p>
             </div>
-            <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-500 dark:border-white/10 dark:bg-black/15 dark:text-slate-400">Système FDI · 32 unités</span>
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-500 dark:border-white/10 dark:bg-black/15 dark:text-slate-400">{language === "ar" ? "نظام FDI · 32 وحدة" : language === "en" ? "FDI System · 32 units" : "Système FDI · 32 unités"}</span>
           </div>
           <div className="overflow-x-auto pb-4">
             <div className="mx-auto flex min-w-[850px] flex-col items-center gap-8">
-              <JawRow label="Maxillaire" left={UPPER_RIGHT} right={UPPER_LEFT} upper getTooth={getTooth} onOpen={openTooth} />
+              <JawRow label={language === "ar" ? "الفك العلوي" : language === "en" ? "Maxillary" : "Maxillaire"} left={UPPER_RIGHT} right={UPPER_LEFT} upper getTooth={getTooth} onOpen={openTooth} />
               <div className="flex items-center gap-4 text-[9px] font-bold uppercase tracking-[.35em] text-slate-400 dark:text-slate-600">
-                <span className="h-px w-24 bg-gradient-to-r from-transparent to-cyan-400/40 dark:to-cyan-200/20" /> Ligne médiane <span className="h-px w-24 bg-gradient-to-l from-transparent to-cyan-400/40 dark:to-cyan-200/20" />
+                <span className="h-px w-24 bg-gradient-to-r from-transparent to-cyan-400/40 dark:to-cyan-200/20" />{language === "ar" ? "الخط الأوسط" : language === "en" ? "Midline" : "Ligne médiane"}<span className="h-px w-24 bg-gradient-to-l from-transparent to-cyan-400/40 dark:to-cyan-200/20" />
               </div>
-              <JawRow label="Mandibule" left={LOWER_RIGHT} right={LOWER_LEFT} getTooth={getTooth} onOpen={openTooth} />
+              <JawRow label={language === "ar" ? "الفك السفلي" : language === "en" ? "Mandible" : "Mandibule"} left={LOWER_RIGHT} right={LOWER_LEFT} getTooth={getTooth} onOpen={openTooth} />
             </div>
           </div>
         </div>
@@ -276,7 +277,7 @@ export function DentalChart({ patient, onUpdate, isUpdating }: { patient: Patien
                   <span className="flex size-10 items-center justify-center rounded-xl bg-cyan-100 text-cyan-600 dark:bg-cyan-300/10 dark:text-cyan-200"><Sparkles className="size-5" /></span>
                   Dent {selectedTooth}
                 </DialogTitle>
-                <DialogDescription className="text-slate-500 dark:text-slate-400">Sélectionnez une face ou appliquez un état global à cette dent.</DialogDescription>
+                <DialogDescription className="text-slate-500 dark:text-slate-400">{language === "ar" ? "حدد سطحاً أو طبّق حالة شاملة على هذا السن." : language === "en" ? "Select a surface or apply a global state to this tooth." : "Sélectionnez une face ou appliquez un état global à cette dent."}</DialogDescription>
               </DialogHeader>
               {editingTooth && selectedTooth !== null && (
                 <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[.035]">
@@ -307,23 +308,23 @@ export function DentalChart({ patient, onUpdate, isUpdating }: { patient: Patien
 
             <form onSubmit={saveTooth} className="flex flex-col gap-5">
               <div>
-                <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Acte sur la face {activeSurface || "—"}</p>
+                <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{language === "ar" ? `إجراء على السطح ${activeSurface || "—"}` : language === "en" ? `Act on surface ${activeSurface || "—"}` : `Acte sur la face ${activeSurface || "—"}`}</p>
                 <div className="grid grid-cols-2 gap-2">
-                  <ActionButton label="Carie" color="rose" onClick={() => applyStatus("caries")} />
-                  <ActionButton label="Composite" color="blue" onClick={() => applyStatus("filled")} />
+                  <ActionButton label={language === "ar" ? "تسوس" : language === "en" ? "Cavity" : "Carie"} color="rose" onClick={() => applyStatus("caries")} />
+                  <ActionButton label={language === "ar" ? "حشو مركّب" : language === "en" ? "Composite" : "Composite"} color="blue" onClick={() => applyStatus("filled")} />
                 </div>
               </div>
               <div>
-                <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">État global de la dent</p>
+                <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{language === "ar" ? "الحالة الشاملة للسن" : language === "en" ? "Global tooth state" : "État global de la dent"}</p>
                 <div className="grid grid-cols-2 gap-2">
-                  <ActionButton label="Couronne" color="amber" icon={<Crown className="size-3.5" />} onClick={() => applyStatus("crown")} />
-                  <ActionButton label="Implant" color="violet" icon={<CircleDot className="size-3.5" />} onClick={() => applyStatus("implant")} />
-                  <ActionButton label="Extraction" color="rose" icon={<Trash2 className="size-3.5" />} onClick={() => applyStatus("extracted")} />
-                  <ActionButton label="Remettre saine" color="emerald" icon={<ShieldCheck className="size-3.5" />} onClick={() => applyStatus("healthy")} />
+                  <ActionButton label={language === "ar" ? "تاج" : language === "en" ? "Crown" : "Couronne"} color="amber" icon={<Crown className="size-3.5" />} onClick={() => applyStatus("crown")} />
+                  <ActionButton label={language === "ar" ? "زرعة" : language === "en" ? "Implant" : "Implant"} color="violet" icon={<CircleDot className="size-3.5" />} onClick={() => applyStatus("implant")} />
+                  <ActionButton label={language === "ar" ? "قلع" : language === "en" ? "Extraction" : "Extraction"} color="rose" icon={<Trash2 className="size-3.5" />} onClick={() => applyStatus("extracted")} />
+                  <ActionButton label={language === "ar" ? "إعادة للحالة السليمة" : language === "en" ? "Set healthy" : "Remettre saine"} color="emerald" icon={<ShieldCheck className="size-3.5" />} onClick={() => applyStatus("healthy")} />
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Notes cliniques</label>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{language === "ar" ? "ملاحظات سريرية" : language === "en" ? "Clinical notes" : "Notes cliniques"}</label>
                 <Textarea
                   value={editingTooth?.notes || ""}
                   onChange={(event) => setEditingTooth((current) => (current ? { ...current, notes: event.target.value } : null))}
@@ -333,10 +334,9 @@ export function DentalChart({ patient, onUpdate, isUpdating }: { patient: Patien
               </div>
               <DialogFooter className="mt-auto border-t border-slate-200 pt-5 dark:border-white/10">
                 <Button type="button" variant="outline" onClick={closeModal} className="border-slate-300 bg-transparent text-slate-700 hover:bg-slate-100 dark:border-white/15 dark:text-white dark:hover:bg-white/10">
-                  <X className="mr-2 size-4" /> Annuler
-                </Button>
+                  <X className="mr-2 size-4" />{language === "ar" ? "إلغاء" : language === "en" ? "Cancel" : "Annuler"}</Button>
                 <Button type="submit" disabled={isUpdating} className="bg-cyan-600 font-black text-white hover:bg-cyan-700 dark:bg-cyan-300 dark:text-slate-950 dark:hover:bg-cyan-200">
-                  <Check className="mr-2 size-4" /> {isUpdating ? "Sauvegarde..." : "Valider l'odontogramme"}
+                  <Check className="mr-2 size-4" /> {isUpdating ? (language === "ar" ? "جاري الحفظ..." : language === "en" ? "Saving..." : "Sauvegarde...") : (language === "ar" ? "حفظ مخطط الأسنان" : language === "en" ? "Validate odontogram" : "Valider l'odontogramme")}
                 </Button>
               </DialogFooter>
             </form>

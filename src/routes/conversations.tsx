@@ -91,7 +91,7 @@ export const Route = createFileRoute("/conversations")({
   },
   head: () => ({
     meta: [
-      { title: "Boîte de réception & Simulateur WhatsApp IA — Medical AI" },
+      { title: "Boîte de réception & Simulateur WhatsApp IA — Sanovia AI" },
       { name: "description", content: "Gérez les conversations et testez l'IA WhatsApp en temps réel." },
     ],
   }),
@@ -177,6 +177,11 @@ function ConversationsPage() {
   useEffect(() => {
     setMsgPage(1);
   }, [activeId]);
+
+  // Update document title dynamically with translation
+  useEffect(() => {
+    document.title = `${t.conversationsPage.title} — Sanovia AI`;
+  }, [t.conversationsPage.title]);
 
   const { data: patients = [] } = useQuery<IPatient[]>({
     queryKey: ["patients"],
@@ -366,7 +371,7 @@ function ConversationsPage() {
                 </div>
               ) : filtered.length === 0 ? (
                 <div className="p-8 text-center text-xs text-muted-foreground">
-                  {t.conversationsPage.noConvs}
+                  ${t.conversationsPage.noConvs}
                 </div>
               ) : (
                 filtered.map((c) => {
@@ -400,12 +405,12 @@ function ConversationsPage() {
                             {c.contactWaId}
                           </p>
                           {c.needsHuman ? (
-                            <Badge variant="destructive" className="text-[9px] px-1.5 py-0 h-4">
+                            <Badge variant="destructive" className="text-[9px] px-1.5 py-0 h-4 animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.5)]">
                               {t.conversationsPage.humanRequired}
                             </Badge>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-[9px] text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded font-semibold">
-                              <Bot className="size-2.5" /> {t.conversationsPage.aiHandled}
+                              <Bot className="size-2.5" /> ${t.conversationsPage.aiHandled}
                             </span>
                           )}
                         </div>
@@ -490,7 +495,7 @@ function ConversationsPage() {
 
                 <div className="flex items-center gap-2">
                   {activeConv.needsHuman ? (
-                    <Badge variant="destructive" className="gap-1 text-xs py-1 px-2.5">
+                    <Badge variant="destructive" className="gap-1 text-xs py-1 px-2.5 animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.6)] border border-red-400">
                       <AlertCircle className="size-3" />
                       {t.conversationsPage.humanRequired}
                     </Badge>
@@ -529,7 +534,7 @@ function ConversationsPage() {
                       <MessageSquare className="size-8 text-muted-foreground/30 mx-auto" />
                       <p className="font-semibold text-foreground">{t.conversationsPage.noMsgsTitle}</p>
                       <p className="text-muted-foreground max-w-xs mx-auto text-[11px]">
-                        {t.conversationsPage.noMsgsDesc}
+                        ${t.conversationsPage.noMsgsDesc}
                       </p>
                     </div>
                   ) : (

@@ -33,21 +33,21 @@ export const Route = createFileRoute("/follow-ups")({
   component: FollowUpsPage,
 });
 
-const taskTypeLabel: Record<string, string> = {
-  no_show_followup: "Absence",
-  cancellation_followup: "Annulation",
-  inactive_reengagement: "Réengagement",
-  checkup_reminder: "Rappel de contrôle",
-  slot_fill_offer: "Proposition créneau",
-};
+const taskTypeLabel = (t: any) => ({
+  no_show_followup: t.followupsPage.typeAbsence,
+  cancellation_followup: t.followupsPage.typeCancel,
+  inactive_reengagement: t.followupsPage.typeReengage,
+  checkup_reminder: t.followupsPage.typeCheckup,
+  slot_fill_offer: t.followupsPage.typeSlotOffer,
+});
 
-const taskStatusLabel: Record<string, string> = {
-  pending: "À faire",
-  in_progress: "En cours",
-  completed: "Terminé",
-  cancelled: "Annulé",
-  expired: "Expiré",
-};
+const taskStatusLabel = (t: any) => ({
+  pending: t.followupsPage.statusPending,
+  in_progress: t.followupsPage.statusInProgress,
+  completed: t.followupsPage.statusCompleted,
+  cancelled: t.followupsPage.statusCancelled,
+  expired: t.followupsPage.statusExpired,
+});
 
 function FollowUpsPage() {
   const { t } = useAppState();
@@ -86,7 +86,7 @@ function FollowUpsPage() {
     mutationFn: (taskId: string) => api.post(`/follow-ups/${taskId}/complete`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["follow-ups"] });
-      toast.success("Tâche terminée avec succès");
+      toast.success(t.followupsPage.toastSuccess);
     },
     onError: (error: any) => toast.error(error.message),
   });
@@ -94,16 +94,16 @@ function FollowUpsPage() {
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 pb-20">
       <PageHeader
-        title="File de relances"
-        subtitle="Gérez les tâches de suivi et d'opportunités de récupération."
+        title={t.pages.followupsTitle}
+        subtitle={t.pages.followupsSubtitle}
       />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard title="À faire" value={pendingCount} icon={Clock} color="text-warning" />
-        <KpiCard title="En cours" value={inProgressCount} icon={PlayCircle} color="text-accent" />
-        <KpiCard title="Terminés (Auj.)" value={completedTodayCount} icon={CheckCircle2} color="text-success" />
-        <KpiCard title="Expirés" value={expiredCount} icon={XCircle} color="text-muted-foreground" />
+        <KpiCard title={t.followupsPage.kpiPending} value={pendingCount} icon={Clock} color="text-warning" />
+        <KpiCard title={t.followupsPage.kpiInProgress} value={inProgressCount} icon={PlayCircle} color="text-accent" />
+        <KpiCard title={t.followupsPage.kpiCompletedToday} value={completedTodayCount} icon={CheckCircle2} color="text-success" />
+        <KpiCard title={t.followupsPage.kpiExpired} value={expiredCount} icon={XCircle} color="text-muted-foreground" />
       </div>
 
       <SectionCard>
@@ -114,11 +114,11 @@ function FollowUpsPage() {
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
-            <option value="">Tous les statuts</option>
-            <option value="active">Actifs (À faire / En cours)</option>
-            <option value="pending">À faire</option>
-            <option value="in_progress">En cours</option>
-            <option value="completed">Terminé</option>
+              <option value="">{t.followupsPage.filterActive}</option>
+              <option value="active">{t.followupsPage.filterActive}</option>
+              <option value="pending">{t.followupsPage.statusPending}</option>
+              <option value="in_progress">{t.followupsPage.statusInProgress}</option>
+              <option value="completed">{t.followupsPage.statusCompleted}</option>
           </select>
 
           <select 
@@ -126,10 +126,10 @@ function FollowUpsPage() {
             value={priorityFilter}
             onChange={(e) => setPriorityFilter(e.target.value)}
           >
-            <option value="">Toutes les priorités</option>
-            <option value="high">Haute</option>
-            <option value="medium">Moyenne</option>
-            <option value="low">Basse</option>
+            <option value="">{t.followupsPage.filterAllPriorities}</option>
+            <option value="high">{t.followupsPage.priorityHigh}</option>
+            <option value="medium">{t.followupsPage.priorityMedium}</option>
+            <option value="low">{t.followupsPage.priorityLow}</option>
           </select>
 
           <select 
@@ -137,8 +137,8 @@ function FollowUpsPage() {
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
           >
-            <option value="">Tous les types</option>
-            {Object.entries(taskTypeLabel).map(([key, label]) => (
+            <option value="">{t.followupsPage.filterAllTypes}</option>
+            {Object.entries(taskTypeLabel(t)).map(([key, label]) => (
               <option key={key} value={key}>{label}</option>
             ))}
           </select>
@@ -149,19 +149,19 @@ function FollowUpsPage() {
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b border-border">
               <tr>
-                <th className="px-4 py-3 font-medium">Patient</th>
-                <th className="px-4 py-3 font-medium">Type</th>
-                <th className="px-4 py-3 font-medium">Priorité</th>
-                <th className="px-4 py-3 font-medium">Statut</th>
-                <th className="px-4 py-3 font-medium text-center">Tentatives</th>
-                <th className="px-4 py-3 font-medium text-right">Actions</th>
+                <th className="px-4 py-3 font-medium">{t.followupsPage.colPatient}</th>
+                <th className="px-4 py-3 font-medium">{t.followupsPage.colType}</th>
+                <th className="px-4 py-3 font-medium">{t.followupsPage.colPriority}</th>
+                <th className="px-4 py-3 font-medium">{t.followupsPage.colStatus}</th>
+                <th className="px-4 py-3 font-medium text-center">{t.followupsPage.colAttempts}</th>
+                <th className="px-4 py-3 font-medium text-right">{t.followupsPage.colActions}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {isLoading ? (
-                <tr><td colSpan={6} className="text-center py-8 text-muted-foreground">Chargement...</td></tr>
+                <tr><td colSpan={6} className="text-center py-8 text-muted-foreground">{t.followupsPage.loading}</td></tr>
               ) : filteredTasks.length === 0 ? (
-                <tr><td colSpan={6} className="text-center py-8 text-muted-foreground">Aucune tâche trouvée.</td></tr>
+                <tr><td colSpan={6} className="text-center py-8 text-muted-foreground">{t.followupsPage.noTasks}</td></tr>
               ) : (
                 filteredTasks.map(task => (
                   <TaskRow 
@@ -194,6 +194,7 @@ function KpiCard({ title, value, icon: Icon, color }: any) {
 }
 
 function TaskRow({ task, onComplete }: { task: IFollowUpTask, onComplete: () => void }) {
+  const { t } = useAppState();
   const patient = (task.patientId && typeof task.patientId === "object") ? (task.patientId as IPatient) : null;
   const isActionable = ["pending", "in_progress"].includes(task.status);
   const pFirstName = patient?.firstName || "Patient";
@@ -211,7 +212,7 @@ function TaskRow({ task, onComplete }: { task: IFollowUpTask, onComplete: () => 
           </div>
         </div>
       </td>
-      <td className="px-4 py-3 font-medium">{taskTypeLabel[task.type] || task.type}</td>
+      <td className="px-4 py-3 font-medium">{taskTypeLabel(t)[task.type] || task.type}</td>
       <td className="px-4 py-3"><PriorityBadge priority={task.priority} /></td>
       <td className="px-4 py-3">
         <span className={cn(
@@ -220,7 +221,7 @@ function TaskRow({ task, onComplete }: { task: IFollowUpTask, onComplete: () => 
           task.status === "in_progress" ? "bg-accent-soft text-accent" :
           task.status === "pending" ? "bg-warning-soft text-warning" : "bg-muted text-muted-foreground"
         )}>
-          {taskStatusLabel[task.status] || task.status}
+          {taskStatusLabel(t)[task.status] || task.status}
         </span>
       </td>
       <td className="px-4 py-3 text-center font-medium">{task.attemptCount}</td>
@@ -228,7 +229,7 @@ function TaskRow({ task, onComplete }: { task: IFollowUpTask, onComplete: () => 
         {isActionable && (
           <div className="flex items-center justify-end gap-2">
             <JournalDialog task={task} />
-            <Button size="sm" variant="outline" onClick={onComplete}>Terminer</Button>
+            <Button size="sm" variant="outline" onClick={onComplete}>{t.followupsPage.btnComplete}</Button>
           </div>
         )}
       </td>
@@ -237,6 +238,7 @@ function TaskRow({ task, onComplete }: { task: IFollowUpTask, onComplete: () => 
 }
 
 function JournalDialog({ task }: { task: IFollowUpTask }) {
+  const { t } = useAppState();
   const [open, setOpen] = useState(false);
   const [channel, setChannel] = useState("phone");
   const [outcome, setOutcome] = useState("no_answer");
@@ -247,7 +249,7 @@ function JournalDialog({ task }: { task: IFollowUpTask }) {
     mutationFn: (data: any) => api.post("/follow-ups/attempts", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["follow-ups"] });
-      toast.success("Tentative enregistrée");
+      toast.success(t.followupsPage.toastAttempt);
       setOpen(false);
       setNotes("");
     },
@@ -273,22 +275,22 @@ function JournalDialog({ task }: { task: IFollowUpTask }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="secondary">Journal</Button>
+        <Button size="sm" variant="secondary">{t.followupsPage.btnJournal}</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Journal de contact</DialogTitle>
+          <DialogTitle>{t.followupsPage.journalTitle}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Canal</label>
+            <label className="text-sm font-medium">{t.followupsPage.journalChannel}</label>
             <div className="grid grid-cols-5 gap-2">
               {[
-                { id: "phone", icon: Phone, label: "Appel" },
-                { id: "whatsapp", icon: MessageSquare, label: "WA" },
-                { id: "sms", icon: Smartphone, label: "SMS" },
-                { id: "email", icon: Mail, label: "Email" },
-                { id: "in_person", icon: User, label: "Visite" }
+                { id: "phone", icon: Phone, label: t.followupsPage.channelPhone },
+                { id: "whatsapp", icon: MessageSquare, label: t.followupsPage.channelWA },
+                { id: "sms", icon: Smartphone, label: t.followupsPage.channelSMS },
+                { id: "email", icon: Mail, label: t.followupsPage.channelEmail },
+                { id: "in_person", icon: User, label: t.followupsPage.channelVisit }
               ].map(c => (
                 <button
                   key={c.id}
@@ -307,31 +309,31 @@ function JournalDialog({ task }: { task: IFollowUpTask }) {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Résultat</label>
+            <label className="text-sm font-medium">{t.followupsPage.journalOutcome}</label>
             <select 
               className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               value={outcome}
               onChange={(e) => setOutcome(e.target.value)}
             >
-              <option value="no_answer">Pas de réponse</option>
-              <option value="left_voicemail">Message vocal laissé</option>
-              <option value="spoken_agreed">Contacté - D'accord</option>
-              <option value="spoken_declined">Contacté - Refus / Pas intéressé</option>
-              <option value="invalid_number">Numéro invalide</option>
+              <option value="no_answer">{t.followupsPage.outNoAnswer}</option>
+              <option value="left_voicemail">{t.followupsPage.outVoicemail}</option>
+              <option value="spoken_agreed">{t.followupsPage.outAgreed}</option>
+              <option value="spoken_declined">{t.followupsPage.outDeclined}</option>
+              <option value="invalid_number">{t.followupsPage.outInvalid}</option>
             </select>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Notes (optionnel)</label>
+            <label className="text-sm font-medium">{t.followupsPage.journalNotes}</label>
             <Textarea 
-              placeholder="Détails de l'échange..." 
+              placeholder={t.followupsPage.journalNotesPlaceholder} 
               value={notes} 
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
 
           <Button type="submit" className="w-full" disabled={mutation.isPending}>
-            {mutation.isPending ? "Enregistrement..." : "Enregistrer la tentative"}
+            {mutation.isPending ? t.followupsPage.journalSaving : t.followupsPage.journalSave}
           </Button>
         </form>
       </DialogContent>

@@ -1,3 +1,4 @@
+import { useAppState } from "@/hooks/use-app-state";
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -12,6 +13,7 @@ export const Route = createFileRoute("/revenue")({
 });
 
 function RevenuePage() {
+  const { t } = useAppState();
   const { isAdminUnlocked } = useAdmin();
 
   if (!isAdminUnlocked) {
@@ -51,7 +53,7 @@ function RevenuePage() {
   if (isError) {
     return (
       <div className="p-12 text-center text-destructive">
-        Impossible de charger les données de revenus.
+        {t.revenuePage.errorLoading}
       </div>
     );
   }
@@ -60,7 +62,7 @@ function RevenuePage() {
     return (
       <div className="p-12 text-center text-muted-foreground animate-pulse">
         <Loader2 className="inline mr-2 size-4 animate-spin" />
-        Chargement...
+        {t.revenuePage.loading}
       </div>
     );
   }
@@ -68,21 +70,21 @@ function RevenuePage() {
   return (
     <div className="mx-auto max-w-[1000px] space-y-6 pb-20">
       <PageHeader
-        title="Revenue Recovery"
-        subtitle="Mesurez les rendez-vous et opportunités récupérés grâce à Dental AI."
+        title={t.revenuePage.title}
+        subtitle={t.revenuePage.subtitle}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="RDV récupérés (Venu)"
+          label={t.revenuePage.statRecoveredAppts}
           value={recoveredAppts}
-          hint="Total récupéré"
+          hint={t.revenuePage.hintTotalRecovered}
           tone="success"
         />
         <StatCard
-          label="Traitements acceptés"
+          label={t.revenuePage.statBookedAppts}
           value={bookedAppts}
-          hint="RDV pris"
+          hint={t.revenuePage.hintApptsBooked}
           tone="accent"
         />
         <div className="col-span-1 lg:col-span-2">
@@ -90,19 +92,19 @@ function RevenuePage() {
               <div className="absolute top-0 right-0 p-4 opacity-10 text-success">
                  <Wallet className="size-24" />
               </div>
-              <p className="text-[13px] font-medium text-muted-foreground">Valeur estimée récupérée</p>
+              <p className="text-[13px] font-medium text-muted-foreground">{t.revenuePage.estimatedValue}</p>
               <div className="mt-2 flex items-baseline gap-3">
                  <p className="num text-4xl font-bold text-success">{money(recoveredValue)}</p>
               </div>
-              <p className="mt-2 text-sm font-medium text-foreground">Potentiel restant à récupérer : <span className="text-warning">{money(potentialValue)}</span></p>
+              <p className="mt-2 text-sm font-medium text-foreground">{t.revenuePage.potentialValue}<span className="text-warning">{money(potentialValue)}</span></p>
            </div>
         </div>
       </div>
 
-      <SectionCard title="Chronologie des récupérations" description="Historique récent des gains générés">
+      <SectionCard title={t.revenuePage.timelineTitle} description={t.revenuePage.timelineDesc}>
          <div className="relative border-l border-border ml-4 pl-8 space-y-8 py-2 mt-4">
             {timeline.length === 0 ? (
-               <p className="text-sm text-muted-foreground">Aucun historique récent.</p>
+               <p className="text-sm text-muted-foreground">{t.revenuePage.noHistory}</p>
             ) : (
                timeline.map((item, i) => (
                  <div key={i} className="relative">

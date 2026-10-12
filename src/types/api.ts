@@ -42,6 +42,14 @@ export interface IPatient {
     updatedAt?: string;
   }[];
   specialtyData?: Record<string, any>;
+  files?: {
+    id: string;
+    url: string;
+    title: string;
+    type: string;
+    size: number;
+    uploadedAt: string;
+  }[];
   createdAt: string;
   updatedAt: string;
 }

@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AgendaRouteImport } from './routes/agenda'
 import { Route as AiAssistantRouteImport } from './routes/ai-assistant'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
+import { Route as AssistantWhatsappRouteImport } from './routes/assistant-whatsapp'
 import { Route as ConversationsRouteImport } from './routes/conversations'
 import { Route as FollowUpsRouteImport } from './routes/follow-ups'
 import { Route as LandingRouteImport } from './routes/landing'
@@ -20,19 +21,25 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as NoShowsRouteImport } from './routes/no-shows'
 import { Route as RecoveryRouteImport } from './routes/recovery'
 import { Route as RevenueRouteImport } from './routes/revenue'
+import { Route as SecuriteRouteImport } from './routes/securite'
 import { Route as SuperAdminRouteImport } from './routes/super-admin'
 import { Route as WaitlistRouteImport } from './routes/waitlist'
+import { Route as AnalyticsOrigRouteImport } from './routes/analytics.orig'
 import { Route as PatientsIndexRouteImport } from './routes/patients/index'
 import { Route as PatientsIdRouteImport } from './routes/patients/$id'
+import { Route as RevenueOrigRouteImport } from './routes/revenue.orig'
 import { Route as SettingsAiRouteImport } from './routes/settings/ai'
+import { Route as SettingsAuditRouteImport } from './routes/settings/audit'
 import { Route as SettingsCatalogRouteImport } from './routes/settings/catalog'
 import { Route as SettingsClinicRouteImport } from './routes/settings/clinic'
 import { Route as SettingsCommunicationRouteImport } from './routes/settings/communication'
 import { Route as SettingsIntegrationsRouteImport } from './routes/settings/integrations'
 import { Route as SettingsTeamRouteImport } from './routes/settings/team'
+import { Route as SolutionsSpecialtyRouteImport } from './routes/solutions.$specialty'
 import { Route as SuperAdminIndexRouteImport } from './routes/super-admin/index'
 import { Route as SuperAdminSettingsRouteImport } from './routes/super-admin/settings'
 import { Route as SuperAdminUsersRouteImport } from './routes/super-admin/users'
+import { Route as SettingsCatalogOrigRouteImport } from './routes/settings/catalog.orig'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -52,6 +59,11 @@ const AiAssistantRoute = AiAssistantRouteImport.update({
 const AnalyticsRoute = AnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssistantWhatsappRoute = AssistantWhatsappRouteImport.update({
+  id: '/assistant-whatsapp',
+  path: '/assistant-whatsapp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConversationsRoute = ConversationsRouteImport.update({
@@ -89,6 +101,11 @@ const RevenueRoute = RevenueRouteImport.update({
   path: '/revenue',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SecuriteRoute = SecuriteRouteImport.update({
+  id: '/securite',
+  path: '/securite',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SuperAdminRoute = SuperAdminRouteImport.update({
   id: '/super-admin',
   path: '/super-admin',
@@ -98,6 +115,11 @@ const WaitlistRoute = WaitlistRouteImport.update({
   id: '/waitlist',
   path: '/waitlist',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AnalyticsOrigRoute = AnalyticsOrigRouteImport.update({
+  id: '/orig',
+  path: '/orig',
+  getParentRoute: () => AnalyticsRoute,
 } as any)
 const PatientsIndexRoute = PatientsIndexRouteImport.update({
   id: '/patients/',
@@ -109,9 +131,19 @@ const PatientsIdRoute = PatientsIdRouteImport.update({
   path: '/patients/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RevenueOrigRoute = RevenueOrigRouteImport.update({
+  id: '/orig',
+  path: '/orig',
+  getParentRoute: () => RevenueRoute,
+} as any)
 const SettingsAiRoute = SettingsAiRouteImport.update({
   id: '/settings/ai',
   path: '/settings/ai',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsAuditRoute = SettingsAuditRouteImport.update({
+  id: '/settings/audit',
+  path: '/settings/audit',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsCatalogRoute = SettingsCatalogRouteImport.update({
@@ -139,6 +171,11 @@ const SettingsTeamRoute = SettingsTeamRouteImport.update({
   path: '/settings/team',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SolutionsSpecialtyRoute = SolutionsSpecialtyRouteImport.update({
+  id: '/solutions/$specialty',
+  path: '/solutions/$specialty',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SuperAdminIndexRoute = SuperAdminIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -154,84 +191,110 @@ const SuperAdminUsersRoute = SuperAdminUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => SuperAdminRoute,
 } as any)
+const SettingsCatalogOrigRoute = SettingsCatalogOrigRouteImport.update({
+  id: '/orig',
+  path: '/orig',
+  getParentRoute: () => SettingsCatalogRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agenda': typeof AgendaRoute
   '/ai-assistant': typeof AiAssistantRoute
-  '/analytics': typeof AnalyticsRoute
+  '/analytics': typeof AnalyticsRouteWithChildren
+  '/assistant-whatsapp': typeof AssistantWhatsappRoute
   '/conversations': typeof ConversationsRoute
   '/follow-ups': typeof FollowUpsRoute
   '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/no-shows': typeof NoShowsRoute
   '/recovery': typeof RecoveryRoute
-  '/revenue': typeof RevenueRoute
+  '/revenue': typeof RevenueRouteWithChildren
+  '/securite': typeof SecuriteRoute
   '/super-admin': typeof SuperAdminRouteWithChildren
   '/waitlist': typeof WaitlistRoute
+  '/analytics/orig': typeof AnalyticsOrigRoute
   '/patients/$id': typeof PatientsIdRoute
+  '/revenue/orig': typeof RevenueOrigRoute
   '/settings/ai': typeof SettingsAiRoute
-  '/settings/catalog': typeof SettingsCatalogRoute
+  '/settings/audit': typeof SettingsAuditRoute
+  '/settings/catalog': typeof SettingsCatalogRouteWithChildren
   '/settings/clinic': typeof SettingsClinicRoute
   '/settings/communication': typeof SettingsCommunicationRoute
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/team': typeof SettingsTeamRoute
+  '/solutions/$specialty': typeof SolutionsSpecialtyRoute
   '/super-admin/settings': typeof SuperAdminSettingsRoute
   '/super-admin/users': typeof SuperAdminUsersRoute
   '/patients/': typeof PatientsIndexRoute
   '/super-admin/': typeof SuperAdminIndexRoute
+  '/settings/catalog/orig': typeof SettingsCatalogOrigRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agenda': typeof AgendaRoute
   '/ai-assistant': typeof AiAssistantRoute
-  '/analytics': typeof AnalyticsRoute
+  '/analytics': typeof AnalyticsRouteWithChildren
+  '/assistant-whatsapp': typeof AssistantWhatsappRoute
   '/conversations': typeof ConversationsRoute
   '/follow-ups': typeof FollowUpsRoute
   '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/no-shows': typeof NoShowsRoute
   '/recovery': typeof RecoveryRoute
-  '/revenue': typeof RevenueRoute
+  '/revenue': typeof RevenueRouteWithChildren
+  '/securite': typeof SecuriteRoute
   '/waitlist': typeof WaitlistRoute
+  '/analytics/orig': typeof AnalyticsOrigRoute
   '/patients/$id': typeof PatientsIdRoute
+  '/revenue/orig': typeof RevenueOrigRoute
   '/settings/ai': typeof SettingsAiRoute
-  '/settings/catalog': typeof SettingsCatalogRoute
+  '/settings/audit': typeof SettingsAuditRoute
+  '/settings/catalog': typeof SettingsCatalogRouteWithChildren
   '/settings/clinic': typeof SettingsClinicRoute
   '/settings/communication': typeof SettingsCommunicationRoute
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/team': typeof SettingsTeamRoute
+  '/solutions/$specialty': typeof SolutionsSpecialtyRoute
   '/super-admin/settings': typeof SuperAdminSettingsRoute
   '/super-admin/users': typeof SuperAdminUsersRoute
   '/patients': typeof PatientsIndexRoute
   '/super-admin': typeof SuperAdminIndexRoute
+  '/settings/catalog/orig': typeof SettingsCatalogOrigRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/agenda': typeof AgendaRoute
   '/ai-assistant': typeof AiAssistantRoute
-  '/analytics': typeof AnalyticsRoute
+  '/analytics': typeof AnalyticsRouteWithChildren
+  '/assistant-whatsapp': typeof AssistantWhatsappRoute
   '/conversations': typeof ConversationsRoute
   '/follow-ups': typeof FollowUpsRoute
   '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/no-shows': typeof NoShowsRoute
   '/recovery': typeof RecoveryRoute
-  '/revenue': typeof RevenueRoute
+  '/revenue': typeof RevenueRouteWithChildren
+  '/securite': typeof SecuriteRoute
   '/super-admin': typeof SuperAdminRouteWithChildren
   '/waitlist': typeof WaitlistRoute
+  '/analytics/orig': typeof AnalyticsOrigRoute
   '/patients/$id': typeof PatientsIdRoute
+  '/revenue/orig': typeof RevenueOrigRoute
   '/settings/ai': typeof SettingsAiRoute
-  '/settings/catalog': typeof SettingsCatalogRoute
+  '/settings/audit': typeof SettingsAuditRoute
+  '/settings/catalog': typeof SettingsCatalogRouteWithChildren
   '/settings/clinic': typeof SettingsClinicRoute
   '/settings/communication': typeof SettingsCommunicationRoute
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/team': typeof SettingsTeamRoute
+  '/solutions/$specialty': typeof SolutionsSpecialtyRoute
   '/super-admin/settings': typeof SuperAdminSettingsRoute
   '/super-admin/users': typeof SuperAdminUsersRoute
   '/patients/': typeof PatientsIndexRoute
   '/super-admin/': typeof SuperAdminIndexRoute
+  '/settings/catalog/orig': typeof SettingsCatalogOrigRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -240,6 +303,7 @@ export interface FileRouteTypes {
     | '/agenda'
     | '/ai-assistant'
     | '/analytics'
+    | '/assistant-whatsapp'
     | '/conversations'
     | '/follow-ups'
     | '/landing'
@@ -247,25 +311,32 @@ export interface FileRouteTypes {
     | '/no-shows'
     | '/recovery'
     | '/revenue'
+    | '/securite'
     | '/super-admin'
     | '/waitlist'
+    | '/analytics/orig'
     | '/patients/$id'
+    | '/revenue/orig'
     | '/settings/ai'
+    | '/settings/audit'
     | '/settings/catalog'
     | '/settings/clinic'
     | '/settings/communication'
     | '/settings/integrations'
     | '/settings/team'
+    | '/solutions/$specialty'
     | '/super-admin/settings'
     | '/super-admin/users'
     | '/patients/'
     | '/super-admin/'
+    | '/settings/catalog/orig'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/agenda'
     | '/ai-assistant'
     | '/analytics'
+    | '/assistant-whatsapp'
     | '/conversations'
     | '/follow-ups'
     | '/landing'
@@ -273,24 +344,31 @@ export interface FileRouteTypes {
     | '/no-shows'
     | '/recovery'
     | '/revenue'
+    | '/securite'
     | '/waitlist'
+    | '/analytics/orig'
     | '/patients/$id'
+    | '/revenue/orig'
     | '/settings/ai'
+    | '/settings/audit'
     | '/settings/catalog'
     | '/settings/clinic'
     | '/settings/communication'
     | '/settings/integrations'
     | '/settings/team'
+    | '/solutions/$specialty'
     | '/super-admin/settings'
     | '/super-admin/users'
     | '/patients'
     | '/super-admin'
+    | '/settings/catalog/orig'
   id:
     | '__root__'
     | '/'
     | '/agenda'
     | '/ai-assistant'
     | '/analytics'
+    | '/assistant-whatsapp'
     | '/conversations'
     | '/follow-ups'
     | '/landing'
@@ -298,42 +376,52 @@ export interface FileRouteTypes {
     | '/no-shows'
     | '/recovery'
     | '/revenue'
+    | '/securite'
     | '/super-admin'
     | '/waitlist'
+    | '/analytics/orig'
     | '/patients/$id'
+    | '/revenue/orig'
     | '/settings/ai'
+    | '/settings/audit'
     | '/settings/catalog'
     | '/settings/clinic'
     | '/settings/communication'
     | '/settings/integrations'
     | '/settings/team'
+    | '/solutions/$specialty'
     | '/super-admin/settings'
     | '/super-admin/users'
     | '/patients/'
     | '/super-admin/'
+    | '/settings/catalog/orig'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgendaRoute: typeof AgendaRoute
   AiAssistantRoute: typeof AiAssistantRoute
-  AnalyticsRoute: typeof AnalyticsRoute
+  AnalyticsRoute: typeof AnalyticsRouteWithChildren
+  AssistantWhatsappRoute: typeof AssistantWhatsappRoute
   ConversationsRoute: typeof ConversationsRoute
   FollowUpsRoute: typeof FollowUpsRoute
   LandingRoute: typeof LandingRoute
   LoginRoute: typeof LoginRoute
   NoShowsRoute: typeof NoShowsRoute
   RecoveryRoute: typeof RecoveryRoute
-  RevenueRoute: typeof RevenueRoute
+  RevenueRoute: typeof RevenueRouteWithChildren
+  SecuriteRoute: typeof SecuriteRoute
   SuperAdminRoute: typeof SuperAdminRouteWithChildren
   WaitlistRoute: typeof WaitlistRoute
   PatientsIdRoute: typeof PatientsIdRoute
   SettingsAiRoute: typeof SettingsAiRoute
-  SettingsCatalogRoute: typeof SettingsCatalogRoute
+  SettingsAuditRoute: typeof SettingsAuditRoute
+  SettingsCatalogRoute: typeof SettingsCatalogRouteWithChildren
   SettingsClinicRoute: typeof SettingsClinicRoute
   SettingsCommunicationRoute: typeof SettingsCommunicationRoute
   SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute
   SettingsTeamRoute: typeof SettingsTeamRoute
+  SolutionsSpecialtyRoute: typeof SolutionsSpecialtyRoute
   PatientsIndexRoute: typeof PatientsIndexRoute
 }
 
@@ -365,6 +453,13 @@ declare module '@tanstack/react-router' {
       path: '/analytics'
       fullPath: '/analytics'
       preLoaderRoute: typeof AnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assistant-whatsapp': {
+      id: '/assistant-whatsapp'
+      path: '/assistant-whatsapp'
+      fullPath: '/assistant-whatsapp'
+      preLoaderRoute: typeof AssistantWhatsappRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/conversations': {
@@ -416,6 +511,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RevenueRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/securite': {
+      id: '/securite'
+      path: '/securite'
+      fullPath: '/securite'
+      preLoaderRoute: typeof SecuriteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/super-admin': {
       id: '/super-admin'
       path: '/super-admin'
@@ -429,6 +531,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/waitlist'
       preLoaderRoute: typeof WaitlistRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/analytics/orig': {
+      id: '/analytics/orig'
+      path: '/orig'
+      fullPath: '/analytics/orig'
+      preLoaderRoute: typeof AnalyticsOrigRouteImport
+      parentRoute: typeof AnalyticsRoute
     }
     '/patients/': {
       id: '/patients/'
@@ -444,11 +553,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PatientsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/revenue/orig': {
+      id: '/revenue/orig'
+      path: '/orig'
+      fullPath: '/revenue/orig'
+      preLoaderRoute: typeof RevenueOrigRouteImport
+      parentRoute: typeof RevenueRoute
+    }
     '/settings/ai': {
       id: '/settings/ai'
       path: '/settings/ai'
       fullPath: '/settings/ai'
       preLoaderRoute: typeof SettingsAiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/audit': {
+      id: '/settings/audit'
+      path: '/settings/audit'
+      fullPath: '/settings/audit'
+      preLoaderRoute: typeof SettingsAuditRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings/catalog': {
@@ -486,6 +609,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsTeamRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/solutions/$specialty': {
+      id: '/solutions/$specialty'
+      path: '/solutions/$specialty'
+      fullPath: '/solutions/$specialty'
+      preLoaderRoute: typeof SolutionsSpecialtyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/super-admin/': {
       id: '/super-admin/'
       path: '/'
@@ -507,8 +637,38 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperAdminUsersRouteImport
       parentRoute: typeof SuperAdminRoute
     }
+    '/settings/catalog/orig': {
+      id: '/settings/catalog/orig'
+      path: '/orig'
+      fullPath: '/settings/catalog/orig'
+      preLoaderRoute: typeof SettingsCatalogOrigRouteImport
+      parentRoute: typeof SettingsCatalogRoute
+    }
   }
 }
+
+interface AnalyticsRouteChildren {
+  AnalyticsOrigRoute: typeof AnalyticsOrigRoute
+}
+
+const AnalyticsRouteChildren: AnalyticsRouteChildren = {
+  AnalyticsOrigRoute: AnalyticsOrigRoute,
+}
+
+const AnalyticsRouteWithChildren = AnalyticsRoute._addFileChildren(
+  AnalyticsRouteChildren,
+)
+
+interface RevenueRouteChildren {
+  RevenueOrigRoute: typeof RevenueOrigRoute
+}
+
+const RevenueRouteChildren: RevenueRouteChildren = {
+  RevenueOrigRoute: RevenueOrigRoute,
+}
+
+const RevenueRouteWithChildren =
+  RevenueRoute._addFileChildren(RevenueRouteChildren)
 
 interface SuperAdminRouteChildren {
   SuperAdminSettingsRoute: typeof SuperAdminSettingsRoute
@@ -526,27 +686,43 @@ const SuperAdminRouteWithChildren = SuperAdminRoute._addFileChildren(
   SuperAdminRouteChildren,
 )
 
+interface SettingsCatalogRouteChildren {
+  SettingsCatalogOrigRoute: typeof SettingsCatalogOrigRoute
+}
+
+const SettingsCatalogRouteChildren: SettingsCatalogRouteChildren = {
+  SettingsCatalogOrigRoute: SettingsCatalogOrigRoute,
+}
+
+const SettingsCatalogRouteWithChildren = SettingsCatalogRoute._addFileChildren(
+  SettingsCatalogRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgendaRoute: AgendaRoute,
   AiAssistantRoute: AiAssistantRoute,
-  AnalyticsRoute: AnalyticsRoute,
+  AnalyticsRoute: AnalyticsRouteWithChildren,
+  AssistantWhatsappRoute: AssistantWhatsappRoute,
   ConversationsRoute: ConversationsRoute,
   FollowUpsRoute: FollowUpsRoute,
   LandingRoute: LandingRoute,
   LoginRoute: LoginRoute,
   NoShowsRoute: NoShowsRoute,
   RecoveryRoute: RecoveryRoute,
-  RevenueRoute: RevenueRoute,
+  RevenueRoute: RevenueRouteWithChildren,
+  SecuriteRoute: SecuriteRoute,
   SuperAdminRoute: SuperAdminRouteWithChildren,
   WaitlistRoute: WaitlistRoute,
   PatientsIdRoute: PatientsIdRoute,
   SettingsAiRoute: SettingsAiRoute,
-  SettingsCatalogRoute: SettingsCatalogRoute,
+  SettingsAuditRoute: SettingsAuditRoute,
+  SettingsCatalogRoute: SettingsCatalogRouteWithChildren,
   SettingsClinicRoute: SettingsClinicRoute,
   SettingsCommunicationRoute: SettingsCommunicationRoute,
   SettingsIntegrationsRoute: SettingsIntegrationsRoute,
   SettingsTeamRoute: SettingsTeamRoute,
+  SolutionsSpecialtyRoute: SolutionsSpecialtyRoute,
   PatientsIndexRoute: PatientsIndexRoute,
 }
 export const routeTree = rootRouteImport

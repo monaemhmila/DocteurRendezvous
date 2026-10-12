@@ -7,7 +7,11 @@ import {
   Sparkles,
   TrendingUp,
   Wallet,
-  ShieldAlert
+  ShieldAlert,
+  UserCheck,
+  XCircle,
+  CheckCircle2,
+  Stethoscope,
 } from "lucide-react";
 import {
   AIStatusBadge,
@@ -41,7 +45,7 @@ import { useAdmin } from "@/contexts/admin-context";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Tableau de bord — Dental AI" },
+      { title: "Tableau de bord — Sanovia AI" },
       {
         name: "description",
         content:
@@ -51,6 +55,93 @@ export const Route = createFileRoute("/")({
   }),
   component: Dashboard,
 });
+
+// ─── Doctor Stats Section ────────────────────────────────────────────────────
+function DoctorStatsSection() {
+  const { t } = useAppState();
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["doctor-stats"],
+    queryFn: () => api.get("/stats/doctors"),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const doctors: any[] = data?.doctors || [];
+
+  if (isLoading) {
+    return (
+      <SectionCard title={t.dashboardPage.doctorPerformance} description={t.dashboardPage.thisWeek}>
+        <div className="p-6 text-center text-muted-foreground text-sm animate-pulse">{t.common.loading}</div>
+      </SectionCard>
+    );
+  }
+
+  if (doctors.length === 0) {
+    return null;
+  }
+
+  return (
+    <SectionCard
+      title={t.dashboardPage.doctorPerformance}
+      description={`${t.dashboardPage.weekOf} ${data?.weekStart ? new Date(data.weekStart).toLocaleDateString(t.common.active === "Actif" ? "fr-FR" : "en-US") : ""}`}
+    >
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {doctors.map((doc: any) => {
+          const retention = doc.stats.retentionRate;
+          const retentionColor =
+            retention >= 80 ? "text-emerald-600" : retention >= 50 ? "text-amber-600" : "text-red-500";
+          const retentionBg =
+            retention >= 80 ? "bg-emerald-50 dark:bg-emerald-950/30" : retention >= 50 ? "bg-amber-50 dark:bg-amber-950/30" : "bg-red-50 dark:bg-red-950/30";
+
+          return (
+            <div
+              key={doc.doctorId}
+              className="relative overflow-hidden rounded-xl border border-border bg-card p-5 shadow-sm hover:shadow-md transition-shadow"
+            >
+              {/* Retention indicator bar */}
+              <div
+                className="absolute top-0 left-0 h-1 rounded-t-xl bg-gradient-to-r from-primary to-primary/50 transition-all duration-700"
+                style={{ width: `${retention}%` }}
+              />
+
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-sm">
+                    {doc.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm text-foreground leading-tight">{doc.name}</p>
+                    <p className="text-[10px] text-muted-foreground capitalize">{doc.role === "clinic_owner" ? t.dashboardPage.headDoctor : doc.specialty || doc.role}</p>
+                  </div>
+                </div>
+                <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${retentionBg} ${retentionColor}`}>
+                  {retention} {t.dashboardPage.attendance}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="flex flex-col items-center rounded-lg bg-muted/50 p-2.5 text-center">
+                  <Stethoscope className="size-4 text-primary mb-1" />
+                  <span className="text-lg font-black text-foreground">{doc.stats.appointmentsThisWeek}</span>
+                  <span className="text-[9px] uppercase tracking-wider text-muted-foreground">{t.dashboardPage.appointmentsAbbr}</span>
+                </div>
+                <div className="flex flex-col items-center rounded-lg bg-muted/50 p-2.5 text-center">
+                  <CheckCircle2 className="size-4 text-emerald-500 mb-1" />
+                  <span className="text-lg font-black text-foreground">{doc.stats.patientsSeen}</span>
+                  <span className="text-[9px] uppercase tracking-wider text-muted-foreground">{t.dashboardPage.patientsSeen}</span>
+                </div>
+                <div className="flex flex-col items-center rounded-lg bg-muted/50 p-2.5 text-center">
+                  <XCircle className="size-4 text-red-400 mb-1" />
+                  <span className="text-lg font-black text-foreground">{doc.stats.noShowsCount}</span>
+                  <span className="text-[9px] uppercase tracking-wider text-muted-foreground">{t.dashboardPage.noShows}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </SectionCard>
+  );
+}
 
 function Dashboard() {
   const { user } = useAuth();
@@ -196,6 +287,9 @@ function Dashboard() {
           icon={MessagesSquare}
         />
       </div>
+
+      {/* Doctor Stats Section */}
+      <DoctorStatsSection />
 
       <div className="grid gap-5 xl:grid-cols-3">
         <SectionCard

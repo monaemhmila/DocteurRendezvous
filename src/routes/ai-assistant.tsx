@@ -2,6 +2,7 @@ import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useAdmin } from "@/contexts/admin-context";
 import { useAuth } from "@/contexts/auth-context";
+import { useAppState } from "@/hooks/use-app-state";
 import {
   Sparkles,
   Languages,
@@ -111,7 +112,7 @@ const PRESETS = {
 export const Route = createFileRoute("/ai-assistant")({
   head: () => ({
     meta: [
-      { title: "Assistant IA & Paramètres WhatsApp — Dental AI" },
+      { title: "Assistant IA & Paramètres WhatsApp — Sanovia AI" },
       { name: "description", content: "Consignes personnalisées de l'IA, QR Code WhatsApp et règles de réservation du cabinet." },
     ],
   }),
@@ -122,6 +123,7 @@ function AIAssistantPage() {
   const queryClient = useQueryClient();
   const { isAdminUnlocked } = useAdmin();
   const { hasPermission } = useAuth();
+  const { t, language } = useAppState();
 
   if (!hasPermission("aiConfig")) {
     return <Navigate to="/" />;
@@ -265,8 +267,8 @@ function AIAssistantPage() {
     <div className="mx-auto max-w-[1100px] space-y-6 pb-12">
       {/* Header */}
       <PageHeader
-        title="Assistant IA & WhatsApp"
-        subtitle="Personnalisez les directives de votre IA, vos règles de prise de RDV et le QR Code WhatsApp du cabinet."
+        title={t.pages.aiAssistantTitle}
+        subtitle={t.pages.aiAssistantSubtitle}
         actions={
           <div className="flex items-center gap-3">
             <Button asChild variant="outline" size="sm" className="gap-2">
@@ -296,19 +298,19 @@ function AIAssistantPage() {
         <TabsList className="grid w-full grid-cols-4 max-w-2xl mb-4 bg-muted/60 p-1">
           <TabsTrigger value="prompt" className="gap-1.5 text-xs md:text-sm">
             <FileText className="size-3.5 md:size-4" />
-            Consignes
+            {t.aiAssistantPage.tabsPrompt}
           </TabsTrigger>
           <TabsTrigger value="services" className="gap-1.5 text-xs md:text-sm font-medium">
             <Clock className="size-3.5 md:size-4 text-emerald-600" />
-            Soins & Durées
+            {t.aiAssistantPage.tabsServices}
           </TabsTrigger>
           <TabsTrigger value="rules" className="gap-1.5 text-xs md:text-sm">
             <Sliders className="size-3.5 md:size-4" />
-            Règles Métier
+            {t.aiAssistantPage.tabsRules}
           </TabsTrigger>
           <TabsTrigger value="whatsapp" className="gap-1.5 text-xs md:text-sm">
             <QrCode className="size-3.5 md:size-4" />
-            QR WhatsApp
+            {t.aiAssistantPage.tabsWhatsapp}
           </TabsTrigger>
         </TabsList>
 
@@ -320,8 +322,8 @@ function AIAssistantPage() {
             <div className="md:col-span-2 space-y-6">
               {/* Presets Header */}
               <SectionCard
-                title="Catalogue des Prestations & Durées de Consultation"
-                description="Configurez les types de soins dispensés au cabinet. L'IA alloue automatiquement des blocs de temps continus correspondant à la durée exacte de chaque soin."
+                title={t.aiAssistantPage.servicesTitle}
+                description={t.aiAssistantPage.servicesDesc}
               >
                 <div className="space-y-4">
                   {/* Preset Buttons */}
@@ -329,9 +331,9 @@ function AIAssistantPage() {
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-semibold text-emerald-950 flex items-center gap-1.5">
                         <Sparkles className="size-4 text-emerald-600" />
-                        Pré-remplir rapidement selon votre spécialité :
+                        {t.aiAssistantPage.presetsHeader}
                       </p>
-                      <span className="text-[11px] text-muted-foreground">1 clic pour charger</span>
+                      <span className="text-[11px] text-muted-foreground">{t.aiAssistantPage.presetsHint}</span>
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -340,7 +342,7 @@ function AIAssistantPage() {
                           key={key}
                           type="button"
                           onClick={() => handleApplyPreset(key)}
-                          className="flex flex-col items-center justify-center p-2.5 rounded-lg border bg-white hover:border-emerald-500 hover:bg-emerald-50/80 transition-all text-center shadow-xs group"
+                          className="flex flex-col items-center justify-center p-2.5 rounded-lg border bg-card hover:border-emerald-500 hover:bg-emerald-50/80 dark:hover:bg-emerald-900/30 transition-all text-center shadow-xs group"
                         >
                           <span className="text-lg mb-1">{PRESETS[key].icon}</span>
                           <span className="text-xs font-medium text-foreground group-hover:text-emerald-700 leading-tight">
@@ -355,7 +357,7 @@ function AIAssistantPage() {
                   <div className="space-y-3 pt-2">
                     <div className="flex items-center justify-between">
                       <Label className="text-sm font-semibold">
-                        Prestations actives ({services.length})
+                        {t.aiAssistantPage.activeServices}{services.length})
                       </Label>
                       <Button
                         type="button"
@@ -365,7 +367,7 @@ function AIAssistantPage() {
                         className="gap-1.5 text-xs h-8 border-emerald-300 text-emerald-700 bg-emerald-50/50 hover:bg-emerald-100/50"
                       >
                         <Plus className="size-3.5" />
-                        Ajouter un soin
+                        {t.aiAssistantPage.addService}
                       </Button>
                     </div>
 
@@ -382,7 +384,7 @@ function AIAssistantPage() {
                                 <Input
                                   value={item.name}
                                   onChange={(e) => handleUpdateService(item.id, "name", e.target.value)}
-                                  placeholder="Intitulé du soin (ex: Détartrage)"
+                                  placeholder={t.aiAssistantPage.serviceNamePlaceholder}
                                   className="h-8 text-sm font-semibold"
                                 />
                               </div>
@@ -437,7 +439,7 @@ function AIAssistantPage() {
                           <Input
                             value={item.description || ""}
                             onChange={(e) => handleUpdateService(item.id, "description", e.target.value)}
-                            placeholder="Description ou consigne indicative (ex: 'Bilan complet, détartrage ultrasonique')..."
+                            placeholder={t.aiAssistantPage.serviceDescPlaceholder}
                             className="h-7 text-xs text-muted-foreground bg-muted/20 border-border/50"
                           />
                         </div>
@@ -450,14 +452,14 @@ function AIAssistantPage() {
 
             {/* Sidebar Guide */}
             <div className="space-y-6">
-              <SectionCard title="Règle d'Agenda IA" className="bg-emerald-50/30 border-emerald-200/50">
+              <SectionCard title={t.aiAssistantPage.agendaRulesTitle} className="bg-emerald-50/30 border-emerald-200/50">
                 <div className="space-y-3 text-xs">
                   <div className="flex items-center gap-2 text-emerald-800 font-semibold">
                     <CheckCircle2 className="size-4 text-emerald-600" />
                     Allocation continue de créneaux
                   </div>
                   <p className="text-muted-foreground leading-relaxed">
-                    Si un patient demande un soin de <strong>60 minutes</strong> (ex: Pose d'implant ou chirurgie), le bot vérifie dans votre agenda qu'un bloc de <strong>1 heure entière continue</strong> est libre sans chevauchement.
+                    Si un patient demande un soin de <strong>60 minutes</strong>{t.aiAssistantPage.allocationDesc2}<strong>1 heure entière continue</strong> est libre sans chevauchement.
                   </p>
                   <Separator className="my-2" />
                   <div className="flex items-center gap-2 text-emerald-800 font-semibold">
@@ -470,10 +472,10 @@ function AIAssistantPage() {
                 </div>
               </SectionCard>
 
-              <SectionCard title="Garde-fous Médicaux">
+              <SectionCard title={t.aiAssistantPage.medicalGuardrails}>
                 <div className="space-y-2 text-xs text-muted-foreground">
-                  <p>• Le bot ne pose jamais de diagnostic médical.</p>
-                  <p>• Les devis complexes ou personnalisés sont toujours renvoyés vers une consultation clinique.</p>
+                  <p>{t.aiAssistantPage.guardrail1}</p>
+                  <p>{t.aiAssistantPage.guardrail2}</p>
                 </div>
               </SectionCard>
             </div>
@@ -487,14 +489,14 @@ function AIAssistantPage() {
           <div className="grid gap-6 md:grid-cols-3">
             <div className="md:col-span-2 space-y-6">
               <SectionCard
-                title="Consignes Personnalisées (System Prompt)"
-                description="Indiquez les particularités de votre cabinet dentaire que l'IA doit toujours respecter dans chaque échange."
+                title={t.aiAssistantPage.promptTitle}
+                description={t.aiAssistantPage.promptDesc}
               >
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="promptInput" className="text-sm font-semibold flex items-center justify-between">
-                      <span>Directives et informations spécifiques du praticien</span>
-                      <span className="text-xs text-muted-foreground">Injecté automatiquement dans l'IA</span>
+                      <span>{t.aiAssistantPage.promptLabel}</span>
+                      <span className="text-xs text-muted-foreground">{t.aiAssistantPage.promptBadge}</span>
                     </Label>
                     <Textarea
                       id="promptInput"
@@ -514,7 +516,7 @@ function AIAssistantPage() {
                       </p>
                       <ul className="text-xs text-muted-foreground mt-1.5 space-y-1 list-disc list-inside">
                         <li>Indiquer l'accès (ascenseur, étage, parking)</li>
-                        <li>Tarifs indicatifs usuels du cabinet</li>
+                        <li>{t.aiAssistantPage.typicalPrices}</li>
                         <li>Durée moyenne par type de consultation</li>
                       </ul>
                     </div>
@@ -536,12 +538,12 @@ function AIAssistantPage() {
 
               {/* Ton & Personnalité */}
               <SectionCard
-                title="Personnalité & Style de Réponse"
-                description="Définissez comment l'assistant s'exprime auprès de vos patients."
+                title={language === "ar" ? "شخصية وأسلوب الرد" : language === "en" ? "Personality & Response Style" : "Personnalité & Style de Réponse"}
+                description={language === "ar" ? "حدد كيف يتحدث المساعد مع مرضاك." : language === "en" ? "Define how the assistant speaks to your patients." : "Définissez comment l'assistant s'exprime auprès de vos patients."}
               >
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label className="text-xs font-semibold">Ton de la communication</Label>
+                    <Label className="text-xs font-semibold">{t.aiAssistantPage.communicationTone}</Label>
                     <select
                       value={tone}
                       onChange={(e) => setTone(e.target.value)}
@@ -549,12 +551,12 @@ function AIAssistantPage() {
                     >
                       <option value="friendly">Amical et professionnel (Recommandé)</option>
                       <option value="professional">Strictement formel & médical</option>
-                      <option value="empathic">Chaleureux, empathique et rassurant</option>
+                      <option value="empathic">{t.aiAssistantPage.toneEmpathic}</option>
                     </select>
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-xs font-semibold">Langues gérées automatiquement</Label>
+                    <Label className="text-xs font-semibold">{language === "ar" ? "اللغات المدعومة تلقائيًا" : language === "en" ? "Automatically managed languages" : "Langues gérées automatiquement"}</Label>
                     <div className="flex flex-wrap gap-1.5">
                       {["Français", "Arabe Tunisien", "Arabizi", "Anglais"].map((l) => (
                         <Badge key={l} variant="secondary" className="text-xs">
@@ -569,14 +571,14 @@ function AIAssistantPage() {
 
             {/* Sidebar info */}
             <div className="space-y-6">
-              <SectionCard title="État du Moteur IA" className="bg-emerald-50/30 border-emerald-200/50">
+              <SectionCard title={t.aiAssistantPage.engineState} className="bg-emerald-50/30 border-emerald-200/50">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-semibold">Statut</span>
+                  <span className="text-sm font-semibold">{t.aiAssistantPage.statusLabel}</span>
                   <AIStatusBadge active={true} />
                 </div>
                 <div className="space-y-2 text-xs text-muted-foreground">
                   <div className="flex justify-between py-1 border-b border-border/50">
-                    <span>Moteur IA</span>
+                    <span>{t.aiAssistantPage.engineAiLabel}</span>
                     <span className="font-semibold text-emerald-700 dark:text-emerald-400">Actif (.env / OpenAI)</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-border/50">
@@ -651,12 +653,12 @@ function AIAssistantPage() {
             <div className="md:col-span-2 space-y-6">
               {/* WhatsApp Business Number */}
               <SectionCard
-                title="Coordonnées WhatsApp du Cabinet"
-                description="Le numéro et le message d'accueil pré-rempli pour vos patients."
+                title={t.aiAssistantPage.waCoordTitle}
+                description={t.aiAssistantPage.waCoordDesc}
               >
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center gap-2 pb-2">
-                    <span className="text-xs text-muted-foreground font-medium">Pré-remplir avec :</span>
+                    <span className="text-xs text-muted-foreground font-medium">{t.aiAssistantPage.waPrefillWith}</span>
                     <Button
                       type="button"
                       variant="outline"
@@ -665,7 +667,7 @@ function AIAssistantPage() {
                       onClick={() => setWaPhoneNumber("+216 92 751 296")}
                     >
                       <Phone className="size-3" />
-                      Numéro Officiel Cabinet (+216 92 751 296)
+                      {t.aiAssistantPage.waOfficialNum} (+216 92 751 296)
                     </Button>
                     <Button
                       type="button"
@@ -675,13 +677,13 @@ function AIAssistantPage() {
                       onClick={() => setWaPhoneNumber("15551577215")}
                     >
                       <Sparkles className="size-3" />
-                      Numéro Test Sandbox (+1 555 157-7215)
+                      {t.aiAssistantPage.waSandboxNum} (+1 555 157-7215)
                     </Button>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label htmlFor="waPhone">Numéro WhatsApp configuré</Label>
+                      <Label htmlFor="waPhone">{t.aiAssistantPage.waConfiguredNum}</Label>
                       <div className="relative flex items-center">
                         <Phone className="absolute left-3 size-4 text-muted-foreground" />
                         <Input
@@ -695,7 +697,7 @@ function AIAssistantPage() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <Label htmlFor="prefilledMsg">Message pré-rempli au scan du QR Code</Label>
+                      <Label htmlFor="prefilledMsg">{t.aiAssistantPage.waPrefillMsg}</Label>
                       <Input
                         id="prefilledMsg"
                         value={prefilledMessage}
@@ -709,8 +711,8 @@ function AIAssistantPage() {
 
               {/* Guide de connexion Meta Webhook */}
               <SectionCard
-                title="⚠️ Guide de Connexion Meta Sandbox (Essentiel)"
-                description="Suivez ces 2 étapes dans Meta Developers pour que vos messages WhatsApp réels arrivent à l'IA :"
+                title={t.aiAssistantPage.waMetaGuideTitle}
+                description={t.aiAssistantPage.waMetaGuideDesc}
                 className="border-amber-200 bg-amber-50/30 dark:bg-amber-950/20"
               >
                 <div className="space-y-3 text-xs">
@@ -720,17 +722,19 @@ function AIAssistantPage() {
                       Abonner le Webhook au champ "messages" (Obligatoire dans Meta)
                     </p>
                     <p className="text-muted-foreground pl-7">
-                      Dans votre console Meta Developers ➔ <strong>WhatsApp</strong> ➔ <strong>Configuration</strong> ➔ Sous <em>Champs du Webhook</em>, cliquez sur <strong>Gérer (Manage)</strong> et cochez la case <strong>messages</strong> (S'abonner), puis validez.
+                      {t.aiAssistantPage.webhookInstruction1}
+                      <strong>WhatsApp</strong> ➔ <strong>Configuration</strong> ➔ Sous <em>Champs du Webhook</em>, cliquez sur <strong>Gérer (Manage)</strong> et cochez la case <strong>messages</strong> (S'abonner), puis validez.
                     </p>
                   </div>
 
                   <div className="p-3 rounded-lg border border-amber-200 bg-white/80 dark:bg-background/80 space-y-1.5">
                     <p className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
                       <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-600 text-white text-[11px]">2</span>
-                      Ajouter votre numéro de téléphone dans Meta Sandbox
+                      {t.aiAssistantPage.waMetaStep2Title}
                     </p>
                     <p className="text-muted-foreground pl-7">
-                      Dans <strong>WhatsApp</strong> ➔ <strong>Configuration de l'API</strong> ➔ Dans la liste déroulante <em>"À" (Numéro destinataire de test)</em>, cliquez sur <strong>Gérer la liste des numéros</strong> et ajoutez votre numéro (+216 23 599 094) avec le code SMS de vérification.
+                      {t.aiAssistantPage.webhookInstruction2}
+                      <strong>Configuration de l'API</strong> ➔ Dans la liste déroulante <em>"À" (Numéro destinataire de test)</em>, cliquez sur <strong>Gérer la liste des numéros</strong> et ajoutez votre numéro (+216 23 599 094) avec le code SMS de vérification.
                     </p>
                   </div>
                 </div>
@@ -738,31 +742,31 @@ function AIAssistantPage() {
 
               {/* Instructions d'utilisation en cabinet */}
               <SectionCard
-                title="Comment utiliser le QR Code au cabinet"
-                description="Facilitez l'accès pour vos patients au comptoir ou sur vos supports de communication."
+                title={t.aiAssistantPage.waUsageTitle}
+                description={t.aiAssistantPage.waUsageDesc}
               >
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                   <div className="p-3 rounded-lg border bg-muted/20 flex flex-col justify-between">
                     <div>
-                      <span className="font-bold text-emerald-700 text-sm">1. Accueil & Affiche</span>
+                      <span className="font-bold text-emerald-700 text-sm">{t.aiAssistantPage.waUsage1Title}</span>
                       <p className="text-muted-foreground mt-1">
-                        Imprimez le QR Code sur le comptoir pour que les patients puissent prendre RDV en 5 secondes.
+                        {t.aiAssistantPage.waUsage1Desc}
                       </p>
                     </div>
                   </div>
                   <div className="p-3 rounded-lg border bg-muted/20 flex flex-col justify-between">
                     <div>
-                      <span className="font-bold text-emerald-700 text-sm">2. Cartes de visite</span>
+                      <span className="font-bold text-emerald-700 text-sm">{t.aiAssistantPage.waUsage2Title}</span>
                       <p className="text-muted-foreground mt-1">
-                        Ajoutez le QR Code au dos de vos cartes de rendez-vous pour les reports et contrôles.
+                        {t.aiAssistantPage.waUsage2Desc}
                       </p>
                     </div>
                   </div>
                   <div className="p-3 rounded-lg border bg-muted/20 flex flex-col justify-between">
                     <div>
-                      <span className="font-bold text-emerald-700 text-sm">3. Site web & Réseaux</span>
+                      <span className="font-bold text-emerald-700 text-sm">{t.aiAssistantPage.waUsage3Title}</span>
                       <p className="text-muted-foreground mt-1">
-                        Partagez le lien direct wa.me sur votre page Instagram ou site pour capter de nouveaux patients.
+                        {t.aiAssistantPage.waUsage3Desc}
                       </p>
                     </div>
                   </div>
@@ -772,9 +776,9 @@ function AIAssistantPage() {
 
             {/* QR Code Preview Card */}
             <div className="space-y-6">
-              <SectionCard title="QR Code WhatsApp Actif" className="text-center">
+              <SectionCard title={t.aiAssistantPage.waActiveQRTitle} className="text-center">
                 <p className="text-xs text-muted-foreground mb-4">
-                  Scannez ce QR Code avec votre appareil photo pour démarrer immédiatement la conversation WhatsApp :
+                  {t.aiAssistantPage.waActiveQRDesc}
                 </p>
 
                 <div className="mx-auto w-[210px] h-[210px] bg-white p-3 rounded-2xl shadow-lg border border-emerald-100 flex items-center justify-center mb-4">
@@ -801,7 +805,7 @@ function AIAssistantPage() {
                     onClick={() => copyToClipboard(whatsappDirectLink, "Lien direct WhatsApp")}
                   >
                     <Share2 className="size-3.5" />
-                    Copier le lien direct (wa.me)
+                    {t.aiAssistantPage.waCopyDirectLink}
                   </Button>
 
                   <Button
@@ -812,7 +816,7 @@ function AIAssistantPage() {
                   >
                     <a href={whatsappDirectLink} target="_blank" rel="noopener noreferrer">
                       <ExternalLink className="size-3.5" />
-                      Tester dans WhatsApp Web
+                      {t.aiAssistantPage.waTestInWeb}
                     </a>
                   </Button>
                 </div>
@@ -828,40 +832,40 @@ function AIAssistantPage() {
           <div className="grid gap-6 md:grid-cols-3">
             <div className="md:col-span-2 space-y-6">
               <SectionCard
-                title="Capacités Autonomes de l'IA"
-                description="Activez ou désactivez les fonctionnalités administratives gérées par l'IA."
+                title={t.aiAssistantPage.capabilitiesTitle}
+                description={t.aiAssistantPage.rulesDesc}
               >
                 <div className="space-y-4">
                   {[
                     {
                       key: "autoBooking",
-                      label: "Vérification des disponibilités & Réservation d'agenda",
-                      desc: `Consulte le planning en direct de ${tenant?.name || "votre cabinet"} et insère automatiquement le rendez-vous.`,
+                      label: t.aiAssistantPage.capBooking,
+                      desc: t.aiAssistantPage.capBookingDesc,
                     },
                     {
                       key: "urgencyHandling",
-                      label: "Gestion prioritaire des Urgences dentaires (Rage de dent, abcès, douleurs)",
-                      desc: "Détecte les cas critiques, rassure avec empathie, propose en priorité absolue les créneaux du jour même et alerte le secrétariat.",
+                      label: t.aiAssistantPage.capUrgency,
+                      desc: t.aiAssistantPage.capUrgencyDesc,
                     },
                     {
                       key: "pricingQuotes",
-                      label: "Renseignements sur les Tarifs & Soins (Détartrage, Devis indicatifs)",
-                      desc: "Communique uniquement les tarifs mentionnés dans vos consignes sans poser de diagnostic.",
+                      label: t.aiAssistantPage.capPricing,
+                      desc: t.aiAssistantPage.capPricingDesc,
                     },
                     {
                       key: "reminders",
-                      label: "Confirmations et rappels automatiques par message",
-                      desc: "Envoie un récapitulatif clair avec date et heure dès qu'un créneau est validé.",
+                      label: t.aiAssistantPage.capReminders,
+                      desc: t.aiAssistantPage.capRemindersDesc,
                     },
                     {
                       key: "doctorEscalation",
-                      label: "Escalade vers le médecin / secrétariat",
-                      desc: "Passe le relais à l'équipe médicale dès qu'un patient demande un suivi ou un praticien.",
+                      label: t.aiAssistantPage.capDoctorEscalation,
+                      desc: t.aiAssistantPage.capDoctorEscalationDesc,
                     },
                     {
                       key: "multiLanguage",
-                      label: "Support multilingue (Français, Arabe Tunisien, Arabizi)",
-                      desc: "L'IA s'adapte automatiquement à la langue parlée par le patient.",
+                      label: t.aiAssistantPage.capMultilingual,
+                      desc: t.aiAssistantPage.capMultilingualDesc,
                     },
                   ].map((item) => (
                     <div
@@ -885,26 +889,26 @@ function AIAssistantPage() {
 
               {/* Escalade Humaine */}
               <SectionCard
-                title="Déclencheurs d'Escalade Vers le Médecin"
-                description="Dans quelles situations l'IA passe-t-elle immédiatement le relais à l'équipe médicale ?"
+                title={t.aiAssistantPage.escalationTitle}
+                description={t.aiAssistantPage.rulesDesc}
               >
                 <div className="space-y-3">
                   {[
                     {
                       key: "medicalQuestion",
-                      label: "Question d'ordre médical ou de prescription (l'IA ne donne jamais d'avis médical)",
+                      label: t.aiAssistantPage.escMedical,
                     },
                     {
                       key: "frustratedPatient",
-                      label: "Patient mécontent, inquiet ou réclamation sur un soin passé",
+                      label: t.aiAssistantPage.escFrustrated,
                     },
                     {
                       key: "complexQuote",
-                      label: "Demande complexe de prothèses multiples ou d'implants",
+                      label: t.aiAssistantPage.escQuote,
                     },
                     {
                       key: "lowConfidence",
-                      label: "Indécision ou confiance du modèle inférieure au seuil de sécurité",
+                      label: t.aiAssistantPage.escConfidence,
                     },
                   ].map((rule) => (
                     <div key={rule.key} className="flex items-center justify-between py-2 border-b border-border/40">

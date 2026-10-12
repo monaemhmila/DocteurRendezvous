@@ -53,7 +53,7 @@ import { useAuth } from "@/contexts/auth-context";
 export const Route = createFileRoute("/settings/team")({
   head: () => ({
     meta: [
-      { title: "Équipe & Gestion des Accès — Medical AI" },
+      { title: "Équipe & Gestion des Accès — Sanovia AI" },
       { name: "description", content: "Gestion des collaborateurs du cabinet médical et configuration des permissions d'accès." },
     ],
   }),

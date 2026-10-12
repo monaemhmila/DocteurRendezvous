@@ -19,7 +19,7 @@ import { useAppState } from "@/hooks/use-app-state";
 export const Route = createFileRoute("/recovery")({
   head: () => ({
     meta: [
-      { title: "Récupération patients — Dental AI" },
+      { title: "Récupération patients — Sanovia AI" },
       {
         name: "description",
         content: "Identifiez automatiquement les patients que votre cabinet risque de perdre.",
@@ -29,16 +29,7 @@ export const Route = createFileRoute("/recovery")({
   component: RecoveryPage,
 });
 
-/* Recovery type label mapping */
-const typeLabel: Record<string, string> = {
-  inactive_patient: "Patient inactif",
-  interrupted_treatment: "Traitement interrompu",
-  pending_quote: "Devis en attente",
-  no_show: "Rendez-vous manqué",
-  cancellation: "Annulation",
-  overdue_checkup: "Contrôle dépassé",
-  follow_up_required: "Suivi",
-};
+
 
 const statusLabel: Record<string, string> = {
   identified: "Identifié",

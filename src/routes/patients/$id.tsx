@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { useAppState } from "@/hooks/use-app-state";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { IPatient, IAppointment, IRecovery, IWaitlistEntry, IFollowUpTask } from "@/types/api";
@@ -19,6 +20,8 @@ import { PediaChart } from "@/components/patients/PediaChart";
 import { GynecoChart } from "@/components/patients/GynecoChart";
 import { GeneralChart } from "@/components/patients/GeneralChart";
 import { PrescriptionGenerator } from "@/components/patients/PrescriptionGenerator";
+import { PatientPDFExport } from "@/components/patients/PatientPDFExport";
+import { MedicalImageViewer } from "@/components/patients/MedicalImageViewer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -73,6 +76,7 @@ import {
   Tag,
   ShieldAlert,
   Eye,
+  ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { relativeDay } from "@/lib/format";
@@ -116,6 +120,7 @@ const DAYS_OF_WEEK = [
 ];
 
 function PatientProfilePage() {
+  const { language, t } = useAppState();
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -185,7 +190,7 @@ function PatientProfilePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["patients", id] });
       queryClient.invalidateQueries({ queryKey: ["patients"] });
-      toast.success("Dossier patient mis à jour avec succès !");
+      toast.success(language === "ar" ? "تم تحديث ملف المريض بنجاح!" : language === "en" ? "Patient file updated successfully!" : "Dossier patient mis à jour avec succès !");
       setIsEditProfileOpen(false);
     },
     onError: (err: any) => toast.error(err.message || "Erreur lors de la mise à jour"),
@@ -195,7 +200,7 @@ function PatientProfilePage() {
     mutationFn: (notes: string) => api.put(`/patients/${id}`, { notes }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["patients", id] });
-      toast.success("Notes cliniques enregistrées.");
+      toast.success(language === "ar" ? "تم حفظ الملاحظات السريرية." : language === "en" ? "Clinical notes saved." : "Notes cliniques enregistrées.");
     },
     onError: (err: any) => toast.error(err.message || "Erreur lors de l'enregistrement des notes"),
   });
@@ -203,7 +208,7 @@ function PatientProfilePage() {
   const deletePatientMutation = useMutation({
     mutationFn: () => api.delete(`/patients/${id}`),
     onSuccess: () => {
-      toast.success("Patient supprimé avec succès.");
+      toast.success(language === "ar" ? "تم حذف المريض بنجاح." : language === "en" ? "Patient deleted successfully." : "Patient supprimé avec succès.");
       navigate({ to: "/patients" });
     },
     onError: (err: any) => toast.error(err.message || "Impossible de supprimer ce patient"),
@@ -339,9 +344,7 @@ function PatientProfilePage() {
           to="/patients"
           className="inline-flex items-center text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
         >
-          <ChevronLeft className="mr-1 size-4" />
-          Retour au répertoire
-        </Link>
+          <ChevronLeft className="mr-1 size-4" />{language === "ar" ? "العودة إلى الدليل" : language === "en" ? "Back to directory" : "Retour au répertoire"}</Link>
         <span className="font-mono text-xs font-medium text-muted-foreground bg-muted px-2.5 py-1 rounded-md border border-border">
           {patientDossierNum}
         </span>
@@ -380,9 +383,7 @@ function PatientProfilePage() {
               {/* Action Buttons */}
               <div className="flex items-center gap-2">
                 <Button size="sm" onClick={() => setIsBookApptOpen(true)} className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-sm text-xs">
-                  <CalendarPlus className="size-3.5 mr-1.5" />
-                  Prendre RDV
-                </Button>
+                  <CalendarPlus className="size-3.5 mr-1.5" />{language === "ar" ? "أخذ موعد" : language === "en" ? "Book appt" : "Prendre RDV"}</Button>
                 {cleanPhone && (
                   <Button size="sm" variant="outline" className="size-9 p-0 text-emerald-600 border-emerald-500/30 hover:bg-emerald-50" asChild>
                     <a href={whatsappUrl} target="_blank" rel="noreferrer" title="WhatsApp"><MessageSquare className="size-4" /></a>
@@ -401,6 +402,8 @@ function PatientProfilePage() {
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+              {/* PDF Export */}
+              <PatientPDFExport patient={p} />
 
               {/* Tags & Badges */}
               {(p.tags && p.tags.length > 0) || (p.metrics?.noShowCount ?? 0) > 0 ? (
@@ -424,15 +427,15 @@ function PatientProfilePage() {
               <div className="space-y-3 text-sm">
                 <div className="flex items-start gap-3 text-muted-foreground">
                   <Phone className="size-4 shrink-0 mt-0.5" />
-                  {p.phone ? <a href={`tel:${p.phone}`} className="font-medium text-foreground hover:text-primary transition-colors">{p.phone}</a> : <span className="italic text-xs">Non renseigné</span>}
+                  {p.phone ? <a href={`tel:${p.phone}`} className="font-medium text-foreground hover:text-primary transition-colors">{p.phone}</a> : <span className="italic text-xs">{language === "ar" ? "غير متوفر" : language === "en" ? "Not provided" : "Non renseigné"}</span>}
                 </div>
                 <div className="flex items-start gap-3 text-muted-foreground">
                   <Mail className="size-4 shrink-0 mt-0.5" />
-                  {p.email ? <a href={`mailto:${p.email}`} className="font-medium text-foreground hover:text-primary transition-colors truncate">{p.email}</a> : <span className="italic text-xs">Non renseigné</span>}
+                  {p.email ? <a href={`mailto:${p.email}`} className="font-medium text-foreground hover:text-primary transition-colors truncate">{p.email}</a> : <span className="italic text-xs">{language === "ar" ? "غير متوفر" : language === "en" ? "Not provided" : "Non renseigné"}</span>}
                 </div>
                 <div className="flex items-start gap-3 text-muted-foreground">
                   <Calendar className="size-4 shrink-0 mt-0.5" />
-                  <span className="text-xs">Inscrit le {p.createdAt ? new Date(p.createdAt).toLocaleDateString("fr-FR") : "—"}</span>
+                  <span className="text-xs">{language === "ar" ? "مسجل في " : language === "en" ? "Registered on " : "Inscrit le "}{p.createdAt ? new Date(p.createdAt).toLocaleDateString("fr-FR") : "—"}</span>
                 </div>
               </div>
             </div>
@@ -490,18 +493,15 @@ function PatientProfilePage() {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="bg-transparent border-b border-border w-full justify-start rounded-none p-0 h-auto gap-6 overflow-x-auto">
               <TabsTrigger value="appointments" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
-                <Calendar className="size-4 mr-2" /> Historique ({appointmentsMeta?.total || 0})
+                <Calendar className="size-4 mr-2" />{language === "ar" ? "السجل " : language === "en" ? "History " : "Historique "}({appointmentsMeta?.total || 0})
               </TabsTrigger>
               <TabsTrigger value="medical" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
-                <HeartPulse className="size-4 mr-2" /> Dossier & Notes
-              </TabsTrigger>
+                <HeartPulse className="size-4 mr-2" />{language === "ar" ? "الملف والملاحظات " : language === "en" ? "Records & Notes " : "Dossier & Notes "}</TabsTrigger>
               <TabsTrigger value="prescriptions" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
-                <FileText className="size-4 mr-2" /> Ordonnances
-              </TabsTrigger>
+                <FileText className="size-4 mr-2" />{language === "ar" ? "الوصفات " : language === "en" ? "Prescriptions " : "Ordonnances "}</TabsTrigger>
               {currentTenant?.specialty?.toLowerCase().includes("dent") && (
                 <TabsTrigger value="odontogram" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
-                  <User className="size-4 mr-2" /> Schéma Dentaire
-                </TabsTrigger>
+                  <User className="size-4 mr-2" />{language === "ar" ? "مخطط الأسنان " : language === "en" ? "Dental Chart " : "Schéma Dentaire "}</TabsTrigger>
               )}
               {currentTenant?.specialty?.toLowerCase().includes("derma") && (
                 <TabsTrigger value="dermachart" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
@@ -533,11 +533,14 @@ function PatientProfilePage() {
                   <Activity className="size-4 mr-2" /> Biométrie & Constantes
                 </TabsTrigger>
               )}
+              <TabsTrigger value="imagerie" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
+                <ImageIcon className="size-4 mr-2" /> {language === "ar" ? "الصور الطبية" : language === "en" ? "Imaging" : "Imagerie & Médias"}
+              </TabsTrigger>
               <TabsTrigger value="recovery" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
-                <Zap className="size-4 mr-2" /> IA & Relances ({opportunities.length})
+                <Zap className="size-4 mr-2" />{language === "ar" ? "الذكاء الاصطناعي والمتابعة " : language === "en" ? "AI & Follow-ups " : "IA & Relances "}({opportunities.length})
               </TabsTrigger>
               <TabsTrigger value="waitlist" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground px-1 py-3 text-sm font-medium data-[state=active]:shadow-none transition-none">
-                <ListOrdered className="size-4 mr-2" /> Attente ({waitlist.length})
+                <ListOrdered className="size-4 mr-2" /> {language === "ar" ? "قائمة الانتظار" : language === "en" ? "Waitlist" : "Attente"} ({waitlist.length})
               </TabsTrigger>
             </TabsList>
 
@@ -571,9 +574,7 @@ function PatientProfilePage() {
                   ))}
                 </div>
                 <Button size="sm" onClick={() => setIsBookApptOpen(true)} className="gap-1.5 text-xs shadow-sm">
-                  <Plus className="size-3.5" />
-                  Nouveau RDV
-                </Button>
+                  <Plus className="size-3.5" />{language === "ar" ? "موعد جديد" : language === "en" ? "New Appt" : "Nouveau RDV"}</Button>
               </div>
             }
           >
@@ -674,16 +675,16 @@ function PatientProfilePage() {
                       <div className="flex items-center gap-1.5 self-end sm:self-center">
                         {isUpcoming && (
                           <>
+                            {/* 'Honoré' only available once confirmed — backend forbids scheduled → completed */}
                             <Button
                               size="sm"
                               variant="outline"
                               className="text-xs h-8 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950"
                               onClick={() => updateApptStatusMutation.mutate({ apptId: appt._id, status: "completed" })}
-                              disabled={updateApptStatusMutation.isPending}
+                              disabled={updateApptStatusMutation.isPending || appt.status === "scheduled"}
+                              title={appt.status === "scheduled" ? "Confirmez d'abord le rendez-vous avant de le marquer Honoré" : undefined}
                             >
-                              <CheckCircle2 className="size-3.5 mr-1" />
-                              Honoré
-                            </Button>
+                              <CheckCircle2 className="size-3.5 mr-1" />{language === "ar" ? "تم الحضور" : language === "en" ? "Showed up" : "Honoré"}</Button>
                             <Button
                               size="sm"
                               variant="outline"
@@ -691,20 +692,17 @@ function PatientProfilePage() {
                               onClick={() => updateApptStatusMutation.mutate({ apptId: appt._id, status: "no_show" })}
                               disabled={updateApptStatusMutation.isPending}
                             >
-                              <XCircle className="size-3.5 mr-1" />
-                              No-Show
-                            </Button>
+                              <XCircle className="size-3.5 mr-1" />{language === "ar" ? "غياب" : "No-Show"}</Button>
                             <Button
                               size="sm"
                               variant="ghost"
                               className="text-xs h-8 text-muted-foreground hover:text-destructive"
                               onClick={() => updateApptStatusMutation.mutate({ apptId: appt._id, status: "cancelled" })}
                               disabled={updateApptStatusMutation.isPending}
-                            >
-                              Annuler
-                            </Button>
+                            >{language === "ar" ? "إلغاء" : language === "en" ? "Cancel" : "Annuler"}</Button>
                           </>
                         )}
+
 
                         {isCompleted && (
                           <span className="text-xs text-emerald-600 font-semibold inline-flex items-center gap-1 bg-emerald-500/10 px-2.5 py-1 rounded-md">
@@ -764,21 +762,21 @@ function PatientProfilePage() {
             {/* Left: Main Clinical Notes */}
             <div className="xl:col-span-2 space-y-6">
               <SectionCard
-                title="Dossier Clinique & Observations"
-                description="Notes de consultation, historique des traitements et plan de soins."
+                title={language === "ar" ? "الملف السريري والملاحظات" : language === "en" ? "Clinical File & Notes" : "Dossier Clinique & Observations"}
+                description={language === "ar" ? "ملاحظات الاستشارة وتاريخ العلاجات وخطة الرعاية." : language === "en" ? "Consultation notes, treatment history and care plan." : "Notes de consultation, historique des traitements et plan de soins."}
               >
                 <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm flex flex-col">
                   {/* Faux Editor Toolbar for a Pro feel */}
                   <div className="border-b border-border bg-muted/30 p-2 flex items-center gap-2">
-                     <span className="text-xs font-semibold text-muted-foreground px-2">Observation libre</span>
+                     <span className="text-xs font-semibold text-muted-foreground px-2">{language === "ar" ? "ملاحظة حرة" : language === "en" ? "Free note" : "Observation libre"}</span>
                      <div className="h-4 w-px bg-border mx-1" />
-                     <button className="p-1.5 text-muted-foreground hover:bg-muted rounded text-[10px] uppercase font-bold tracking-wider" type="button" onClick={() => setClinicalNotes((clinicalNotes ?? p.notes ?? '') + '\n[Examen initial] ')}>Examen</button>
-                     <button className="p-1.5 text-muted-foreground hover:bg-muted rounded text-[10px] uppercase font-bold tracking-wider" type="button" onClick={() => setClinicalNotes((clinicalNotes ?? p.notes ?? '') + '\n[Plan de traitement] ')}>Plan</button>
-                     <button className="p-1.5 text-muted-foreground hover:bg-muted rounded text-[10px] uppercase font-bold tracking-wider" type="button" onClick={() => setClinicalNotes((clinicalNotes ?? p.notes ?? '') + '\n[Devis] ')}>Devis</button>
+                     <button className="p-1.5 text-muted-foreground hover:bg-muted rounded text-[10px] uppercase font-bold tracking-wider" type="button" onClick={() => setClinicalNotes((clinicalNotes ?? p.notes ?? '') + '\n[Examen initial] ')}>{language === "ar" ? "فحص" : language === "en" ? "Exam" : "Examen"}</button>
+                     <button className="p-1.5 text-muted-foreground hover:bg-muted rounded text-[10px] uppercase font-bold tracking-wider" type="button" onClick={() => setClinicalNotes((clinicalNotes ?? p.notes ?? '') + '\n[Plan de traitement] ')}>{language === "ar" ? "خطة" : language === "en" ? "Plan" : "Plan"}</button>
+                     <button className="p-1.5 text-muted-foreground hover:bg-muted rounded text-[10px] uppercase font-bold tracking-wider" type="button" onClick={() => setClinicalNotes((clinicalNotes ?? p.notes ?? '') + '\n[Devis] ')}>{language === "ar" ? "عرض سعر" : language === "en" ? "Quote" : "Devis"}</button>
                   </div>
                   
                   <Textarea
-                    placeholder="Saisissez ici les notes cliniques du patient..."
+                    placeholder={language === "ar" ? "أدخل هنا الملاحظات السريرية للمريض..." : language === "en" ? "Enter clinical notes here..." : "Saisissez ici les notes cliniques du patient..."}
                     value={clinicalNotes !== null ? clinicalNotes : p.notes || ""}
                     onChange={(e) => setClinicalNotes(e.target.value)}
                     className="border-0 focus-visible:ring-0 resize-y min-h-[350px] p-5 font-sans text-sm leading-relaxed rounded-none bg-transparent"
@@ -787,7 +785,7 @@ function PatientProfilePage() {
                   <div className="border-t border-border bg-muted/10 p-3 flex items-center justify-between">
                     <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                       <Clock className="size-3" />
-                      Dernière modification : {p.updatedAt ? new Date(p.updatedAt).toLocaleString("fr-FR") : "—"}
+                      {language === "ar" ? "آخر تعديل: " : language === "en" ? "Last modified: " : "Dernière modification : "}{p.updatedAt ? new Date(p.updatedAt).toLocaleString(language === "ar" ? "ar-TN" : language === "en" ? "en-GB" : "fr-FR") : "—"}
                     </p>
                     <Button
                       size="sm"
@@ -796,7 +794,7 @@ function PatientProfilePage() {
                       className="gap-1.5 text-xs h-8 bg-primary hover:bg-primary/90 shadow-sm"
                     >
                       <CheckCircle2 className="size-3.5" />
-                      {saveNotesMutation.isPending ? "Sauvegarde..." : "Enregistrer le dossier"}
+                      {saveNotesMutation.isPending ? (language === "ar" ? "جاري الحفظ..." : language === "en" ? "Saving..." : "Sauvegarde...") : (language === "ar" ? "حفظ الملف" : language === "en" ? "Save file" : "Enregistrer le dossier")}
                     </Button>
                   </div>
                 </div>
@@ -806,8 +804,8 @@ function PatientProfilePage() {
             {/* Right: Medical Alerts & Info */}
             <div className="space-y-6">
               <SectionCard
-                title="Alertes Médicales"
-                description="Antécédents et précautions."
+                title={language === "ar" ? "التنبيهات الطبية" : language === "en" ? "Medical Alerts" : "Alertes Médicales"}
+                description={language === "ar" ? "الخلفية الطبية والاحتياطات." : language === "en" ? "Medical history and precautions." : "Antécédents et précautions."}
                 bodyClassName="bg-amber-50/30 dark:bg-amber-950/10 border-amber-500/20"
               >
                 <div className="space-y-3">
@@ -838,16 +836,16 @@ function PatientProfilePage() {
                 </div>
               </SectionCard>
 
-              <SectionCard title="Parcours de soins">
+              <SectionCard title={language === "ar" ? "مسار الرعاية" : language === "en" ? "Care Journey" : "Parcours de soins"}>
                 <div className="space-y-3">
                   <div className="rounded-xl border border-border bg-card p-3 shadow-sm flex items-start gap-3">
                      <div className="bg-primary/10 text-primary p-2 rounded-lg">
                         <History className="size-4" />
                      </div>
                      <div>
-                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Première visite</p>
+                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{language === "ar" ? "أول زيارة" : language === "en" ? "First Visit" : "Première visite"}</p>
                         <p className="text-sm font-bold text-foreground mt-0.5">
-                           {pastAppointments.length > 0 ? pastAppointments[pastAppointments.length - 1]?.date : "Aucune visite"}
+                           {pastAppointments.length > 0 ? pastAppointments[pastAppointments.length - 1]?.date : language === "ar" ? "لا توجد زيارة" : language === "en" ? "No visits" : "Aucune visite"}
                         </p>
                      </div>
                   </div>
@@ -857,9 +855,9 @@ function PatientProfilePage() {
                         <Stethoscope className="size-4" />
                      </div>
                      <div>
-                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Soins effectués</p>
+                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{language === "ar" ? "العلاجات المنجزة" : language === "en" ? "Completed treatments" : "Soins effectués"}</p>
                         <p className="text-sm font-bold text-foreground mt-0.5">
-                           {totalVisits} actes terminés
+                           {totalVisits} {language === "ar" ? "إجراء مكتمل" : language === "en" ? "completed acts" : "actes terminés"}
                         </p>
                      </div>
                   </div>
@@ -869,7 +867,7 @@ function PatientProfilePage() {
                         <FileText className="size-4" />
                      </div>
                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Motif principal</p>
+                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{language === "ar" ? "السبب الرئيسي" : language === "en" ? "Main reason" : "Motif principal"}</p>
                         <p className="text-sm font-bold text-foreground mt-0.5 truncate" title={appointments[0]?.treatment || "Consultation"}>
                            {appointments[0]?.treatment || "Consultation"}
                         </p>
@@ -963,27 +961,114 @@ function PatientProfilePage() {
           </TabsContent>
         )}
 
+        {/* ── TAB: Imagerie & Médias ───────────────────── */}
+        <TabsContent value="imagerie" className="space-y-4 m-0">
+          <SectionCard
+            title={language === "ar" ? "الصور الطبية" : language === "en" ? "Medical Imaging" : "Imagerie & Médias"}
+            description={language === "ar" ? "عرض الأشعة والصور الطبية بجودة عالية مع إمكانية التكبير." : language === "en" ? "View high-quality X-rays and medical images with interactive zoom." : "Visionnez les radios, échographies et photos médicales avec zoom interactif."}
+          >
+            <MedicalImageViewer 
+              patientId={p?._id || id}
+              images={(p?.files || []).map((f: any) => {
+                let parsedPixelSpacing: [number, number] | undefined = undefined;
+                if (f.pixelSpacing) {
+                  if (Array.isArray(f.pixelSpacing)) {
+                    parsedPixelSpacing = f.pixelSpacing as [number, number];
+                  } else if (typeof f.pixelSpacing === 'string') {
+                    const parts = f.pixelSpacing.split('\\').map(Number);
+                    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                      parsedPixelSpacing = [parts[0], parts[1]];
+                    }
+                  }
+                }
+
+                // Point directly to the secure download endpoint for this file
+                const patientId = p?._id || id;
+                const secureUrl = `/api/v1/patients/${patientId}/files/${f.id}/download`;
+
+                return {
+                  id: f.id,
+                  url: secureUrl,
+                  title: f.title,
+                  date: f.uploadedAt ? new Date(f.uploadedAt).toLocaleDateString() : undefined,
+                  isDicom: Boolean(f.isDicom || f.title?.toLowerCase().endsWith('.dcm') || f.url?.toLowerCase().endsWith('.dcm') || f.type === 'application/dicom'),
+                  pixelSpacing: parsedPixelSpacing,
+                  studyInstanceUID: f.studyInstanceUID,
+                  seriesInstanceUID: f.seriesInstanceUID,
+                  sopInstanceUID: f.sopInstanceUID,
+                  modality: f.modality || (f.isDicom ? "CT" : "IMG")
+                };
+              })} 
+              onUpload={async (file) => {
+                const formData = new FormData();
+                formData.append('file', file);
+                await api.post(`/patients/${p?._id || id}/files`, formData);
+              }}
+              onUploadSuccess={() => queryClient.invalidateQueries({ queryKey: ["patients", id] })}
+              onRequestDownload={async (instance) => {
+                try {
+                  const blob = await api.download(`/patients/${p?._id || id}/files/${instance.id}/download`);
+                  const blobUrl = window.URL.createObjectURL(blob);
+                  const link = document.createElement('a');
+                  link.href = blobUrl;
+                  link.setAttribute('download', instance.title || 'download');
+                  document.body.appendChild(link);
+                  link.click();
+                  link.parentNode?.removeChild(link);
+                  window.URL.revokeObjectURL(blobUrl);
+                } catch (error) {
+                  const errorMsg = language === "ar" ? "فشل التنزيل. يرجى التحقق من أذوناتك." : language === "en" ? "Download failed. Please check your permissions." : "Échec du téléchargement. Vérifiez vos permissions.";
+                  toast.error(errorMsg);
+                  console.error("Download error:", error);
+                }
+              }}
+              onRequestAiAnalysis={async (instance, imageBase64, reqLang) => {
+                const res = await api.post('/ai/analyze-image', {
+                  imageBase64,
+                  modality: instance.modality,
+                  title: instance.title,
+                  language: reqLang || language || 'fr',
+                  patientId: p?._id || id,
+                  fileId: instance.id
+                });
+                return res;
+              }}
+              onAuditEvent={(event) => {
+                try {
+                  const payload = {
+                    action: `VIEW_MEDICAL_IMAGE_${event.type.toUpperCase()}`,
+                    resourceType: "patient",
+                    resourceId: p?._id || id,
+                    details: event,
+                  };
+                  api.post('/audit', payload).catch(console.error);
+                } catch(e) {}
+              }}
+            />
+          </SectionCard>
+        </TabsContent>
+
         {/* ── TAB 3: AI Recovery & Relances ───────────────────── */}
         <TabsContent value="recovery" className="space-y-4 m-0">
           <SectionCard
-            title="Opportunités de Récupération & Relances Intelligentes"
-            description="L'IA identifie les désistements, retards de contrôle annuel ou patients inactifs et déclenche les scénarios de réengagement."
+            title={language === "ar" ? "فرص الاسترداد والمتابعة الذكية" : language === "en" ? "Recovery Opportunities & Smart Follow-ups" : "Opportunités de Récupération & Relances Intelligentes"}
+            description={language === "ar" ? "يحدد الذكاء الاصطناعي حالات الانسحاب والمراقبة المتأخرة والمرضى غير النشطين، ثم ينفّذ سيناريوهات إعادة التفاعل." : language === "en" ? "The AI identifies dropouts, delayed check-ups or inactive patients and triggers re-engagement scenarios." : "L'IA identifie les désistements, retards de contrôle annuel ou patients inactifs et déclenche les scénarios de réengagement."}
             actions={
               <Button size="sm" onClick={() => setIsCreateRecoveryOpen(true)} className="gap-1.5 text-xs">
                 <Plus className="size-3.5" />
-                Nouvelle opportunité
+                {language === "ar" ? "فرصة جديدة" : language === "en" ? "New opportunity" : "Nouvelle opportunité"}
               </Button>
             }
           >
             {opportunities.length === 0 ? (
               <EmptyState
                 icon={Zap}
-                title="Aucune opportunité de relance"
-                description="Ce patient est parfaitement à jour dans ses soins ou aucun désistement n'a été constaté."
+                title={language === "ar" ? "لا توجد فرص متابعة" : language === "en" ? "No follow-up opportunities" : "Aucune opportunité de relance"}
+                description={language === "ar" ? "هذا المريض محدّث تماماً في رعايته أو لم يُسجَّل أي انسحاب." : language === "en" ? "This patient is perfectly up to date in their care or no dropout has been observed." : "Ce patient est parfaitement à jour dans ses soins ou aucun désistement n'a été constaté."}
                 action={
                   <Button size="sm" onClick={() => setIsCreateRecoveryOpen(true)} className="gap-1.5 text-xs">
                     <Zap className="size-3.5 text-primary" />
-                    Créer une relance manuelle
+                    {language === "ar" ? "إنشاء متابعة يدوية" : language === "en" ? "Create manual follow-up" : "Créer une relance manuelle"}
                   </Button>
                 }
               />
@@ -1010,26 +1095,26 @@ function PatientProfilePage() {
                           )}
                         >
                           {opp.status === "identified"
-                            ? "Identifié par l'IA"
+                            ? language === "ar" ? "تم تحديده بالذكاء الاصطناعي" : language === "en" ? "Identified by AI" : "Identifié par l'IA"
                             : opp.status === "queued"
-                            ? "En file d'attente"
+                            ? language === "ar" ? "في قائمة الانتظار" : language === "en" ? "In queue" : "En file d'attente"
                             : opp.status === "contacted"
                             ? "Contacté"
                             : opp.status === "responded"
-                            ? "A répondu"
+                            ? language === "ar" ? "ردّ" : language === "en" ? "Responded" : "A répondu"
                             : opp.status === "booked"
-                            ? "RDV Reprogrammé"
+                            ? language === "ar" ? "تم إعادة الجدولة" : language === "en" ? "Rescheduled" : "RDV Reprogrammé"
                             : opp.status === "visited"
-                            ? "Récupéré & Honoré"
+                            ? language === "ar" ? "تم الاسترداد وحضر" : language === "en" ? "Recovered & Attended" : "Récupéré & Honoré"
                             : opp.status === "no_response"
-                            ? "Sans réponse"
-                            : "Écarté"}
+                            ? language === "ar" ? "بدون رد" : language === "en" ? "No response" : "Sans réponse"
+                            : (language === "ar" ? "تم الرفض" : language === "en" ? "Dismissed" : "Écarté")}
                         </span>
                       </div>
 
                       <div className="text-right">
                         <span className="text-xs font-bold text-primary">
-                          Valeur estimée : {opp.estimatedValue || 0} DT
+                          {language === "ar" ? "القيمة المقدرة: " : language === "en" ? "Estimated value: " : "Valeur estimée : "}{opp.estimatedValue || 0} DT
                         </span>
                       </div>
                     </div>
@@ -1042,7 +1127,7 @@ function PatientProfilePage() {
                     )}
 
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs text-muted-foreground">
-                      <span>Détecté le {opp.detectedAt ? new Date(opp.detectedAt).toLocaleDateString("fr-FR") : "—"}</span>
+                      <span>{language === "ar" ? "تم اكتشافه في " : language === "en" ? "Detected on " : "Détecté le "}{opp.detectedAt ? new Date(opp.detectedAt).toLocaleDateString(language === "ar" ? "ar-TN" : language === "en" ? "en-GB" : "fr-FR") : "—"}</span>
                       
                       <div className="flex items-center gap-2">
                         {p.phone && (
@@ -1054,7 +1139,7 @@ function PatientProfilePage() {
                           >
                             <a href={whatsappUrl} target="_blank" rel="noreferrer">
                               <MessageSquare className="size-3" />
-                              Relancer WhatsApp
+                              {language === "ar" ? "متابعة واتساب" : language === "en" ? "WhatsApp follow-up" : "Relancer WhatsApp"}
                             </a>
                           </Button>
                         )}
@@ -1069,7 +1154,7 @@ function PatientProfilePage() {
                           }}
                         >
                           <History className="size-3" />
-                          Journal de contact
+                          {language === "ar" ? "سجل التواصل" : language === "en" ? "Contact journal" : "Journal de contact"}
                         </Button>
                       </div>
                     </div>
@@ -1083,24 +1168,24 @@ function PatientProfilePage() {
         {/* ── TAB 4: Waitlist ─────────────────────────────────── */}
         <TabsContent value="waitlist" className="space-y-4 m-0">
           <SectionCard
-            title="Inscriptions en Liste d'attente"
-            description="Dès qu'un créneau s'annule, le patient recevra automatiquement une proposition prioritaire."
+            title={language === "ar" ? "التسجيلات في قائمة الانتظار" : language === "en" ? "Waitlist Registrations" : "Inscriptions en Liste d'attente"}
+            description={language === "ar" ? "بمجرد إلغاء موعد، يتلقى المريض تلقائياً عرضاً ذا أولوية." : language === "en" ? "As soon as a slot is cancelled, the patient will automatically receive a priority offer." : "Dès qu'un créneau s'annule, le patient recevra automatiquement une proposition prioritaire."}
             actions={
               <Button size="sm" onClick={() => setIsAddWaitlistOpen(true)} className="gap-1.5 text-xs">
                 <Plus className="size-3.5" />
-                Ajouter une demande
+                {language === "ar" ? "إضافة طلب" : language === "en" ? "Add request" : "Ajouter une demande"}
               </Button>
             }
           >
             {waitlist.length === 0 ? (
               <EmptyState
                 icon={ListOrdered}
-                title="Aucune demande d'attente active"
-                description="Ce patient n'est actuellement pas inscrit sur la liste d'attente pour un désistement."
+                title={language === "ar" ? "لا توجد طلبات انتظار نشطة" : language === "en" ? "No active waitlist requests" : "Aucune demande d'attente active"}
+                description={language === "ar" ? "هذا المريض غير مسجّل حالياً في قائمة الانتظار." : language === "en" ? "This patient is not currently registered on the waitlist." : "Ce patient n'est actuellement pas inscrit sur la liste d'attente pour un désistement."}
                 action={
                   <Button size="sm" onClick={() => setIsAddWaitlistOpen(true)} className="gap-1.5 text-xs">
                     <Plus className="size-3.5" />
-                    Inscrire en liste d'attente
+                    {language === "ar" ? "إضافة لقائمة الانتظار" : language === "en" ? "Add to waitlist" : "Inscrire en liste d'attente"}
                   </Button>
                 }
               />
@@ -1115,27 +1200,21 @@ function PatientProfilePage() {
                         </span>
                         <PriorityBadge priority={entry.priority} />
                         <Badge variant="outline" className="text-[10px] capitalize">
-                          {entry.status === "active" ? "En attente d'un créneau" : entry.status}
+                          {entry.status === "active" ? language === "ar" ? "في انتظار موعد" : language === "en" ? "Waiting for a slot" : "En attente d'un créneau" : entry.status}
                         </Badge>
                       </div>
 
                       {entry.preferredDays && entry.preferredDays.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
-                          <span className="text-[11px] text-muted-foreground mr-1">Disponibilités :</span>
+                          <span className="text-[11px] text-muted-foreground mr-1">{language === "ar" ? "التوفر:" : language === "en" ? "Availability:" : "Disponibilités :"}</span>
                           {entry.preferredDays.map((d) => (
                             <span key={d} className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground">
-                              {d === "Monday"
-                                ? "Lun"
-                                : d === "Tuesday"
-                                ? "Mar"
-                                : d === "Wednesday"
-                                ? "Mer"
-                                : d === "Thursday"
-                                ? "Jeu"
-                                : d === "Friday"
-                                ? "Ven"
-                                : d === "Saturday"
-                                ? "Sam"
+                              {d === "Monday" ? (language === "ar" ? "الإثنين" : language === "en" ? "Mon" : "Lun")
+                                : d === "Tuesday" ? (language === "ar" ? "الثلاثاء" : language === "en" ? "Tue" : "Mar")
+                                : d === "Wednesday" ? (language === "ar" ? "الأربعاء" : language === "en" ? "Wed" : "Mer")
+                                : d === "Thursday" ? (language === "ar" ? "الخميس" : language === "en" ? "Thu" : "Jeu")
+                                : d === "Friday" ? (language === "ar" ? "الجمعة" : language === "en" ? "Fri" : "Ven")
+                                : d === "Saturday" ? (language === "ar" ? "السبت" : language === "en" ? "Sat" : "Sam")
                                 : d}
                             </span>
                           ))}
@@ -1157,7 +1236,7 @@ function PatientProfilePage() {
                       disabled={deleteWaitlistMutation.isPending}
                     >
                       <Trash2 className="size-3 mr-1" />
-                      Retirer
+                      {language === "ar" ? "إزالة" : language === "en" ? "Remove" : "Retirer"}
                     </Button>
                   </div>
                 ))}
@@ -1224,24 +1303,24 @@ function BookAppointmentDialog({
   onOpenChange: (open: boolean) => void;
   patient: IPatient;
 }) {
+  const { language } = useAppState();
   const queryClient = useQueryClient();
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [startTime, setStartTime] = useState("09:00");
   const [durationMin, setDurationMin] = useState(30);
   const [treatment, setTreatment] = useState("Consultation");
   const [notes, setNotes] = useState("");
-
   const mutation = useMutation({
     mutationFn: async (data: any) => api.post("/appointments", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["appointments"] });
       queryClient.invalidateQueries({ queryKey: ["appointments", "patient", patient._id] });
       queryClient.invalidateQueries({ queryKey: ["patients", patient._id] });
-      toast.success("Rendez-vous planifié avec succès !");
+      toast.success(language === "ar" ? "تمت برمجة الموعد بنجاح!" : language === "en" ? "Appointment scheduled successfully!" : "Rendez-vous planifié avec succès !");
       onOpenChange(false);
       setNotes("");
     },
-    onError: (err: any) => toast.error(err.message || "Erreur lors de la prise de rendez-vous"),
+    onError: (err: any) => toast.error(err.message || (language === "ar" ? "خطأ أثناء حجز الموعد" : language === "en" ? "Error scheduling appointment" : "Erreur lors de la prise de rendez-vous")),
   });
 
   const calculateEndTime = (start: string, duration: number) => {
@@ -1271,15 +1350,15 @@ function BookAppointmentDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Programmer un Rendez-vous</DialogTitle>
+          <DialogTitle>{language === "ar" ? "برمجة موعد" : language === "en" ? "Schedule an Appointment" : "Programmer un Rendez-vous"}</DialogTitle>
           <DialogDescription>
-            Fixez un créneau pour {patient.firstName} {patient.lastName}.
+            {language === "ar" ? `حدد موعداً لـ ${patient.firstName} ${patient.lastName}.` : language === "en" ? `Set a time slot for ${patient.firstName} ${patient.lastName}.` : `Fixez un créneau pour ${patient.firstName} ${patient.lastName}.`}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Date *</label>
+              <label className="text-xs font-semibold">{language === "ar" ? "التاريخ *" : language === "en" ? "Date *" : "Date *"}</label>
               <Input
                 type="date"
                 required
@@ -1288,7 +1367,7 @@ function BookAppointmentDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Heure de début *</label>
+              <label className="text-xs font-semibold">{language === "ar" ? "وقت البدء *" : language === "en" ? "Start time *" : "Heure de début *"}</label>
               <Input
                 type="time"
                 required
@@ -1300,21 +1379,21 @@ function BookAppointmentDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Durée (minutes)</label>
+              <label className="text-xs font-semibold">{language === "ar" ? "المدة (دقائق)" : language === "en" ? "Duration (minutes)" : "Durée (minutes)"}</label>
               <select
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
                 value={durationMin}
                 onChange={(e) => setDurationMin(Number(e.target.value))}
               >
-                <option value={15}>15 minutes</option>
-                <option value={30}>30 minutes</option>
-                <option value={45}>45 minutes</option>
-                <option value={60}>1 heure</option>
-                <option value={90}>1h 30min</option>
+                <option value={15}>{language === "ar" ? "15 دقيقة" : language === "en" ? "15 minutes" : "15 minutes"}</option>
+                <option value={30}>{language === "ar" ? "30 دقيقة" : language === "en" ? "30 minutes" : "30 minutes"}</option>
+                <option value={45}>{language === "ar" ? "45 دقيقة" : language === "en" ? "45 minutes" : "45 minutes"}</option>
+                <option value={60}>{language === "ar" ? "ساعة واحدة" : language === "en" ? "1 hour" : "1 heure"}</option>
+                <option value={90}>{language === "ar" ? "ساعة ونصف" : language === "en" ? "1h 30min" : "1h 30min"}</option>
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Heure de fin estimée</label>
+              <label className="text-xs font-semibold">{language === "ar" ? "وقت الانتهاء المقدر" : language === "en" ? "Estimated end time" : "Heure de fin estimée"}</label>
               <Input
                 disabled
                 value={calculateEndTime(startTime, durationMin)}
@@ -1324,12 +1403,12 @@ function BookAppointmentDialog({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold">Soin / Motif de consultation *</label>
+            <label className="text-xs font-semibold">{language === "ar" ? "العلاج / سبب الاستشارة *" : language === "en" ? "Treatment / Reason for consultation *" : "Soin / Motif de consultation *"}</label>
             <Input
               required
               value={treatment}
               onChange={(e) => setTreatment(e.target.value)}
-              placeholder="Ex: Détartrage, Soin carie, Contrôle..."
+              placeholder={language === "ar" ? "مثال: تنظيف جير، علاج تسوس، فحص..." : language === "en" ? "Ex: Scaling, Cavity treatment, Check-up..." : "Ex: Détartrage, Soin carie, Contrôle..."}
             />
             <div className="flex flex-wrap gap-1 mt-1">
               {POPULAR_TREATMENTS.slice(0, 4).map((t) => (
@@ -1346,20 +1425,18 @@ function BookAppointmentDialog({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold">Remarques (optionnel)</label>
+            <label className="text-xs font-semibold">{language === "ar" ? "ملاحظات (اختياري)" : language === "en" ? "Remarks (optional)" : "Remarques (optionnel)"}</label>
             <Textarea
-              placeholder="Ex: Première consultation, douleur molaire gauche..."
+              placeholder={language === "ar" ? "مثال: استشارة أولى، ألم في الضرس الأيسر..." : language === "en" ? "Ex: First consultation, left molar pain..." : "Ex: Première consultation, douleur molaire gauche..."}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Annuler
-            </Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{language === "ar" ? "إلغاء" : language === "en" ? "Cancel" : "Annuler"}</Button>
             <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "Création..." : "Confirmer le rendez-vous"}
+              {mutation.isPending ? (language === "ar" ? "جاري الإنشاء..." : language === "en" ? "Creating..." : "Création...") : (language === "ar" ? "تأكيد الموعد" : language === "en" ? "Confirm appointment" : "Confirmer le rendez-vous")}
             </Button>
           </DialogFooter>
         </form>
@@ -1381,6 +1458,7 @@ function EditPatientDialog({
   onSave: (data: Partial<IPatient>) => void;
   isSaving: boolean;
 }) {
+  const { language: appLanguage } = useAppState();
   const [firstName, setFirstName] = useState(patient.firstName || "");
   const [lastName, setLastName] = useState(patient.lastName || "");
   const [phone, setPhone] = useState(patient.phone || "");
@@ -1410,75 +1488,75 @@ function EditPatientDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Modifier la fiche patient</DialogTitle>
-          <DialogDescription>Mettez à jour les informations générales du dossier.</DialogDescription>
+          <DialogTitle>{appLanguage === "ar" ? "تعديل ملف المريض" : appLanguage === "en" ? "Edit patient file" : "Modifier la fiche patient"}</DialogTitle>
+          <DialogDescription>{appLanguage === "ar" ? "تحديث المعلومات العامة للملف." : appLanguage === "en" ? "Update general file information." : "Mettez à jour les informations générales du dossier."}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Prénom *</label>
+              <label className="text-xs font-semibold">{appLanguage === "ar" ? "الاسم *" : appLanguage === "en" ? "First Name *" : "Prénom *"}</label>
               <Input required value={firstName} onChange={(e) => setFirstName(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Nom *</label>
+              <label className="text-xs font-semibold">{appLanguage === "ar" ? "اللقب *" : appLanguage === "en" ? "Last Name *" : "Nom *"}</label>
               <Input required value={lastName} onChange={(e) => setLastName(e.target.value)} />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Téléphone *</label>
+              <label className="text-xs font-semibold">{appLanguage === "ar" ? "الهاتف *" : appLanguage === "en" ? "Phone *" : "Téléphone *"}</label>
               <Input required value={phone} onChange={(e) => setPhone(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Email</label>
+              <label className="text-xs font-semibold">{appLanguage === "ar" ? "البريد الإلكتروني" : appLanguage === "en" ? "Email" : "Email"}</label>
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Sexe</label>
+              <label className="text-xs font-semibold">{appLanguage === "ar" ? "الجنس" : appLanguage === "en" ? "Gender" : "Sexe"}</label>
               <select
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
                 value={gender}
                 onChange={(e) => setGender(e.target.value)}
               >
-                <option value="male">Homme</option>
-                <option value="female">Femme</option>
-                <option value="other">Autre</option>
+                <option value="male">{appLanguage === "ar" ? "ذكر" : appLanguage === "en" ? "Male" : "Homme"}</option>
+                <option value="female">{appLanguage === "ar" ? "أنثى" : appLanguage === "en" ? "Female" : "Femme"}</option>
+                <option value="other">{appLanguage === "ar" ? "آخر" : appLanguage === "en" ? "Other" : "Autre"}</option>
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Statut</label>
+              <label className="text-xs font-semibold">{appLanguage === "ar" ? "الحالة" : appLanguage === "en" ? "Status" : "Statut"}</label>
               <select
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
                 value={status}
                 onChange={(e) => setStatus(e.target.value as any)}
               >
-                <option value="active">Actif</option>
-                <option value="at_risk">À risque</option>
-                <option value="inactive">Inactif</option>
-                <option value="lead">Prospect (Lead)</option>
+                <option value="active">{appLanguage === "ar" ? "نشط" : appLanguage === "en" ? "Active" : "Actif"}</option>
+                <option value="at_risk">{appLanguage === "ar" ? "في خطر" : appLanguage === "en" ? "At risk" : "À risque"}</option>
+                <option value="inactive">{appLanguage === "ar" ? "غير نشط" : appLanguage === "en" ? "Inactive" : "Inactif"}</option>
+                <option value="lead">{appLanguage === "ar" ? "عميل محتمل" : appLanguage === "en" ? "Prospect (Lead)" : "Prospect (Lead)"}</option>
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Langue</label>
+              <label className="text-xs font-semibold">{appLanguage === "ar" ? "اللغة" : appLanguage === "en" ? "Language" : "Langue"}</label>
               <select
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
               >
-                <option value="fr">Français</option>
-                <option value="arabizi">Tunisien (Arabizi)</option>
-                <option value="ar">Arabe</option>
-                <option value="en">Anglais</option>
+                <option value="fr">{appLanguage === "ar" ? "الفرنسية" : appLanguage === "en" ? "French" : "Français"}</option>
+                <option value="arabizi">{appLanguage === "ar" ? "تونسي (عربيزي)" : appLanguage === "en" ? "Tunisian (Arabizi)" : "Tunisien (Arabizi)"}</option>
+                <option value="ar">{appLanguage === "ar" ? "العربية" : appLanguage === "en" ? "Arabic" : "Arabe"}</option>
+                <option value="en">{appLanguage === "ar" ? "الإنجليزية" : appLanguage === "en" ? "English" : "Anglais"}</option>
               </select>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold">Date de naissance</label>
+            <label className="text-xs font-semibold">{appLanguage === "ar" ? "تاريخ الميلاد" : appLanguage === "en" ? "Date of Birth" : "Date de naissance"}</label>
             <Input
               type="date"
               value={dateOfBirth}
@@ -1487,11 +1565,9 @@ function EditPatientDialog({
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Annuler
-            </Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{appLanguage === "ar" ? "إلغاء" : appLanguage === "en" ? "Cancel" : "Annuler"}</Button>
             <Button type="submit" disabled={isSaving}>
-              {isSaving ? "Enregistrement..." : "Enregistrer"}
+              {isSaving ? (appLanguage === "ar" ? "جاري الحفظ..." : appLanguage === "en" ? "Saving..." : "Enregistrement...") : (appLanguage === "ar" ? "حفظ" : appLanguage === "en" ? "Save" : "Enregistrer")}
             </Button>
           </DialogFooter>
         </form>
@@ -1509,24 +1585,24 @@ function AddWaitlistDialog({
   onOpenChange: (open: boolean) => void;
   patient: IPatient;
 }) {
+  const { language } = useAppState();
   const queryClient = useQueryClient();
   const [treatment, setTreatment] = useState("");
   const [priority, setPriority] = useState("medium");
   const [notes, setNotes] = useState("");
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
-
   const mutation = useMutation({
     mutationFn: (data: any) => api.post("/waitlist", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["waitlist"] });
       queryClient.invalidateQueries({ queryKey: ["waitlist", "patient", patient._id] });
-      toast.success("Patient ajouté à la liste d'attente !");
+      toast.success(language === "ar" ? "تمت إضافة المريض إلى قائمة الانتظار!" : language === "en" ? "Patient added to waitlist!" : "Patient ajouté à la liste d'attente !");
       onOpenChange(false);
       setTreatment("");
       setNotes("");
       setSelectedDays([]);
     },
-    onError: (err: any) => toast.error(err.message || "Erreur lors de l'ajout"),
+    onError: (err: any) => toast.error(err.message || (language === "ar" ? "خطأ أثناء الإضافة" : language === "en" ? "Error adding" : "Erreur lors de l'ajout")),
   });
 
   const toggleDay = (dayId: string) => {
@@ -1554,37 +1630,37 @@ function AddWaitlistDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Inscrire en Liste d'attente</DialogTitle>
+          <DialogTitle>{language === "ar" ? "تسجيل في قائمة الانتظار" : language === "en" ? "Register on Waitlist" : "Inscrire en Liste d'attente"}</DialogTitle>
           <DialogDescription>
-            Attribuer automatiquement les créneaux qui se libèrent à {patient.firstName}.
+            {language === "ar" ? `تخصيص المواعيد الشاغرة تلقائياً لـ ${patient.firstName}.` : language === "en" ? `Automatically assign freed slots to ${patient.firstName}.` : `Attribuer automatiquement les créneaux qui se libèrent à ${patient.firstName}.`}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold">Soin souhaité *</label>
+            <label className="text-xs font-semibold">{language === "ar" ? "العلاج المطلوب *" : language === "en" ? "Desired treatment *" : "Soin souhaité *"}</label>
             <Input
               required
               value={treatment}
               onChange={(e) => setTreatment(e.target.value)}
-              placeholder="Ex: Détartrage, Urgence dentaire..."
+              placeholder={language === "ar" ? "مثال: تنظيف جير، طوارئ أسنان..." : language === "en" ? "Ex: Scaling, Dental emergency..." : "Ex: Détartrage, Urgence dentaire..."}
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold">Degré de priorité</label>
+            <label className="text-xs font-semibold">{language === "ar" ? "درجة الأولوية" : language === "en" ? "Priority level" : "Degré de priorité"}</label>
             <select
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
             >
-              <option value="high">Haute (Urgence / Patient très disponible)</option>
-              <option value="medium">Moyenne (Standard)</option>
-              <option value="low">Basse (Simple contrôle)</option>
+              <option value="high">{language === "ar" ? "عالية (طوارئ / مريض متاح جداً)" : language === "en" ? "High (Emergency / Highly available patient)" : "Haute (Urgence / Patient très disponible)"}</option>
+              <option value="medium">{language === "ar" ? "متوسطة (قياسي)" : language === "en" ? "Medium (Standard)" : "Moyenne (Standard)"}</option>
+              <option value="low">{language === "ar" ? "منخفضة (فحص بسيط)" : language === "en" ? "Low (Simple check-up)" : "Basse (Simple contrôle)"}</option>
             </select>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold">Jours de préférence</label>
+            <label className="text-xs font-semibold">{language === "ar" ? "الأيام المفضلة" : language === "en" ? "Preferred days" : "Jours de préférence"}</label>
             <div className="flex flex-wrap gap-1.5">
               {DAYS_OF_WEEK.map((d) => {
                 const isSelected = selectedDays.includes(d.id);
@@ -1600,7 +1676,7 @@ function AddWaitlistDialog({
                         : "bg-background text-muted-foreground border-input hover:bg-muted"
                     )}
                   >
-                    {d.label}
+                    {language === "ar" ? ({"Lundi":"الاثنين","Mardi":"الثلاثاء","Mercredi":"الأربعاء","Jeudi":"الخميس","Vendredi":"الجمعة","Samedi":"السبت"})[d.label] : language === "en" ? ({"Lundi":"Monday","Mardi":"Tuesday","Mercredi":"Wednesday","Jeudi":"Thursday","Vendredi":"Friday","Samedi":"Saturday"})[d.label] : d.label}
                   </button>
                 );
               })}
@@ -1608,20 +1684,18 @@ function AddWaitlistDialog({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold">Notes</label>
+            <label className="text-xs font-semibold">{language === "ar" ? "ملاحظات" : language === "en" ? "Notes" : "Notes"}</label>
             <Textarea
-              placeholder="Ex: Prévient 2h à l'avance..."
+              placeholder={language === "ar" ? "مثال: إشعار قبل ساعتين..." : language === "en" ? "Ex: Warns 2h in advance..." : "Ex: Prévient 2h à l'avance..."}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Annuler
-            </Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{language === "ar" ? "إلغاء" : language === "en" ? "Cancel" : "Annuler"}</Button>
             <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "Inscription..." : "Inscrire"}
+              {mutation.isPending ? (language === "ar" ? "جاري التسجيل..." : language === "en" ? "Registering..." : "Inscription...") : (language === "ar" ? "تسجيل" : language === "en" ? "Register" : "Inscrire")}
             </Button>
           </DialogFooter>
         </form>
@@ -1639,12 +1713,12 @@ function CreateRecoveryDialog({
   onOpenChange: (open: boolean) => void;
   patient: IPatient;
 }) {
+  const { language } = useAppState();
   const queryClient = useQueryClient();
   const [type, setType] = useState("inactive_patient");
   const [priority, setPriority] = useState("medium");
   const [estimatedValue, setEstimatedValue] = useState(120);
   const [reason, setReason] = useState("Suivi régulier du patient recommandé par l'IA");
-
   const mutation = useMutation({
     mutationFn: (data: any) => api.post("/recovery", data),
     onSuccess: () => {
@@ -1673,42 +1747,42 @@ function CreateRecoveryDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Créer une Opportunité de Relance IA</DialogTitle>
+          <DialogTitle>{language === "ar" ? "إنشاء فرصة متابعة ذكية" : language === "en" ? "Create AI Follow-up Opportunity" : "Créer une Opportunité de Relance IA"}</DialogTitle>
           <DialogDescription>
-            Programmez une relance intelligente pour {patient.firstName}.
+            {language === "ar" ? `برمجة متابعة ذكية لـ ${patient.firstName}.` : language === "en" ? `Schedule a smart follow-up for ${patient.firstName}.` : `Programmez une relance intelligente pour ${patient.firstName}.`}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold">Type de relance</label>
+            <label className="text-xs font-semibold">{language === "ar" ? "نوع المتابعة" : language === "en" ? "Follow-up type" : "Type de relance"}</label>
             <select
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
               value={type}
               onChange={(e) => setType(e.target.value)}
             >
-              <option value="inactive_patient">Patient inactif (Sans visite récente)</option>
-              <option value="overdue_checkup">Contrôle annuel en retard</option>
-              <option value="cancellation">Rendez-vous annulé à reprogrammer</option>
-              <option value="no_show">Rendez-vous manqué (No-Show)</option>
-              <option value="follow_up_required">Suivi post-opératoire requis</option>
+              <option value="inactive_patient">{language === "ar" ? "مريض غير نشط (بدون زيارة حديثة)" : language === "en" ? "Inactive patient (No recent visit)" : "Patient inactif (Sans visite récente)"}</option>
+              <option value="overdue_checkup">{language === "ar" ? "فحص سنوي متأخر" : language === "en" ? "Overdue annual checkup" : "Contrôle annuel en retard"}</option>
+              <option value="cancellation">{language === "ar" ? "موعد ملغى لإعادة برمجته" : language === "en" ? "Cancelled appointment to reschedule" : "Rendez-vous annulé à reprogrammer"}</option>
+              <option value="no_show">{language === "ar" ? "موعد فائت (تغيب)" : language === "en" ? "Missed appointment (No-Show)" : "Rendez-vous manqué (No-Show)"}</option>
+              <option value="follow_up_required">{language === "ar" ? "متابعة بعد العملية مطلوبة" : language === "en" ? "Post-operative follow-up required" : "Suivi post-opératoire requis"}</option>
             </select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Priorité</label>
+              <label className="text-xs font-semibold">{language === "ar" ? "الأولوية" : language === "en" ? "Priority" : "Priorité"}</label>
               <select
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
                 value={priority}
                 onChange={(e) => setPriority(e.target.value)}
               >
-                <option value="high">Haute</option>
-                <option value="medium">Moyenne</option>
-                <option value="low">Basse</option>
+                <option value="high">{language === "ar" ? "عالية" : language === "en" ? "High" : "Haute"}</option>
+                <option value="medium">{language === "ar" ? "متوسطة" : language === "en" ? "Medium" : "Moyenne"}</option>
+                <option value="low">{language === "ar" ? "منخفضة" : language === "en" ? "Low" : "Basse"}</option>
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Valeur estimée (DT)</label>
+              <label className="text-xs font-semibold">{language === "ar" ? "القيمة المقدرة (دينار)" : language === "en" ? "Estimated value (DT)" : "Valeur estimée (DT)"}</label>
               <Input
                 type="number"
                 value={estimatedValue}
@@ -1718,20 +1792,18 @@ function CreateRecoveryDialog({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold">Motif / Contexte de relance</label>
+            <label className="text-xs font-semibold">{language === "ar" ? "السبب / سياق المتابعة" : language === "en" ? "Reason / Follow-up context" : "Motif / Contexte de relance"}</label>
             <Textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Ex: Le patient devait rappeler pour la suite de son traitement..."
+              placeholder={language === "ar" ? "مثال: كان على المريض الاتصال لمتابعة علاجه..." : language === "en" ? "Ex: The patient was supposed to call back to continue treatment..." : "Ex: Le patient devait rappeler pour la suite de son traitement..."}
             />
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Annuler
-            </Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{language === "ar" ? "إلغاء" : language === "en" ? "Cancel" : "Annuler"}</Button>
             <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "Création..." : "Déclencher la relance"}
+              {mutation.isPending ? (language === "ar" ? "جاري الإنشاء..." : language === "en" ? "Creating..." : "Création...") : (language === "ar" ? "تفعيل المتابعة" : language === "en" ? "Trigger follow-up" : "Déclencher la relance")}
             </Button>
           </DialogFooter>
         </form>
@@ -1749,11 +1821,11 @@ function ContactJournalDialog({
   onOpenChange: (open: boolean) => void;
   recovery: IRecovery;
 }) {
+  const { language } = useAppState();
   const queryClient = useQueryClient();
   const [channel, setChannel] = useState("whatsapp");
   const [outcome, setOutcome] = useState("spoken_agreed");
   const [notes, setNotes] = useState("");
-
   const mutation = useMutation({
     mutationFn: (data: any) => api.post("/follow-ups/attempts", data),
     onSuccess: () => {
@@ -1780,18 +1852,18 @@ function ContactJournalDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Journal de Contact Patient</DialogTitle>
+          <DialogTitle>{language === "ar" ? "سجل تواصل المريض" : language === "en" ? "Patient Contact Journal" : "Journal de Contact Patient"}</DialogTitle>
           <DialogDescription>
-            Consignez le résultat de votre échange (appel, message, relance).
+            {language === "ar" ? "سجل نتيجة تفاعلك (مكالمة، رسالة، متابعة)." : language === "en" ? "Record the result of your interaction (call, message, follow-up)." : "Consignez le résultat de votre échange (appel, message, relance)."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           <div className="space-y-2">
-            <label className="text-xs font-semibold">Canal de contact</label>
+            <label className="text-xs font-semibold">{language === "ar" ? "قناة التواصل" : language === "en" ? "Contact channel" : "Canal de contact"}</label>
             <div className="grid grid-cols-4 gap-2">
               {[
                 { id: "whatsapp", icon: MessageSquare, label: "WhatsApp" },
-                { id: "phone", icon: Phone, label: "Appel" },
+                { id: "phone", icon: Phone, label: language === "ar" ? "اتصال" : language === "en" ? "Call" : "Appel" },
                 { id: "sms", icon: Send, label: "SMS" },
                 { id: "email", icon: Mail, label: "Email" },
               ].map((c) => (
@@ -1814,35 +1886,33 @@ function ContactJournalDialog({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold">Résultat de l'échange</label>
+            <label className="text-xs font-semibold">{language === "ar" ? "نتيجة التفاعل" : language === "en" ? "Interaction outcome" : "Résultat de l'échange"}</label>
             <select
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
               value={outcome}
               onChange={(e) => setOutcome(e.target.value)}
             >
-              <option value="spoken_agreed">Patient d'accord (Souhaite un RDV)</option>
-              <option value="no_answer">Pas de réponse</option>
-              <option value="left_voicemail">Message laissé</option>
-              <option value="spoken_declined">Refus / Ne souhaite pas de suivi</option>
-              <option value="invalid_number">Numéro non attribué</option>
+              <option value="spoken_agreed">{language === "ar" ? "المريض موافق (يرغب في موعد)" : language === "en" ? "Patient agreed (Wants an appointment)" : "Patient d'accord (Souhaite un RDV)"}</option>
+              <option value="no_answer">{language === "ar" ? "لا يوجد رد" : language === "en" ? "No answer" : "Pas de réponse"}</option>
+              <option value="left_voicemail">{language === "ar" ? "تم ترك رسالة صوتية" : language === "en" ? "Voicemail left" : "Message laissé"}</option>
+              <option value="spoken_declined">{language === "ar" ? "رفض / لا يرغب في متابعة" : language === "en" ? "Declined / No follow-up wanted" : "Refus / Ne souhaite pas de suivi"}</option>
+              <option value="invalid_number">{language === "ar" ? "رقم غير صالح" : language === "en" ? "Invalid number" : "Numéro non attribué"}</option>
             </select>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold">Notes / Détails</label>
+            <label className="text-xs font-semibold">{language === "ar" ? "ملاحظات / تفاصيل" : language === "en" ? "Notes / Details" : "Notes / Détails"}</label>
             <Textarea
-              placeholder="Ex: Le patient rappelle demain pour confirmer son horaire..."
+              placeholder={language === "ar" ? "مثال: سيتصل المريض غداً لتأكيد موعده..." : language === "en" ? "Ex: The patient calls back tomorrow to confirm their schedule..." : "Ex: Le patient rappelle demain pour confirmer son horaire..."}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Annuler
-            </Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{language === "ar" ? "إلغاء" : language === "en" ? "Cancel" : "Annuler"}</Button>
             <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "Enregistrement..." : "Enregistrer dans l'historique"}
+              {mutation.isPending ? (language === "ar" ? "جاري الحفظ..." : language === "en" ? "Saving..." : "Enregistrement...") : (language === "ar" ? "حفظ في السجل" : language === "en" ? "Save in history" : "Enregistrer dans l'historique")}
             </Button>
           </DialogFooter>
         </form>

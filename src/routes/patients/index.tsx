@@ -53,7 +53,7 @@ interface BackendPatient {
 export const Route = createFileRoute("/patients/")({
   head: () => ({
     meta: [
-      { title: "Patients — Dental AI" },
+      { title: "Patients — Sanovia AI" },
       {
         name: "description",
         content: "Annuaire des patients du cabinet.",

@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils";
 import { ALL_MEDICATIONS, searchMedications } from "@/data/medications";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import html2pdf from "html2pdf.js";
+import { useAppState } from "@/hooks/use-app-state";
+import jsPDF from "jspdf";
 
 // Exemples de médicaments selon la spécialité
 const SPECIALTY_CATALOGS = {
@@ -67,6 +68,7 @@ export function PrescriptionGenerator({
   patient: Patient;
   tenant: any; // On passe les infos du cabinet pour l'en-tête
 }) {
+  const { language } = useAppState();
   const [items, setItems] = useState<PrescriptionItem[]>([]);
   const [customMed, setCustomMed] = useState("");
   const [customPosology, setCustomPosology] = useState("");
@@ -107,13 +109,88 @@ export function PrescriptionGenerator({
     setItems((prev) => prev.filter((i) => i.id !== id));
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
+
 
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  
+  const savePrescriptionToBackend = async () => {
+    if (items.length === 0) return;
+    try {
+      await api.post("/prescriptions", {
+        patientId: patient.id,
+        items: items.map(({ name, form, posology }) => ({ name, form, posology })),
+        doctorName: tenant?.ownerName || tenant?.name || "",
+        cabinetName: tenant?.name || "",
+        specialty: tenant?.specialty || "",
+      });
+    } catch (err) {
+      // Silent fail — print still works even if save fails
+      console.warn("[PrescriptionGenerator] Backend save failed:", err);
+    }
+  };
+
+  const handlePrint = async () => {
+    setIsSaving(true);
+    try {
+      await savePrescriptionToBackend();
+    } finally {
+      setIsSaving(false);
+    }
+
+    // Isolate printing to just the prescription preview
+    const printElement = document.getElementById("prescription-preview");
+    if (!printElement) {
+      toast.error("Erreur: Aperçu introuvable");
+      return;
+    }
+
+    const printWindow = window.open("", "_blank", "width=800,height=800");
+    if (!printWindow) {
+      toast.error("Veuillez autoriser les pop-ups pour imprimer.");
+      return;
+    }
+
+    // Get Tailwind CSS styles (assuming they are injected in head)
+    const styles = Array.from(document.styleSheets)
+      .map(styleSheet => {
+        try {
+          return Array.from(styleSheet.cssRules)
+            .map(rule => rule.cssText)
+            .join("");
+        } catch (e) {
+          return "";
+        }
+      })
+      .join("");
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Ordonnance - ${patient.firstName} ${patient.lastName}</title>
+          <style>
+            ${styles}
+            @page { size: A4; margin: 20mm; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white; }
+          </style>
+        </head>
+        <body>
+          ${printElement.outerHTML}
+        </body>
+      </html>
+    `);
+    
+    printWindow.document.close();
+    printWindow.focus();
+    
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.onafterprint = () => printWindow.close();
+    }, 500);
+
+    toast.success("Ordonnance sauvegardée et imprimée !");
+  };
+
   const handleWhatsAppShare = async () => {
     if (items.length === 0) {
       toast.error("Veuillez ajouter au moins un médicament.");
@@ -122,8 +199,9 @@ export function PrescriptionGenerator({
 
     setIsSendingWhatsApp(true);
     try {
-      // 1. Generate text fallback and caption
-      let text = `*Ordonnance Médicale*\n_Dr. ${tenant?.name || "Médecin"}_
+      // 1. Generate text fallback
+      let text = `*Ordonnance Médicale*\n_Dr. ${tenant?.ownerName || tenant?.name || "Médecin"}_
+*Patient(e)* : ${patient.firstName} ${patient.lastName}
 
 `;
       items.forEach((item, index) => {
@@ -133,19 +211,58 @@ export function PrescriptionGenerator({
       text += `
 _Généré le ${new Date().toLocaleDateString("fr-FR")}_`;
 
-      // 2. Generate PDF
-      const element = document.getElementById("prescription-preview");
-      if (!element) throw new Error("Impossible de trouver l'aperçu");
-
-      const opt = {
-        margin:       10,
-        filename:     'Ordonnance.pdf',
-        image:        { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true },
-        jsPDF:        { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
-      };
-
-      const pdfDataUri = await html2pdf().from(element).set(opt).outputPdf('datauristring');
+      // 2. Generate PDF natively with jsPDF (no HTML parsing, so no oklch crash)
+      const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+      
+      // En-tête
+      doc.setFontSize(20);
+      doc.text(tenant?.name || "Cabinet Médical", 20, 20);
+      doc.setFontSize(12);
+      doc.text(tenant?.ownerName || "Dr. Médecin", 20, 28);
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(tenant?.specialty || "Spécialité", 20, 34);
+      
+      doc.setFontSize(10);
+      doc.text(tenant?.address || "Adresse", 130, 20);
+      doc.text(`Tél : ${tenant?.phone || "—"}`, 130, 26);
+      
+      // Patient & Date
+      doc.setTextColor(0);
+      doc.setFontSize(14);
+      doc.text(`Patient(e) : ${patient.firstName} ${patient.lastName}`, 20, 50);
+      
+      doc.setFontSize(10);
+      doc.text(`Fait le : ${new Date().toLocaleDateString("fr-FR")}`, 130, 50);
+      
+      // Titre
+      doc.setFontSize(18);
+      doc.text("ORDONNANCE", 105, 70, { align: "center" });
+      
+      // Items
+      let y = 90;
+      doc.setFontSize(12);
+      items.forEach((item, index) => {
+        doc.setFont("helvetica", "bold");
+        doc.text(`${index + 1}. ${item.name} ${item.form ? `(${item.form})` : ""}`, 20, y);
+        y += 6;
+        if (item.posology) {
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(80);
+          doc.text(item.posology, 25, y);
+          y += 8;
+          doc.setTextColor(0);
+        } else {
+          y += 4;
+        }
+      });
+      
+      // Signature
+      doc.setFontSize(10);
+      doc.text("Signature du médecin :", 130, y + 20);
+      
+      // Obtenir la dataUri base64 sans le prefixe data:application/pdf;base64,
+      const pdfDataUri = doc.output('datauristring');
       const base64 = pdfDataUri.split(',')[1];
 
       // 3. Send via API
@@ -166,25 +283,25 @@ _Généré le ${new Date().toLocaleDateString("fr-FR")}_`;
   };
 
 
-  const today = new Date().toLocaleDateString("fr-FR", { year: 'numeric', month: 'long', day: 'numeric' });
+  const today = new Date().toLocaleDateString(language === "ar" ? "ar-TN" : language === "en" ? "en-GB" : "fr-FR", { year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
     <div className="flex flex-col lg:flex-row gap-6">
       {/* SECTION GAUCHE : Générateur (Masqué à l'impression) */}
       <div className="flex-1 space-y-6 print:hidden">
         <SectionCard 
-          title="Créer une Ordonnance" 
-          description="Sélectionnez ou ajoutez des médicaments."
+          title={language === "ar" ? "إنشاء وصفة طبية" : language === "en" ? "Create Prescription" : "Créer une Ordonnance"} 
+          description={language === "ar" ? "اختر أو أضف أدوية." : language === "en" ? "Select or add medications." : "Sélectionnez ou ajoutez des médicaments."}
           className="overflow-visible"
         >
           
           <div className="space-y-4">
-            <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Rechercher un Médicament</h4>
+            <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">{language === "ar" ? "البحث عن دواء" : language === "en" ? "Search Medication" : "Rechercher un Médicament"}</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5 relative">
-                <label className="text-xs font-semibold">Nom du Médicament</label>
+                <label className="text-xs font-semibold">{language === "ar" ? "اسم الدواء" : language === "en" ? "Medication name" : "Nom du Médicament"}</label>
                 <Input 
-                  placeholder="Ex: Clamoxyl 500mg" 
+                  placeholder={language === "ar" ? "مثال: أموكسيسيلين 500mg" : language === "en" ? "Ex: Clamoxyl 500mg" : "Ex: Clamoxyl 500mg"} 
                   value={customMed} 
                   onChange={(e) => setCustomMed(e.target.value)}
                   onFocus={() => setShowSuggestions(true)}
@@ -218,13 +335,12 @@ _Généré le ${new Date().toLocaleDateString("fr-FR")}_`;
                 )}
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold">Posologie (Optionnel)</label>
-                <Input placeholder="Ex: 1 gélule le matin" value={customPosology} onChange={(e) => setCustomPosology(e.target.value)} />
+                <label className="text-xs font-semibold">{language === "ar" ? "الجرعة (اختياري)" : language === "en" ? "Dosage (Optional)" : "Posologie (Optionnel)"}</label>
+                <Input placeholder={language === "ar" ? "مثال: كبسولة واحدة صباحاً" : language === "en" ? "Ex: 1 capsule in the morning" : "Ex: 1 gélule le matin"} value={customPosology} onChange={(e) => setCustomPosology(e.target.value)} />
               </div>
             </div>
             <Button onClick={addCustom} disabled={!customMed} className="w-full sm:w-auto" variant="secondary">
-              <Plus className="size-4 mr-2" /> Ajouter à l'ordonnance
-            </Button>
+              <Plus className="size-4 mr-2" />{language === "ar" ? "إضافة للوصفة" : language === "en" ? "Add to prescription" : "Ajouter à l'ordonnance"}</Button>
           </div>
 
         </SectionCard>
@@ -233,15 +349,14 @@ _Généré le ${new Date().toLocaleDateString("fr-FR")}_`;
       {/* SECTION DROITE : Aperçu A4 (Seule partie visible à l'impression) */}
       <div className="w-full lg:w-[45%] xl:w-[40%] flex flex-col gap-4">
         <div className="flex items-center justify-between print:hidden">
-          <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Aperçu PDF</h3>
+          <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">{language === "ar" ? "معاينة PDF" : language === "en" ? "PDF Preview" : "Aperçu PDF"}</h3>
           <div className="flex items-center gap-2">
             <Button onClick={handleWhatsAppShare} disabled={items.length === 0 || isSendingWhatsApp} variant="outline" className="text-green-600 border-green-600 hover:bg-green-50">
               {isSendingWhatsApp ? <Loader2 className="size-4 mr-2 animate-spin" /> : <MessageSquare className="size-4 mr-2" />}
               WhatsApp
             </Button>
             <Button onClick={handlePrint} disabled={items.length === 0}>
-              <Printer className="size-4 mr-2" /> Imprimer / PDF
-            </Button>
+              <Printer className="size-4 mr-2" />{language === "ar" ? "طباعة / PDF" : language === "en" ? "Print / PDF" : "Imprimer / PDF"}</Button>
           </div>
         </div>
 
@@ -267,23 +382,21 @@ _Généré le ${new Date().toLocaleDateString("fr-FR")}_`;
             {/* Info Patient & Date */}
             <div className="flex justify-between items-end mb-10">
               <div className="space-y-1">
-                <p className="text-sm text-slate-500 font-semibold uppercase tracking-wider">Patient(e)</p>
+                <p className="text-sm text-slate-500 font-semibold uppercase tracking-wider">{language === "ar" ? "المريض/المريضة" : language === "en" ? "Patient" : "Patient(e)"}</p>
                 <p className="text-lg font-bold text-slate-800">{patient.firstName} {patient.lastName}</p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-medium text-slate-600">Fait le : <span className="font-bold">{today}</span></p>
+                <p className="text-sm font-medium text-slate-600">{language === "ar" ? "بتاريخ: " : language === "en" ? "Date: " : "Fait le : "}<span className="font-bold">{today}</span></p>
               </div>
             </div>
 
-            <h3 className="text-center text-xl font-black uppercase tracking-[0.2em] text-slate-800 mb-10 border-b border-slate-200 inline-block self-center pb-1">
-              Ordonnance
-            </h3>
+            <h3 className="text-center text-xl font-black uppercase tracking-[0.2em] text-slate-800 mb-10 border-b border-slate-200 inline-block self-center pb-1">{language === "ar" ? "وصفة طبية" : language === "en" ? "PRESCRIPTION" : "Ordonnance"}</h3>
 
             {/* Liste des médicaments */}
             <div className="flex-1 space-y-6">
               {items.length === 0 ? (
                 <div className="h-full flex items-center justify-center text-slate-300 italic text-sm print:hidden">
-                  L'ordonnance est vide. Ajoutez des médicaments.
+                  {language === "ar" ? "الوصفة فارغة. أضف أدوية." : language === "en" ? "The prescription is empty. Add medications." : "L'ordonnance est vide. Ajoutez des médicaments."}
                 </div>
               ) : (
                 items.map((item, index) => (
@@ -310,7 +423,7 @@ _Généré le ${new Date().toLocaleDateString("fr-FR")}_`;
             {/* Footer Signature */}
             <div className="mt-16 pt-10 flex justify-end">
               <div className="text-center">
-                <p className="text-sm font-semibold text-slate-500 mb-12">Signature du médecin</p>
+                <p className="text-sm font-semibold text-slate-500 mb-12">{language === "ar" ? "توقيع الطبيب" : language === "en" ? "Doctor's signature" : "Signature du médecin"}</p>
                 <div className="w-40 border-b border-slate-400 border-dashed"></div>
               </div>
             </div>

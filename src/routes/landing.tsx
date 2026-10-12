@@ -1,982 +1,865 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   motion,
+  AnimatePresence,
   useScroll,
+  useSpring,
   useTransform,
   useMotionValue,
   useMotionTemplate,
-  useSpring,
+  useReducedMotion,
 } from "framer-motion";
-import { type ReactNode, useState, useEffect } from "react";
+import { type ReactNode, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
-  Bot,
-  Sparkles,
-  CalendarDays,
-  HeartPulse,
-  ArrowRight,
-  CheckCircle2,
-  Activity,
-  MessageCircle,
-  Send,
-  ChevronDown,
-  ShieldCheck,
-  Users,
-  TrendingUp,
-  Star,
-  ClipboardList,
-  Languages,
-  ListPlus,
-  RefreshCw,
-  UserPlus,
-  Bell,
+  Bot, CalendarDays, HeartPulse, ArrowRight, CheckCircle2, Activity, MessageCircle,
+  ShieldCheck, Users, TrendingUp, Star, ClipboardList, Languages, ListPlus, RefreshCw,
+  UserPlus, Bell, LockKeyhole, DatabaseZap, UserCheck, Siren, Fingerprint, Repeat,
+  ScrollText, Stethoscope, Menu, X, Globe, MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
+import { useAppState } from "@/hooks/use-app-state";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-export const Route = createFileRoute("/landing")({
-  component: LandingPage,
-});
 
-/* ────────────────────────────────────────────────────────────────────── */
-/*  Building blocks                                                       */
-/* ────────────────────────────────────────────────────────────────────── */
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import PhoneInput from 'react-phone-number-input';
+import 'react-phone-number-input/style.css';
+import { getCountries } from 'react-phone-number-input/input';
+import en from 'react-phone-number-input/locale/en.json';
+import fr from 'react-phone-number-input/locale/fr.json';
+import ar from 'react-phone-number-input/locale/ar.json';
+import { ChevronsUpDown } from "lucide-react";
 
-/** A drawn heartbeat trace — the recurring signature motif of the page. */
-function PulseTrace({
-  className = "",
-  duration = 2.4,
-}: {
-  className?: string;
-  duration?: number;
-}) {
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+
+
+export const Route = createFileRoute("/landing")({ component: LandingPage });
+
+/* ───────────────────────── Effets signature ───────────────────────── */
+
+const mix = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
+
+/** Les lettres montent une à une depuis une ligne de coupe, avec bascule 3D et flou qui se dissipe. */
+function Reveal({ text, className = "", gradient = false, delay = 0 }: { text: string; className?: string; gradient?: boolean; delay?: number }) {
+  const reduce = useReducedMotion();
+  if (reduce) return <span className={className}>{text}</span>;
+  const isArabic = /[\u0600-\u06FF]/.test(text);
+  const words = text.split(" ");
+  const total = isArabic ? words.length : (text.replace(/ /g, "").length || 1);
+  let n = 0;
   return (
-    <svg
-      viewBox="0 0 400 60"
-      fill="none"
+    <motion.span
+      key={text}
       className={className}
-      preserveAspectRatio="none"
+      dir="auto"
+      aria-label={text}
+      initial="h"
+      whileInView="v"
+      viewport={{ once: true, margin: "-40px" }}
+      transition={{ staggerChildren: isArabic ? 0.08 : 0.03, delayChildren: delay }}
     >
+      {words.map((w, wi) => {
+        const wordT = isArabic ? n++ / total : 0;
+        return (
+          <span key={wi}>
+            {wi > 0 && " "}
+            <span aria-hidden className="-my-[0.14em] inline-block whitespace-nowrap py-[0.14em] align-bottom" style={{ overflow: "hidden", perspective: 600 }}>
+              {isArabic ? (
+                <motion.span
+                  className="inline-block"
+                  style={{
+                    transformOrigin: "50% 100%",
+                    ...(gradient ? { color: `rgb(${mix(45, 251, wordT)},${mix(212, 113, wordT)},${mix(191, 133, wordT)})` } : {}),
+                  }}
+                  variants={{
+                    h: { y: "115%", rotateX: -75, opacity: 0, filter: "blur(8px)" },
+                    v: { y: "0%", rotateX: 0, opacity: 1, filter: "blur(0px)", transition: { type: "spring", stiffness: 140, damping: 16 } },
+                  }}
+                >
+                  {w}
+                </motion.span>
+              ) : (
+                w.split("").map((c, ci) => {
+                  const t = n++ / total;
+                  return (
+                    <motion.span
+                      key={ci}
+                      className="inline-block"
+                      style={{
+                        transformOrigin: "50% 100%",
+                        ...(gradient ? { color: `rgb(${mix(45, 251, t)},${mix(212, 113, t)},${mix(191, 133, t)})` } : {}),
+                      }}
+                      variants={{
+                        h: { y: "115%", rotateX: -75, opacity: 0, filter: "blur(8px)" },
+                        v: { y: "0%", rotateX: 0, opacity: 1, filter: "blur(0px)", transition: { type: "spring", stiffness: 140, damping: 16 } },
+                      }}
+                    >
+                      {c}
+                    </motion.span>
+                  );
+                })
+              )}
+            </span>
+          </span>
+        );
+      })}
+    </motion.span>
+  );
+}
+
+/** Un électrocardiogramme fixe qui se trace au fil du scroll. */
+function ScrollECG() {
+  const { scrollYProgress } = useScroll();
+  const p = useSpring(scrollYProgress, { stiffness: 80, damping: 22 });
+  const d = "M16 0" + Array.from({ length: 4 }, (_, i) => ` V${i * 250 + 100} L6 ${i * 250 + 130} L26 ${i * 250 + 170} L16 ${i * 250 + 200}`).join("") + " V1000";
+  return (
+    <svg aria-hidden className="pointer-events-none fixed left-2 top-0 z-30 hidden h-screen w-8 lg:block" viewBox="0 0 32 1000" preserveAspectRatio="none" fill="none">
+      <path d={d} stroke="rgba(255,255,255,0.07)" strokeWidth="1.5" />
+      <motion.path d={d} stroke="#2dd4bf" strokeWidth="2" strokeLinejoin="round" style={{ pathLength: p, filter: "drop-shadow(0 0 6px #2dd4bf)" }} />
+    </svg>
+  );
+}
+
+/** Carte qui s'incline en 3D et suit le curseur avec un halo. */
+function Tilt({ children, className = "" }: { children: ReactNode; className?: string }) {
+  const reduce = useReducedMotion();
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const rx = useSpring(useTransform(y, [-0.5, 0.5], [7, -7]), { stiffness: 200, damping: 20 });
+  const ry = useSpring(useTransform(x, [-0.5, 0.5], [-7, 7]), { stiffness: 200, damping: 20 });
+  const gx = useTransform(x, (v) => (v + 0.5) * 100);
+  const gy = useTransform(y, (v) => (v + 0.5) * 100);
+  const glow = useMotionTemplate`radial-gradient(280px circle at ${gx}% ${gy}%, rgba(45,212,191,0.16), transparent 70%)`;
+  return (
+    <motion.div
+      onMouseMove={(e) => {
+        if (reduce) return;
+        const r = e.currentTarget.getBoundingClientRect();
+        x.set((e.clientX - r.left) / r.width - 0.5);
+        y.set((e.clientY - r.top) / r.height - 0.5);
+      }}
+      onMouseLeave={() => { x.set(0); y.set(0); }}
+      style={{ rotateX: rx, rotateY: ry, transformPerspective: 900 }}
+      className={`relative rounded-3xl border border-white/10 bg-white/[0.03] backdrop-blur-sm ${className}`}
+    >
+      <motion.div aria-hidden className="pointer-events-none absolute inset-0 rounded-3xl" style={{ background: glow }} />
+      <div className="relative">{children}</div>
+    </motion.div>
+  );
+}
+
+function Pulse({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 400 60" fill="none" className={className} preserveAspectRatio="none" aria-hidden>
       <defs>
-        <linearGradient id="pulseGrad" x1="0" y1="0" x2="400" y2="0" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#2dd4bf" stopOpacity="0" />
-          <stop offset="45%" stopColor="#2dd4bf" />
-          <stop offset="100%" stopColor="#fb7185" />
+        <linearGradient id="pg" x1="0" y1="0" x2="400" y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#2dd4bf" stopOpacity="0" />
+          <stop offset=".5" stopColor="#2dd4bf" />
+          <stop offset="1" stopColor="#fb7185" />
         </linearGradient>
       </defs>
       <motion.path
         d="M0 30 H130 L142 30 L152 8 L166 54 L178 30 L188 30 L198 20 L208 40 L218 30 L400 30"
-        stroke="url(#pulseGrad)"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        initial={{ pathLength: 0, opacity: 0 }}
-        whileInView={{ pathLength: 1, opacity: 1 }}
-        viewport={{ once: true }}
-        transition={{ duration, ease: "easeInOut" }}
+        stroke="url(#pg)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        initial={{ pathLength: 0 }} whileInView={{ pathLength: 1 }} viewport={{ once: true }}
+        transition={{ duration: 2.4, ease: "easeInOut" }}
       />
     </svg>
   );
 }
 
-/** Radial glow that follows the cursor inside its container. */
-function CursorGlow({ children }: { children: ReactNode }) {
-  const mouseX = useMotionValue(0);
-  const mouseY = useMotionValue(0);
-  const springX = useSpring(mouseX, { stiffness: 120, damping: 20 });
-  const springY = useSpring(mouseY, { stiffness: 120, damping: 20 });
-  const background = useMotionTemplate`radial-gradient(560px circle at ${springX}px ${springY}px, rgba(45,212,191,0.14), transparent 70%)`;
-
+function Chip({ children, tone = "teal" }: { children: ReactNode; tone?: "teal" | "rose" }) {
+  const c = tone === "teal" ? "border-teal-400/30 text-teal-200" : "border-rose-400/30 text-rose-200";
   return (
-    <div
-      onMouseMove={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        mouseX.set(e.clientX - rect.left);
-        mouseY.set(e.clientY - rect.top);
-      }}
-      className="relative"
-    >
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 z-0"
-        style={{ background }}
-      />
+    <span className={`inline-flex items-center gap-2 rounded-full border ${c} bg-black/40 px-3 py-1.5 text-xs font-medium backdrop-blur-md`}>
+      <span className={`size-1.5 rounded-full ${tone === "teal" ? "bg-teal-400" : "bg-rose-400"} animate-pulse`} />
       {children}
-    </div>
+    </span>
   );
 }
 
-/** Small mono "vitals" readout badge — the recurring data-chip motif. */
-function VitalBadge({
-  label,
-  value,
-  tone = "teal",
-}: {
-  label: string;
-  value: string;
-  tone?: "teal" | "coral";
-}) {
-  const ring = tone === "teal" ? "border-teal-400/30 text-teal-300" : "border-rose-400/30 text-rose-300";
-  const dot = tone === "teal" ? "bg-teal-400" : "bg-rose-400";
-  return (
-    <div className={`flex items-center gap-2 rounded-full border ${ring} bg-black/40 backdrop-blur-md px-3 py-1.5`}>
-      <span className={`size-1.5 rounded-full ${dot} animate-pulse`} />
-      <span className="font-mono text-[10px] uppercase tracking-widest text-slate-400">{label}</span>
-      <span className="font-mono text-xs font-semibold">{value}</span>
-    </div>
-  );
-}
+/* ───────────────────── Pipeline de contrôles en direct ───────────────────── */
 
-/** Gradient-bordered card: outer gradient div + slightly inset solid panel. */
-function EdgeCard({
-  children,
-  className = "",
-  from = "from-teal-400/40",
-  to = "to-rose-400/10",
-}: {
-  children: ReactNode;
-  className?: string;
-  from?: string;
-  to?: string;
-}) {
-  return (
-    <div className={`rounded-[26px] bg-gradient-to-br ${from} ${to} p-px ${className}`}>
-      <div className="h-full w-full rounded-[25px] bg-white dark:bg-[#060a0d]">{children}</div>
-    </div>
-  );
-}
+const getGates = (t: any) => [
+  { icon: MessageCircle, t: t('landing.gates.msg_received'), d: t('landing.gates.msg_received_desc') },
+  { icon: Fingerprint, t: t('landing.gates.context_isolated'), d: t('landing.gates.context_isolated_desc') },
+  { icon: Languages, t: t('landing.gates.intent_understood'), d: t('landing.gates.intent_understood_desc') },
+  { icon: Siren, t: t('landing.gates.ai_guardrail'), d: t('landing.gates.ai_guardrail_desc') },
+  { icon: CalendarDays, t: t('landing.gates.slot_validated'), d: t('landing.gates.slot_validated_desc') },
+  { icon: RefreshCw, t: t('landing.gates.waitlist_check'), d: t('landing.gates.waitlist_check_desc') },
+  { icon: Bell, t: t('landing.gates.reminders'), d: t('landing.gates.reminders_desc') },
+  { icon: CheckCircle2, t: t('landing.gates.confirmation'), d: t('landing.gates.confirmation_desc') },
+];
 
-/** Interactive Chat Mockup — rotates through 3 real scenarios */
-const CHAT_SCENARIOS = [
-  {
-    label: "📅 Nouvelle réservation",
-    botName: "Dr. Ben Salah — IA",
-    messages: [
-      { from: "patient", text: "Salem, nheb nekhou rdv ghodwa 🙏" },
-      { from: "bot", text: "Ey behi 😊 fama disponibilité ghodwa à 10h w 14h30. Chnowa yse3dek ?" },
-      { from: "patient", text: "10h behi" },
-      { from: "confirm", text: "RDV confirmé automatiquement ✅" },
+const getScenarios = (t: any) => [
+  { 
+    tab: t('landing.scenarios.tab1'), 
+    history: [
+       { role: 'user', text: t('landing.scenarios.msg1_1') },
+       { role: 'bot', text: t('landing.scenarios.reply1_1') },
     ],
+    msg: t('landing.scenarios.msg1_2'), 
+    stop: undefined as number | undefined, 
+    reply: t('landing.scenarios.reply1_2'), 
+    tone: "teal" 
   },
-  {
-    label: "🔄 Modification de RDV",
-    botName: "Dr. Ben Salah — IA",
-    messages: [
-      { from: "patient", text: "Je veux changer mon rendez-vous de demain 9h, j'ai un empêchement 😬" },
-      { from: "bot", text: "Pas de souci ! Les prochains créneaux disponibles sont : Jeudi 10h, Vendredi 11h30. Lequel vous convient ?" },
-      { from: "patient", text: "Jeudi 10h parfait" },
-      { from: "confirm", text: "RDV modifié avec succès ✅ Votre ancien créneau a été libéré." },
+  { 
+    tab: t('landing.scenarios.tab2'), 
+    history: [
+       { role: 'user', text: t('landing.scenarios.msg2_1') },
+       { role: 'bot', text: t('landing.scenarios.reply2_1') },
     ],
-  },
-  {
-    label: "👨‍👩‍👧 Réservation famille",
-    botName: "Dr. Ben Salah — IA",
-    messages: [
-      { from: "patient", text: "Bonjour, je veux prendre des rendez-vous pour moi et ma fille de 8 ans svp" },
-      { from: "bot", text: "Bien sûr ! Pour vous, j'ai 14h00 mardi. Pour votre fille (pédiatrie), j'ai 14h30 juste après. C'est pratique ?" },
-      { from: "patient", text: "Oui parfait pour les deux ! 🙏" },
-      { from: "confirm", text: "2 RDV confirmés pour la famille ✅" },
-    ],
+    msg: t('landing.scenarios.msg2_2'), 
+    stop: 3, 
+    reply: t('landing.scenarios.reply2_2'), 
+    tone: "rose" 
   },
 ];
 
-function InteractiveChatMockup() {
-  const [scenario, setScenario] = useState(0);
-  const [step, setStep] = useState(0);
+function Pipeline() {
+  const { t } = useTranslation();
+
+  const GATES = getGates(t);
+  const SCEN = getScenarios(t);
+  const [s, setS] = useState(0);
+  const [i, setI] = useState(-1);
+  const sc = SCEN[s]!;
+  const last = sc.stop ?? GATES.length - 1;
 
   useEffect(() => {
-    let timers: NodeJS.Timeout[] = [];
-
-    const startSequence = () => {
-      setStep(0);
-      timers.push(setTimeout(() => setStep(1), 800));   // Patient message
-      timers.push(setTimeout(() => setStep(2), 1800));  // Bot typing
-      timers.push(setTimeout(() => setStep(3), 3000));  // Bot reply
-      timers.push(setTimeout(() => setStep(4), 4200));  // Patient reply
-      timers.push(setTimeout(() => setStep(5), 5000));  // Confirmation
-      // Switch scenario 2s after confirmation
-      timers.push(setTimeout(() => {
-        setScenario(s => (s + 1) % CHAT_SCENARIOS.length);
-        startSequence();
-      }, 7200));
-    };
-
-    startSequence();
-    return () => timers.forEach(clearTimeout);
-  }, []);
-
-  const sc = CHAT_SCENARIOS[scenario]!;
+    const t = setTimeout(() => {
+      if (i < last) setI(i + 1);
+      else { setI(-1); setS((v) => (v + 1) % SCEN.length); }
+    }, i < last ? 850 : 3400);
+    return () => clearTimeout(t);
+  }, [i, last, s]);
 
   return (
-    <div className="p-5">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/5">
-        <div className="flex items-center gap-3">
-          <div className="size-9 rounded-full bg-teal-400/15 flex items-center justify-center">
-            <Bot className="size-4 text-teal-300" />
-          </div>
-          <div className="text-left">
-            <div className="text-sm font-semibold">{sc.botName}</div>
-            <div className="text-[11px] flex items-center gap-1 h-4">
-              {step === 2 ? (
-                <span className="text-teal-400 flex items-center gap-1">
-                  <span className="size-1.5 rounded-full bg-teal-400 animate-pulse" /> en train d'écrire…
-                </span>
-              ) : (
-                <span className="text-slate-500">En ligne</span>
-              )}
-            </div>
-          </div>
-        </div>
-        {/* Scenario indicator */}
-        <div className="flex gap-1">
-          {CHAT_SCENARIOS.map((_, i) => (
-            <span key={i} className={`size-1.5 rounded-full transition-colors ${i === scenario ? "bg-teal-400" : "bg-white/15"}`} />
+    <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr]">
+      <div>
+        <div className="mb-5 flex flex-wrap gap-2" role="tablist">
+          {SCEN.map((x, k) => (
+            <button key={x.tab} role="tab" aria-selected={k === s} onClick={() => { setS(k); setI(-1); }}
+              className={`rounded-full border px-4 py-1.5 text-sm transition-colors ${k === s ? "border-teal-400/60 bg-teal-400/10 text-teal-100" : "border-white/10 text-slate-400 hover:text-white"}`}>
+              {x.tab}
+            </button>
           ))}
         </div>
-      </div>
-
-      {/* Scenario label */}
-      <div className="mb-3">
-        <motion.span
-          key={scenario}
-          initial={{ opacity: 0, y: -5 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-[10px] font-mono uppercase tracking-widest text-slate-500"
-        >
-          {sc.label}
-        </motion.span>
-      </div>
-
-      {/* Messages */}
-      <div className="space-y-2.5 text-left text-sm min-h-[230px]">
-        {step >= 1 && (
-          <motion.div
-            key={`${scenario}-m1`}
-            initial={{ opacity: 0, x: -10, scale: 0.95 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            transition={{ duration: 0.3 }}
-            className="bg-slate-100 dark:bg-white/5 text-slate-800 dark:text-slate-100 rounded-2xl rounded-tl-sm px-4 py-2.5 max-w-[85%]"
-          >
-            {sc.messages[0]!.text}
-          </motion.div>
-        )}
-        {step >= 3 && (
-          <motion.div
-            key={`${scenario}-m2`}
-            initial={{ opacity: 0, x: 10, scale: 0.95 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            transition={{ duration: 0.3 }}
-            className="bg-teal-500/20 dark:bg-teal-400/15 border border-teal-500/30 dark:border-teal-400/20 rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-[90%] ml-auto text-teal-900 dark:text-teal-100"
-          >
-            {sc.messages[1]!.text}
-          </motion.div>
-        )}
-        {step >= 4 && (
-          <motion.div
-            key={`${scenario}-m3`}
-            initial={{ opacity: 0, x: -10, scale: 0.95 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            transition={{ duration: 0.3 }}
-            className="bg-slate-100 dark:bg-white/5 text-slate-800 dark:text-slate-100 rounded-2xl rounded-tl-sm px-4 py-2.5 max-w-[65%]"
-          >
-            {sc.messages[2]!.text}
-          </motion.div>
-        )}
-        {step >= 5 && sc.messages[3] && (
-          <motion.div
-            key={`${scenario}-m4`}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.4, type: "spring", bounce: 0.3 }}
-            className="flex items-center gap-2 w-fit bg-rose-50 dark:bg-rose-400/10 border border-rose-300 dark:border-rose-400/20 rounded-full px-3 py-1.5"
-          >
-            <CheckCircle2 className="size-3.5 text-rose-500 dark:text-rose-300 flex-shrink-0" />
-            <span className="text-[11px] text-rose-700 dark:text-rose-200 font-medium">{sc.messages[3].text}</span>
-          </motion.div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/** Medical Record integration mockup */
-function MedicalRecordMockup() {
-  const [step, setStep] = useState(0);
-
-  useEffect(() => {
-    let timers: NodeJS.Timeout[] = [];
-    const startSequence = () => {
-      setStep(0);
-      timers.push(setTimeout(() => setStep(1), 1000)); // AI reading dossier
-      timers.push(setTimeout(() => setStep(2), 2500)); // AI found meds
-      timers.push(setTimeout(() => setStep(3), 4000)); // AI replies to patient
-      timers.push(setTimeout(startSequence, 10000));
-    };
-    startSequence();
-    return () => timers.forEach(clearTimeout);
-  }, []);
-
-  return (
-    <div className="flex flex-col sm:flex-row h-full">
-      {/* Left side: Doctor CRM */}
-      <div className="w-full sm:w-1/2 p-5 border-b sm:border-b-0 sm:border-r border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-black/20">
-        <div className="flex items-center gap-2 mb-4 opacity-50">
-          <ClipboardList className="size-4 text-teal-300" />
-          <span className="text-xs font-semibold">Dossier: Ahmed K.</span>
-        </div>
-        <div className="space-y-3">
-          <div className="h-2 w-1/3 bg-slate-200 dark:bg-white/10 rounded" />
-          <div className="h-2 w-3/4 bg-slate-200 dark:bg-white/10 rounded" />
-          <div className="mt-4 p-3 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/5 rounded-xl text-xs space-y-2 relative overflow-hidden">
-            <span className="text-teal-600 dark:text-teal-400 font-semibold block mb-1">Prescription (Hier)</span>
-            <span className="block text-slate-600 dark:text-slate-300">• Amoxicilline 1g (2x/j)</span>
-            <span className="block text-slate-600 dark:text-slate-300">• Paracétamol 1000mg</span>
-
-            {step >= 1 && (
-              <motion.div
-                initial={{ left: "-100%" }}
-                animate={{ left: "100%" }}
-                transition={{ duration: 1.5, ease: "linear" }}
-                className="absolute inset-0 bg-gradient-to-r from-transparent via-teal-400/20 to-transparent w-[50%]"
-              />
-            )}
-            {step >= 2 && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="absolute top-2 right-2 flex items-center gap-1 bg-teal-400/20 text-teal-300 px-1.5 py-0.5 rounded text-[10px] font-bold"
-              >
-                <Bot className="size-3" /> Lu par l'IA
+        <AnimatePresence mode="wait">
+          <motion.div key={s} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-3 text-sm">
+            {sc.history && sc.history.map((h: any, idx: number) => (
+              <div key={idx} className={h.role === 'bot' 
+                ? `ml-auto w-fit max-w-[92%] rounded-2xl rounded-tr-sm border px-4 py-2.5 ${sc.tone === "teal" ? "border-teal-400/30 bg-teal-400/10 text-teal-50" : "border-rose-400/30 bg-rose-400/10 text-rose-50"}` 
+                : "w-fit max-w-[88%] rounded-2xl rounded-tl-sm bg-white/[0.07] px-4 py-2.5"}>
+                {h.text}
+              </div>
+            ))}
+            <div className="w-fit max-w-[88%] rounded-2xl rounded-tl-sm bg-white/[0.07] px-4 py-2.5">{sc.msg}</div>
+            {i >= last && (
+              <motion.div initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }}
+                className={`ml-auto w-fit max-w-[92%] rounded-2xl rounded-tr-sm border px-4 py-2.5 ${sc.tone === "teal" ? "border-teal-400/30 bg-teal-400/10 text-teal-50" : "border-rose-400/30 bg-rose-400/10 text-rose-50"}`}>
+                {sc.reply}
               </motion.div>
             )}
-          </div>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      <ol className="relative space-y-2.5">
+        {GATES.map((g, k) => {
+          const lit = k <= i;
+          const blocked = sc.stop === k && lit;
+          const skipped = sc.stop !== undefined && k > sc.stop;
+          return (
+            <li key={g.t} className={`relative flex items-center gap-4 rounded-2xl border px-3 py-2.5 transition-all duration-500 ${blocked ? "border-rose-400/50 bg-rose-400/10" : lit ? "border-teal-400/40 bg-teal-400/[0.07]" : "border-white/5 bg-white/[0.02]"} ${skipped ? "opacity-30" : ""}`}>
+              {k > 0 && <span aria-hidden className={`absolute -top-[11px] left-[30px] h-[11px] w-px transition-colors duration-500 ${lit && !skipped ? "bg-teal-300" : "bg-white/10"}`} />}
+              <span className={`relative z-10 flex size-9 shrink-0 items-center justify-center rounded-full border ${blocked ? "border-rose-400 bg-[#1a0a0f] text-rose-300" : lit ? "border-teal-300 bg-[#04120f] text-teal-200 shadow-[0_0_18px_rgba(45,212,191,.5)]" : "border-white/10 bg-[#04070a] text-slate-500"}`}>
+                <g.icon className="size-4" />
+              </span>
+              <div>
+                <div className="text-sm font-semibold">{blocked ? t("landing.gates.escalation") : g.t}</div>
+                <div className="text-xs text-slate-400">{g.d}</div>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+
+    </div>
+  );
+}
+
+/* ───────────────────────── Orbite de sécurité ───────────────────────── */
+
+const getLayers = (t: any) => [
+  { icon: LockKeyhole, t: t('landing.security.layers.access.title'), d: t('landing.security.layers.access.desc') },
+  { icon: DatabaseZap, t: t('landing.security.layers.tenant.title'), d: t('landing.security.layers.tenant.desc') },
+  { icon: UserCheck, t: t('landing.security.layers.validation.title'), d: t('landing.security.layers.validation.desc') },
+  { icon: Repeat, t: t('landing.security.layers.idempotent.title'), d: t('landing.security.layers.idempotent.desc') },
+  { icon: Siren, t: t('landing.security.layers.ai_limits.title'), d: t('landing.security.layers.ai_limits.desc') },
+  { icon: ScrollText, t: t('landing.security.layers.traceability.title'), d: t('landing.security.layers.traceability.desc') },
+  { icon: Users, t: t('landing.security.layers.permissions.title'), d: t('landing.security.layers.permissions.desc') },
+];
+
+function SecurityOrbit() {
+  const { t } = useTranslation();
+  const LAYERS = getLayers(t);
+  const [a, setA] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setA((v) => (v + 1) % LAYERS.length), 5000);
+    return () => clearInterval(id);
+  }, []);
+  const L = LAYERS[a]!;
+  return (
+    <div className="grid items-center gap-12 lg:grid-cols-2">
+      <div className="relative mx-auto aspect-square w-full max-w-[460px]">
+        <style>{`
+          @keyframes orb{to{transform:rotate(360deg)}}
+          .orb{animation:orb var(--d) linear infinite;transform-origin:200px 200px}
+          @media (prefers-reduced-motion:reduce){.orb{animation:none}}
+        `}</style>
+        <svg viewBox="0 0 400 400" className="h-full w-full" role="img" aria-label="Sept couches de sécurité concentriques">
+          {LAYERS.map((_, k) => {
+            const r = 56 + k * 21;
+            const on = k === a;
+            return (
+              <g key={k} className="orb" style={{ ["--d" as string]: `${18 + k * 7}s`, animationDirection: k % 2 ? "reverse" : "normal" }}>
+                <circle cx="200" cy="200" r={r} fill="none" stroke={on ? "#2dd4bf" : "rgba(255,255,255,0.12)"} strokeWidth={on ? 2.2 : 1} strokeDasharray={on ? "none" : `${4 + k * 2} ${6 + k}`} style={{ filter: on ? "drop-shadow(0 0 8px #2dd4bf)" : "none", transition: "all .6s" }} />
+                <circle cx={200 + r} cy="200" r={on ? 5 : 3} fill={on ? "#fb7185" : "#2dd4bf"} opacity={on ? 1 : 0.5} />
+              </g>
+            );
+          })}
+        </svg>
+        <div className="absolute left-1/2 top-1/2 flex aspect-square w-1/5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-teal-300/50 bg-[#04120f] shadow-[0_0_50px_rgba(45,212,191,.35)]">
+          <ShieldCheck className="h-1/2 w-1/2 text-teal-200" />
         </div>
       </div>
-      {/* Right side: WhatsApp */}
-      <div className="w-full sm:w-1/2 p-5 bg-slate-100 dark:bg-[#060a0d]">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="size-6 rounded-full bg-teal-500/20 dark:bg-teal-400/15 flex items-center justify-center">
-            <Bot className="size-3 text-teal-600 dark:text-teal-300" />
-          </div>
-          <span className="text-xs font-semibold">Ahmed K.</span>
-        </div>
-        <div className="space-y-2.5 text-left text-sm h-[130px]">
-          <div className="bg-slate-200 dark:bg-white/5 rounded-2xl rounded-tl-sm px-3 py-2 w-[85%] text-xs text-slate-700 dark:text-slate-200">
-            Docteur, je ne trouve plus l'ordonnance d'hier. Quels antibios je dois prendre ?
-          </div>
-          {step >= 3 && (
-            <motion.div
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              className="bg-teal-500/20 dark:bg-teal-400/15 border border-teal-500/30 dark:border-teal-400/20 rounded-2xl rounded-tr-sm px-3 py-2 w-[90%] ml-auto text-teal-900 dark:text-teal-100 text-xs origin-top-right"
-            >
-              Bonjour Ahmed ! D'après votre dossier, le Dr vous a prescrit de l'Amoxicilline 1g (2 fois par jour) et du Paracétamol 1000mg. 😊
-            </motion.div>
-          )}
-        </div>
+
+      <div>
+        <ul className="mb-8 flex flex-wrap gap-2">
+          {LAYERS.map((l, k) => (
+            <li key={l.t}>
+              <button onClick={() => setA(k)} aria-pressed={k === a}
+                className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors ${k === a ? "border-teal-300/70 bg-teal-400/10 text-teal-50" : "border-white/10 text-slate-400 hover:text-white"}`}>
+                <l.icon className="size-3.5" /> {l.t}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <AnimatePresence mode="wait">
+          <motion.div key={a} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: 0.35 }} className="min-h-[150px]">
+            <L.icon className="mb-4 size-8 text-teal-300" />
+            <h3 className="mb-3 text-2xl font-semibold">{L.t}</h3>
+            <p className="max-w-md leading-relaxed text-slate-300">{L.d}</p>
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );
 }
 
-/* ────────────────────────────────────────────────────────────────────── */
-/*  Page                                                                  */
-/* ────────────────────────────────────────────────────────────────────── */
+/* ───────────────────────────── Données ───────────────────────────── */
+
+const getMarquee = (t: any) => ["Rendez-vous automatisés", "مرحبا، نحب نحجز موعد", "Isolation par cabinet", "Escalade humaine", "Hello, I'd like to book", "Rappels WhatsApp", "Salem, nheb nekhou rdv", "Agenda validé côté serveur"]; // kept static or we can just translate them later
+
+const getFeatures = (t: any) => [
+  { icon: Bot, t: t('landing.features.items.assistant.title'), d: t('landing.features.items.assistant.desc') },
+  { icon: Languages, t: t('landing.features.items.multilingual.title'), d: t('landing.features.items.multilingual.desc') },
+  { icon: ClipboardList, t: t('landing.features.items.record.title'), d: t('landing.features.items.record.desc') },
+  { icon: RefreshCw, t: t('landing.features.items.modify.title'), d: t('landing.features.items.modify.desc') },
+  { icon: UserPlus, t: t('landing.features.items.family.title'), d: t('landing.features.items.family.desc') },
+  { icon: CalendarDays, t: t('landing.features.items.calendar.title'), d: t('landing.features.items.calendar.desc') },
+  { icon: ListPlus, t: t('landing.features.items.queue.title'), d: t('landing.features.items.queue.desc') },
+  { icon: Bell, t: t('landing.features.items.reminders.title'), d: t('landing.features.items.reminders.desc') },
+  { icon: HeartPulse, t: t('landing.features.items.followup.title'), d: t('landing.features.items.followup.desc') },
+  { icon: Stethoscope, t: t('landing.features.items.specialty.title'), d: t('landing.features.items.specialty.desc') },
+  { icon: TrendingUp, t: t('landing.features.items.analytics.title'), d: t('landing.features.items.analytics.desc') },
+  { icon: Users, t: t('landing.features.items.team.title'), d: t('landing.features.items.team.desc') },
+];
+
+const getPlans = (t: any) => [
+  { name: "Starter", price: "49", tagline: t('landing.plans.starter.tagline'), features: [t('landing.plans.starter.f1'), t('landing.plans.starter.f2'), t('landing.plans.starter.f3'), t('landing.plans.starter.f4')], cta: t('landing.plans.starter.cta'), hi: false },
+  { name: "Pro", price: "99", tagline: t('landing.plans.pro.tagline'), features: [t('landing.plans.pro.f1'), t('landing.plans.pro.f2'), t('landing.plans.pro.f3'), t('landing.plans.pro.f4'), t('landing.plans.pro.f5')], cta: t('landing.plans.pro.cta'), hi: true },
+  { name: "Enterprise", price: "249", tagline: t('landing.plans.enterprise.tagline'), features: [t('landing.plans.enterprise.f1'), t('landing.plans.enterprise.f2'), t('landing.plans.enterprise.f3'), t('landing.plans.enterprise.f4'), t('landing.plans.enterprise.f5')], cta: t('landing.plans.enterprise.cta'), hi: false },
+];
+
+const reveal = { initial: { opacity: 0, y: 24 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true, margin: "-60px" }, transition: { duration: 0.6 } } as const;
+
+function Head({ k, title, sub }: { k: string; title: string; sub?: string }) {
+  return (
+    <div className="mb-14 max-w-3xl" dir="auto">
+      <p className="mb-3 text-sm font-medium text-teal-300">{k}</p>
+      <h2 className="text-3xl font-semibold tracking-tight lg:text-5xl"><Reveal text={title} /></h2>
+      {sub && <p className="mt-5 leading-relaxed text-slate-400">{sub}</p>}
+    </div>
+  );
+}
+
+/* ───────────────────────────── Page ───────────────────────────── */
 
 function LandingPage() {
+
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [subForm, setSubForm] = useState({ name: "", email: "", phone: "", country: "", message: "" });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [defaultCountry, setDefaultCountry] = useState<any>("TN");
+  const { t, i18n } = useTranslation();
+  const { setLanguage } = useAppState();
+  const countryLabels: Record<string, string> = i18n.language.startsWith('fr') ? fr : (i18n.language.startsWith('ar') ? ar : en);
+
+  useEffect(() => {
+    fetch('https://ipapi.co/json/')
+      .then(res => res.json())
+      .then(data => {
+        if (data.country_code) {
+          setDefaultCountry(data.country_code);
+          setSubForm(prev => ({ ...prev, country: data.country_code }));
+          
+          if (!localStorage.getItem("medical_ai_lang")) {
+            const country = data.country_code;
+            const region = data.region || "";
+            const city = data.city || "";
+            
+            const arabicCountries = ["SA", "AE", "QA", "KW", "BH", "OM", "LY", "IQ", "SY", "JO", "LB", "PS", "YE", "EG", "SD"];
+            const frenchCountries = ["TN", "DZ", "MA", "MR", "SN", "CI", "ML", "NE", "BF", "TG", "BJ", "GN", "GA", "CG", "CD", "CM", "CF", "MG", "TD", "BI", "RW", "FR", "BE", "CH", "LU", "MC", "HT"];
+            
+            let matchedLang = "en"; // Default to English for US, UK, AU, and others
+            
+            if (arabicCountries.includes(country)) {
+              matchedLang = "ar";
+            } else if (frenchCountries.includes(country)) {
+              matchedLang = "fr";
+            } else if (country === "CA" && (region.toLowerCase().includes("quebec") || city.toLowerCase().includes("montreal"))) {
+              matchedLang = "fr"; // French specifically for Quebec/Montreal
+            }
+            
+            setLanguage(matchedLang as any);
+          }
+        }
+      })
+      .catch(console.error);
+  }, [i18n]);
+  const countriesList = getCountries().map(c => ({ value: c, label: countryLabels[c] || c })).sort((a,b) => a.label.localeCompare(b.label));
+
+  const [openCountry, setOpenCountry] = useState(false);
+  
+
+
+  const handleSubscriptionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const apiUrl = import.meta.env['VITE_API_URL'] || "http://localhost:5000";
+      const res = await fetch(`${apiUrl}/api/v1/subscriptions/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...subForm, plan: selectedPlan }),
+      });
+      if (res.ok) {
+        toast.success(t("landing.footer.subSuccess"));
+        setSelectedPlan(null);
+        setSubForm({ name: "", email: "", phone: "", country: "", message: "" });
+      } else {
+        toast.error(t("landing.footer.subError"));
+      }
+    } catch (err) {
+      toast.error(t("landing.footer.subError"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const FEATURES = getFeatures(t);
+  const PLANS = getPlans(t);
+  const MARQUEE = getMarquee(t);
   const { scrollYProgress } = useScroll();
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.15], [1, 0]);
-  const heroY = useTransform(scrollYProgress, [0, 0.15], [0, 40]);
-
-  const marqueeWords = [
-    "RDV AUTOMATISÉS",
-    "PATIENTS RÉCUPÉRÉS",
-    "AGENDA OPTIMISÉ",
-    "IA MÉDICALE",
-    "ZÉRO NO-SHOW",
-    "WHATSAPP NATIF",
-  ];
-
-  const bentoFeatures = [
-    {
-      icon: Bot,
-      title: "Assistant WhatsApp IA",
-      desc: "Répond aux patients 24/7, planifie les rendez-vous et gère les urgences automatiquement.",
-      tone: "teal" as const,
-      span: "md:col-span-2",
-    },
-    {
-      icon: Languages,
-      title: "Multilingue Natif",
-      desc: "Comprend le Français, l'Arabe classique, l'Anglais et le dialecte Tunisien (Darija) — sans configuration.",
-      tone: "coral" as const,
-      span: "md:col-span-1",
-    },
-    {
-      icon: ClipboardList,
-      title: "Dossier Patient Intégré",
-      desc: "L'IA lit les fiches médicales et ordonnances pour répondre aux questions des patients avec un contexte parfait.",
-      tone: "coral" as const,
-      span: "md:col-span-1",
-    },
-    {
-      icon: RefreshCw,
-      title: "Modification de RDV",
-      desc: "Le patient veut changer sa date ? Un simple message suffit. L'IA libère l'ancien créneau et en propose de nouveaux en 3 secondes.",
-      tone: "teal" as const,
-      span: "md:col-span-1",
-    },
-    {
-      icon: UserPlus,
-      title: "Réservation Famille",
-      desc: "Un patient peut réserver pour lui et ses proches en un seul échange. L'agenda de chaque praticien se met à jour instantanément.",
-      tone: "teal" as const,
-      span: "md:col-span-1",
-    },
-    {
-      icon: CalendarDays,
-      title: "Agenda Intelligent",
-      desc: "Se synchronise en temps réel. Fini les conflits et les doubles réservations.",
-      tone: "coral" as const,
-      span: "md:col-span-1",
-    },
-    {
-      icon: ListPlus,
-      title: "File d'Attente Automatisée",
-      desc: "Un rendez-vous annulé ? L'IA propose immédiatement la place au prochain patient sur la liste.",
-      tone: "coral" as const,
-      span: "md:col-span-1",
-    },
-    {
-      icon: Bell,
-      title: "Rappels Anti No-Shows",
-      desc: "Rappels automatiques J-1 et H-2 par WhatsApp. Vos patients ne l'oublient plus jamais.",
-      tone: "teal" as const,
-      span: "md:col-span-1",
-    },
-    {
-      icon: ShieldCheck,
-      title: "Isolation des Données",
-      desc: "Chaque cabinet, chaque praticien, ses propres données — cloisonnées par conception.",
-      tone: "coral" as const,
-      span: "md:col-span-3",
-    },
-  ];
-
-  const steps = [
-    {
-      n: "01",
-      title: "Le patient écrit sur WhatsApp",
-      desc: "Aucune app à installer, aucun compte à créer — le canal que vos patients utilisent déjà tous les jours.",
-      icon: MessageCircle,
-    },
-    {
-      n: "02",
-      title: "L'IA comprend et propose",
-      desc: "Elle lit l'intention réelle du message, vérifie votre agenda en temps réel et propose des créneaux valides.",
-      icon: Activity,
-    },
-    {
-      n: "03",
-      title: "Le rendez-vous se confirme seul",
-      desc: "Double-booking impossible, confirmation envoyée automatiquement, votre équipe n'intervient que si besoin.",
-      icon: CalendarDays,
-    },
-  ];
-
-  const plans = [
-    {
-      name: "Starter",
-      price: "49",
-      tagline: "Pour les cabinets individuels qui démarrent.",
-      features: ["150 patients max", "2 utilisateurs", "200 RDV / mois", "Support email"],
-      cta: "Commencer",
-      highlight: false,
-    },
-    {
-      name: "Pro",
-      price: "99",
-      tagline: "L'automatisation IA complète pour accélérer.",
-      features: [
-        "1 000 patients max",
-        "5 utilisateurs",
-        "Assistant IA WhatsApp",
-        "Relances automatiques",
-        "Export & Analytics",
-      ],
-      cta: "Démarrer l'essai",
-      highlight: true,
-    },
-    {
-      name: "Enterprise",
-      price: "249",
-      tagline: "Pour les cliniques à fort volume.",
-      features: [
-        "Patients illimités",
-        "Utilisateurs illimités",
-        "Marque blanche",
-        "Support prioritaire 24/7",
-        "IA multi-praticiens",
-      ],
-      cta: "Contacter les ventes",
-      highlight: false,
-    },
-  ];
+  const heroO = useTransform(scrollYProgress, [0, 0.12], [1, 0]);
+  const heroY = useTransform(scrollYProgress, [0, 0.12], [0, 50]);
+  const reduce = useReducedMotion();
+  const [menu, setMenu] = useState(false);
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 dark:bg-[#05080a] dark:text-slate-50 selection:bg-teal-400/30 overflow-x-hidden font-sans">
-      {/* Grain texture overlay */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 z-[1] opacity-[0.035] mix-blend-overlay"
-        style={{
-          backgroundImage:
-            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
-        }}
-      />
+    <div className="relative min-h-screen overflow-x-hidden bg-[#04070a] text-slate-50 selection:bg-teal-400/30" style={{ fontFamily: "'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif" }}>
+      <style>{`
+        @keyframes mq{to{transform:translateX(-33.333%)}} .mq{animation:mq 36s linear infinite}
+        @media (prefers-reduced-motion:reduce){.mq{animation:none}}`}</style>
 
-      {/* Ambient background glows */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <div className="absolute top-[-15%] left-[-10%] w-[55%] h-[55%] rounded-full bg-teal-400/10 dark:bg-teal-500/10 blur-[130px]" />
-        <div className="absolute bottom-[-15%] right-[-10%] w-[55%] h-[55%] rounded-full bg-rose-400/[0.07] dark:bg-rose-500/[0.07] blur-[130px]" />
+      <ScrollECG />
+
+      {/* Aurore */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 z-0">
+        <motion.div className="absolute -left-[10%] -top-[15%] h-[55%] w-[55%] rounded-full bg-teal-500/15 blur-[80px] md:blur-[130px]" animate={reduce ? { x: 0, y: 0 } : { x: [0, 80, 0], y: [0, 40, 0] }} transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }} />
+        <motion.div className="absolute -bottom-[15%] -right-[10%] h-[55%] w-[55%] rounded-full bg-rose-500/10 blur-[80px] md:blur-[130px]" animate={reduce ? { x: 0, y: 0 } : { x: [0, -80, 0], y: [0, -40, 0] }} transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }} />
+        <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "64px 64px", maskImage: "radial-gradient(ellipse at 50% 20%,#000,transparent 70%)", WebkitMaskImage: "radial-gradient(ellipse at 50% 20%,#000,transparent 70%)" }} />
       </div>
 
       {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-slate-200/60 dark:border-white/5 bg-white/80 dark:bg-black/50 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="relative flex size-8 items-center justify-center rounded-xl bg-gradient-to-br from-teal-400 to-teal-600 shadow-lg shadow-teal-500/20">
-              <Activity className="size-4 text-black" />
-              <span className="absolute -top-1 -right-1 size-2 rounded-full bg-rose-400 animate-pulse" />
-            </div>
-            <span className="font-bold text-lg tracking-tight text-slate-900 dark:text-white">
-              Medical<span className="text-teal-500">AI</span>
-            </span>
+      <nav className="fixed inset-x-0 top-0 z-40 border-b border-white/5 bg-black/60 backdrop-blur-xl" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <img src="/logo-dark.png" alt="Sanovia AI Logo" className="h-8 w-auto" fetchPriority="high" loading="eager" />
           </div>
-          <div className="flex items-center gap-3">
-            <ThemeToggle variant="pill" />
-            <Link to="/login">
-              <Button variant="ghost" className="text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5">
-                Connexion
-              </Button>
+          <div className="hidden gap-8 text-sm text-slate-400 md:flex">
+            <a href="#fonctionnalites" className="transition-colors hover:text-white">{t("nav.features")}</a>
+            <Link to="/assistant-whatsapp" preload="intent" className="transition-colors hover:text-white">
+              {i18n.language.startsWith('ar') ? 'مساعد واتساب' : i18n.language.startsWith('en') ? 'WhatsApp Assistant' : 'Assistant WhatsApp'}
             </Link>
-            <Link to="/login">
-              <Button className="bg-teal-500 text-white hover:bg-teal-600 dark:bg-teal-400 dark:text-black dark:hover:bg-teal-300 rounded-full font-semibold px-6 shadow-[0_0_20px_-5px_rgba(45,212,191,0.5)]">
-                Démarrer <ArrowRight className="ml-2 size-4" />
-              </Button>
-            </Link>
+            <Link to="/securite" preload="intent" className="transition-colors hover:text-white">{t("nav.security")}</Link>
+            <a href="#tarifs" className="transition-colors hover:text-white">{t("nav.pricing")}</a>
+          </div>
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex h-10 items-center gap-2 rounded-full border border-white/10 px-4 text-sm font-medium text-slate-300 transition-colors hover:bg-white/5 hover:text-white">
+                  <Globe className="size-4 shrink-0" />
+                  {i18n.language?.startsWith('en') ? 'English' : i18n.language?.startsWith('ar') ? 'العربية' : 'Français'}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40 border-white/10 bg-black/90 text-slate-200 backdrop-blur-xl">
+                {(
+                  [
+                    ["fr", "Français"],
+                    ["en", "English"],
+                    ["ar", "العربية"],
+                  ] as const
+                ).map(([code, label]) => (
+                  <DropdownMenuItem
+                    key={code}
+                    onClick={() => {
+                      setLanguage(code as any);
+                    }}
+                    className={cn(
+                      "cursor-pointer",
+                      i18n.language?.startsWith(code) && "font-semibold text-teal-400 focus:text-teal-400"
+                    )}
+                  >
+                    {label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Link to="/login" className="hidden sm:block"><Button variant="ghost" className="text-sm text-slate-300 hover:bg-white/5 hover:text-white">{t("nav.login")}</Button></Link>
+            <Link to="/login" className="hidden sm:block"><Button className="rounded-full bg-teal-400 px-6 font-semibold text-black shadow-[0_0_24px_-6px_rgba(45,212,191,.7)] hover:bg-teal-300">{t("nav.start")} <ArrowRight className="ml-2 size-4" /></Button></Link>
+            <button onClick={() => setMenu((v) => !v)} aria-label={menu ? "Fermer le menu" : "Ouvrir le menu"} aria-expanded={menu}
+              className="flex size-10 items-center justify-center rounded-full border border-white/10 text-slate-200 md:hidden">
+              {menu ? <X className="size-5" /> : <Menu className="size-5" />}
+            </button>
           </div>
         </div>
+        <AnimatePresence>
+          {menu && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden border-t border-white/5 md:hidden">
+              <div className="flex flex-col gap-1 px-4 py-3 text-base">
+                {[["#fonctionnalites", "Fonctionnalités"], ["/assistant-whatsapp", "Assistant WhatsApp"], ["/securite", "Sécurité"], ["#tarifs", "Tarifs"]].map(([h, l]) => (
+                  <a key={h} href={h} onClick={() => setMenu(false)} className="rounded-lg px-3 py-3 text-slate-300 hover:bg-white/5">{l}</a>
+                ))}
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:hidden">
+                  <Link to="/login"><Button variant="outline" className="w-full rounded-full border-white/20 bg-transparent text-slate-200">{t("nav.login")}</Button></Link>
+                  <Link to="/login"><Button className="w-full rounded-full bg-teal-400 font-semibold text-black hover:bg-teal-300">Démarrer</Button></Link>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </nav>
 
       <main className="relative z-10">
-        {/* ────────────────────────────── Hero ────────────────────────────── */}
-        <CursorGlow>
-          <section className="relative pt-40 pb-16 lg:pt-56 lg:pb-24 px-6 flex flex-col items-center text-center">
-            <motion.div style={{ opacity: heroOpacity, y: heroY }} className="max-w-5xl mx-auto relative z-10">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-                className="inline-flex items-center gap-2 mb-8"
-              >
-                <VitalBadge label="Système" value="En ligne 24/7" tone="teal" />
-              </motion.div>
-
-              <h1 className="text-6xl lg:text-8xl font-bold tracking-tighter mb-8 leading-[0.95]">
-                {["Votre cabinet", "ne dort", "plus jamais."].map((line, li) => (
-                  <motion.span
-                    key={li}
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, delay: 0.15 + li * 0.12 }}
-                    className={
-                      li === 2
-                        ? "block bg-clip-text text-transparent bg-gradient-to-r from-teal-600 via-teal-500 to-rose-500 dark:from-teal-300 dark:via-teal-400 dark:to-rose-400"
-                        : "block text-slate-900 dark:text-white"
-                    }
-                  >
-                    {line}
-                  </motion.span>
-                ))}
-              </h1>
-
-              <motion.p
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.55 }}
-                className="text-lg lg:text-xl text-slate-600 dark:text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed"
-              >
-                Automatisez vos rendez-vous, réduisez les no-shows et récupérez vos patients perdus avec
-                notre assistant WhatsApp intelligent.
-              </motion.p>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.7 }}
-                className="flex flex-col sm:flex-row items-center justify-center gap-4"
-              >
-                <Link to="/login">
-                  <Button className="h-14 px-8 bg-teal-600 hover:bg-teal-700 dark:bg-teal-400 dark:hover:bg-teal-300 text-white dark:text-black rounded-full text-lg font-semibold shadow-[0_0_40px_-10px_rgba(45,212,191,0.6)] transition-transform hover:scale-105">
-                    Accéder à mon espace
-                  </Button>
-                </Link>
-                <button className="group flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-sm font-medium transition-colors">
-                  Voir la démo en direct
-                  <span className="flex size-8 items-center justify-center rounded-full border border-slate-300 dark:border-white/15 group-hover:border-teal-500/50 dark:group-hover:border-teal-400/50 group-hover:bg-teal-500/10 dark:group-hover:bg-teal-400/10 transition-colors">
-                    <ArrowRight className="size-3.5" />
-                  </span>
-                </button>
-              </motion.div>
+        {/* Hero */}
+        <section className="flex flex-col items-center px-6 pb-12 pt-32 text-center sm:pt-40 lg:pt-52">
+          <motion.div style={{ opacity: heroO, y: heroY }} className="mx-auto max-w-5xl">
+            <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="mb-8 flex flex-wrap justify-center gap-2">
+              <Chip>{t("landing.hero.chip1")}</Chip>
+              <Chip tone="rose">{t("landing.hero.chip2")}</Chip>
             </motion.div>
-
-            {/* Full-width pulse divider */}
-            <div className="w-full max-w-4xl mt-16 h-12 opacity-80">
-              <PulseTrace className="w-full h-full" />
-            </div>
-
-            {/* Floating WhatsApp mockup + vitals readouts */}
-            <motion.div
-              initial={{ opacity: 0, y: 50 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.5 }}
-              className="mt-8 w-full max-w-md mx-auto relative"
-            >
-              <motion.div
-                animate={{ y: [0, -12, 0] }}
-                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-              >
-                <EdgeCard className="shadow-2xl shadow-teal-500/10">
-                  <InteractiveChatMockup />
-                </EdgeCard>
-              </motion.div>
-
-              <motion.div
-                className="absolute -left-4 lg:-left-24 top-6 hidden sm:block"
-                animate={{ y: [0, 10, 0] }}
-                transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-              >
-                <VitalBadge label="No-shows" value="−42%" tone="coral" />
-              </motion.div>
-              <motion.div
-                className="absolute -right-4 lg:-right-28 top-1/2 hidden sm:block"
-                animate={{ y: [0, -10, 0] }}
-                transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-              >
-                <VitalBadge label="Réponse" value="< 3s" tone="teal" />
-              </motion.div>
+            <h1 className="mb-8 text-[clamp(2.5rem,11.5vw,6rem)] font-bold leading-[0.95] tracking-tighter">
+              <span className="block"><Reveal text={t("landing.hero.title1")} /></span>
+              <span className="block"><Reveal text={t("landing.hero.title2")} delay={0.18} /></span>
+              <span className="block"><Reveal text={t("landing.hero.title3")} gradient delay={0.36} /></span>
+            </h1>
+            <motion.p initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="mx-auto mb-10 max-w-2xl text-lg leading-relaxed text-slate-400 lg:text-xl">
+              {t("landing.hero.subtitle")}
+            </motion.p>
+            <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65 }} className="flex flex-col items-center justify-center gap-4 sm:flex-row">
+              <Link to="/login"><Button className="h-14 rounded-full bg-teal-400 px-8 text-lg font-semibold text-black shadow-[0_0_40px_-10px_rgba(45,212,191,.7)] transition-transform hover:scale-105 hover:bg-teal-300">{t("landing.hero.cta1")}</Button></Link>
+              <a href="#securite" className="group flex items-center gap-2 text-sm font-medium text-slate-300 hover:text-white">
+                {t("landing.hero.cta2")}
+                <span className="flex size-8 items-center justify-center rounded-full border border-white/15 transition-colors group-hover:border-teal-400/60 group-hover:bg-teal-400/10"><ArrowRight className="size-3.5" /></span>
+              </a>
             </motion.div>
+          </motion.div>
+          <div className="mt-16 h-12 w-full max-w-4xl opacity-80"><Pulse className="h-full w-full" /></div>
+        </section>
 
-            <motion.div
-              animate={{ y: [0, 8, 0] }}
-              transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
-              className="mt-20 text-slate-600"
-            >
-              <ChevronDown className="size-5" />
-            </motion.div>
-          </section>
-        </CursorGlow>
-
-        {/* ────────────────────────────── Marquee ────────────────────────────── */}
-        <section className="py-8 border-y border-white/5 bg-black/30 overflow-hidden relative">
-          <div className="flex whitespace-nowrap animate-marquee">
-            {[...marqueeWords, ...marqueeWords, ...marqueeWords].map((w, i) => (
-              <span
-                key={i}
-                className="mx-8 font-mono text-xs tracking-[0.3em] text-slate-600 flex items-center gap-8"
-              >
-                {w}
-                <span className="size-1 rounded-full bg-teal-500/40" />
-              </span>
+        {/* Marquee */}
+        <section aria-hidden className="overflow-hidden border-y border-white/5 bg-black/30 py-6">
+          <div className="mq flex whitespace-nowrap">
+            {[...MARQUEE, ...MARQUEE, ...MARQUEE].map((w, i) => (
+              <span key={i} className="mx-8 flex items-center gap-8 text-sm text-slate-500">{w}<span className="size-1 rounded-full bg-teal-500/50" /></span>
             ))}
           </div>
-          <style>{`
-            @keyframes marquee {
-              from { transform: translateX(0); }
-              to { transform: translateX(-33.333%); }
-            }
-            .animate-marquee { animation: marquee 28s linear infinite; }
-          `}</style>
         </section>
 
-        {/* ────────────────────────────── Dossier Patient & IA ────────────────────────────── */}
-        <section className="py-28 px-6 relative z-10">
-          <div className="max-w-6xl mx-auto">
-            <div className="flex flex-col lg:flex-row items-center gap-16">
-              <div className="w-full lg:w-1/3">
-                <span className="font-mono text-xs uppercase tracking-[0.3em] text-teal-600 dark:text-teal-400">Le vrai pouvoir</span>
-                <h2 className="text-3xl lg:text-5xl font-bold mt-4 mb-6 tracking-tight">
-                  L'IA qui connaît <br /> vos patients.
-                </h2>
-                <p className="text-slate-600 dark:text-slate-400 leading-relaxed mb-8">
-                  Ne vous contentez pas d'un simple agenda. Notre IA se connecte à vos dossiers patients.
-                  <br /><br />
-                  Quand vous prescrivez un médicament, l'IA le sait. Quand un patient a oublié sa posologie, elle lui répond instantanément sur WhatsApp, sans que vous n'ayez à lever le petit doigt.
-                </p>
-                <ul className="space-y-4">
-                  {[
-                    "Lit vos prescriptions et ordonnances",
-                    "Répond aux questions médicales basiques",
-                    "Alerte le praticien en cas d'urgence",
-                  ].map((feat, i) => (
-                    <li key={i} className="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
-                      <CheckCircle2 className="size-4 text-teal-600 dark:text-teal-400" />
-                      {feat}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="w-full lg:w-2/3">
-                <EdgeCard from="from-teal-400/40" to="to-teal-900/10" className="shadow-2xl shadow-teal-500/10">
-                  <MedicalRecordMockup />
-                </EdgeCard>
-              </div>
-            </div>
+        {/* Pipeline */}
+        <section className="px-6 py-28">
+          <div className="mx-auto max-w-6xl">
+            <Head k={t("landing.pipeline.kicker")} title={t("landing.pipeline.title")} sub={t("landing.pipeline.subtitle")} />
+            <motion.div {...reveal}><Tilt className="p-4 sm:p-6 lg:p-10"><Pipeline /></Tilt></motion.div>
           </div>
         </section>
 
-        {/* ────────────────────────────── Features (bento) ────────────────────────────── */}
-        <section className="py-28 px-6 relative z-10">
-          <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-16">
-              <span className="font-mono text-xs uppercase tracking-[0.3em] text-teal-600 dark:text-teal-400">Fonctionnalités</span>
-              <h2 className="text-3xl lg:text-5xl font-bold mt-4 mb-4 tracking-tight">
-                L'innovation au service de la santé
-              </h2>
-              <p className="text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
-                Découvrez comment notre technologie transforme la gestion quotidienne de votre clinique.
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-3 md:grid-rows-2 gap-4">
-              {bentoFeatures.map((f, i) => {
-                const isTeal = f.tone === "teal";
-                return (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: i * 0.08 }}
-                    className={f.span}
-                  >
-                    <EdgeCard
-                      from={isTeal ? "from-teal-400/30" : "from-rose-400/25"}
-                      to="to-transparent"
-                      className="h-full group hover:shadow-[0_0_40px_-15px_rgba(45,212,191,0.3)] transition-shadow"
-                    >
-                      <div className="p-8 h-full flex flex-col">
-                        <div
-                          className={`size-14 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform ${isTeal ? "bg-teal-400/10" : "bg-rose-400/10"
-                            }`}
-                        >
-                          <f.icon className={`size-7 ${isTeal ? "text-teal-600 dark:text-teal-300" : "text-rose-500 dark:text-rose-300"}`} />
-                        </div>
-                        <h3 className="text-xl font-bold mb-3">{f.title}</h3>
-                        <p className="text-slate-600 dark:text-slate-400 leading-relaxed">{f.desc}</p>
-                      </div>
-                    </EdgeCard>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
-        {/* ────────────────────────────── Process timeline ────────────────────────────── */}
-        <section className="py-28 px-6 relative z-10 border-t border-slate-200 dark:border-white/5">
-          <div className="max-w-4xl mx-auto">
-            <div className="text-center mb-20">
-              <span className="font-mono text-xs uppercase tracking-[0.3em] text-rose-500 dark:text-rose-400">Comment ça marche</span>
-              <h2 className="text-3xl lg:text-5xl font-bold mt-4 tracking-tight">Trois battements, un rendez-vous.</h2>
-            </div>
-
-            <div className="relative">
-              <div className="absolute left-8 md:left-1/2 top-0 bottom-0 w-px bg-gradient-to-b from-teal-400/40 via-white/10 to-rose-400/40 md:-translate-x-1/2" />
-              <div className="space-y-16">
-                {steps.map((s, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, y: 30 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.5 }}
-                    className={`relative flex items-start gap-6 md:gap-10 ${i % 2 === 1 ? "md:flex-row-reverse md:text-right" : ""
-                      }`}
-                  >
-                    <div className="relative z-10 flex-shrink-0">
-                      <div className="size-16 rounded-full bg-white dark:bg-[#05080a] border-2 border-teal-500/40 dark:border-teal-400/30 flex items-center justify-center shadow-md">
-                        <s.icon className="size-6 text-teal-600 dark:text-teal-300" />
-                      </div>
-                    </div>
-                    <div className="flex-1 pt-2">
-                      <span className="font-mono text-6xl font-bold text-slate-200 dark:text-white/5 block leading-none mb-2">
-                        {s.n}
-                      </span>
-                      <h3 className="text-xl font-bold mb-2 -mt-8 md:mt-0">{s.title}</h3>
-                      <p className="text-slate-600 dark:text-slate-400 leading-relaxed max-w-md">{s.desc}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ────────────────────────────── Pricing ────────────────────────────── */}
-        <section className="py-28 px-6 relative z-10 border-t border-white/5 bg-black/20">
-          <div className="max-w-7xl mx-auto">
-            <div className="text-center mb-16">
-              <span className="font-mono text-xs uppercase tracking-[0.3em] text-teal-600 dark:text-teal-400">Tarifs</span>
-              <h2 className="text-3xl lg:text-5xl font-bold mt-4 mb-4 tracking-tight">
-                Des plans adaptés à votre croissance
-              </h2>
-              <p className="text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
-                Passez à la vitesse supérieure. Un investissement rentabilisé dès le premier patient récupéré.
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-6 items-center max-w-5xl mx-auto">
-              {plans.map((plan, i) => (
-                <motion.div
-                  key={plan.name}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.1 }}
-                  className={plan.highlight ? "md:-translate-y-4" : ""}
-                >
-                  <EdgeCard
-                    from={plan.highlight ? "from-teal-400/60" : "from-white/15"}
-                    to={plan.highlight ? "to-rose-400/20" : "to-transparent"}
-                    className={plan.highlight ? "shadow-2xl shadow-teal-500/10" : ""}
-                  >
-                    <div className="p-8 relative">
-                      {plan.highlight && (
-                        <div className="absolute top-0 inset-x-0 flex justify-center -translate-y-1/2">
-                          <span className="flex items-center gap-1 bg-teal-400 text-black text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">
-                            <Star className="size-3" /> Populaire
-                          </span>
-                        </div>
-                      )}
-                      <h3 className={`text-lg font-medium ${plan.highlight ? "text-teal-600 dark:text-teal-300" : "text-slate-500 dark:text-slate-300"}`}>
-                        {plan.name}
-                      </h3>
-                      <div className="mt-4 flex items-baseline text-5xl font-extrabold font-mono">
-                        {plan.price}
-                        <span className="text-xl text-slate-500 ml-1 font-medium">TND</span>
-                        <span className="text-sm text-slate-500 ml-1 font-normal">/mo</span>
-                      </div>
-                      <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">{plan.tagline}</p>
-                      <ul className="mt-8 space-y-4">
-                        {plan.features.map((feat) => (
-                          <li key={feat} className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-                            <CheckCircle2
-                              className={`size-4 ${plan.highlight ? "text-teal-500 dark:text-teal-400" : "text-slate-400 dark:text-slate-500"}`}
-                            />
-                            {feat}
-                          </li>
-                        ))}
-                      </ul>
-                      {plan.highlight ? (
-                        <Link to="/login">
-                          <Button className="w-full mt-8 rounded-full bg-teal-400 text-black hover:bg-teal-300 font-bold">
-                            {plan.cta}
-                          </Button>
-                        </Link>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          className="w-full mt-8 rounded-full border-slate-200 dark:border-white/20 bg-transparent hover:bg-slate-100 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200"
-                        >
-                          {plan.cta}
-                        </Button>
-                      )}
-                    </div>
-                  </EdgeCard>
+        {/* Fonctionnalités */}
+        <section id="fonctionnalites" className="px-6 py-28">
+          <div className="mx-auto max-w-6xl">
+            <Head k={t("landing.features.kicker")} title={t("landing.features.title")} sub={t("landing.features.subtitle")} />
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {FEATURES.map((f, i) => (
+                <motion.div key={f.t} {...reveal} transition={{ duration: 0.5, delay: (i % 3) * 0.08 }}>
+                  <Tilt className="h-full p-7">
+                    <div className="mb-5 flex size-12 items-center justify-center rounded-2xl bg-teal-400/10"><f.icon className="size-6 text-teal-300" /></div>
+                    <h3 className="mb-2 text-lg font-semibold">{f.t}</h3>
+                    <p className="text-sm leading-relaxed text-slate-400">{f.d}</p>
+                  </Tilt>
                 </motion.div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* ────────────────────────────── CTA banner ────────────────────────────── */}
-        <section className="py-28 px-6 relative z-10 overflow-hidden">
-          <div className="absolute inset-0 flex items-center justify-center opacity-20">
-            <PulseTrace className="w-full max-w-3xl h-24" duration={3} />
-          </div>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="relative max-w-2xl mx-auto text-center"
-          >
-            <div className="inline-flex items-center gap-2 mb-6">
-              <Users className="size-4 text-teal-400" />
-              <span className="font-mono text-xs uppercase tracking-[0.3em] text-slate-400">
-                Rejoignez les cabinets déjà connectés
-              </span>
+        {/* Sécurité */}
+        <section id="securite" className="border-y border-white/5 bg-white/[0.02] px-6 py-28">
+          <div className="mx-auto max-w-6xl">
+            <Head k={t("landing.security.kicker")} title={t("landing.security.title")} sub={t("landing.security.subtitle")} />
+            <SecurityOrbit />
+            
+            <div className="mt-20 grid gap-6 md:grid-cols-2">
+              <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-8 transition-colors hover:bg-white/[0.04]">
+                <div className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-teal-500/10"><MapPin className="size-6 text-teal-400" /></div>
+                <h3 className="mb-3 text-xl font-semibold text-white">{t("landing.compliance.rgpd.title")}</h3>
+                <ul className="space-y-3 text-sm text-slate-400">
+                  <li className="flex gap-3"><CheckCircle2 className="size-5 shrink-0 text-teal-400" /><span><strong>{t("landing.compliance.rgpd.i1.strong")}</strong> {t("landing.compliance.rgpd.i1.text")}</span></li>
+                  <li className="flex gap-3"><CheckCircle2 className="size-5 shrink-0 text-teal-400" /><span><strong>{t("landing.compliance.rgpd.i2.strong")}</strong> {t("landing.compliance.rgpd.i2.text")}</span></li>
+                  <li className="flex gap-3"><CheckCircle2 className="size-5 shrink-0 text-teal-400" /><span><strong>{t("landing.compliance.rgpd.i3.strong")}</strong> {t("landing.compliance.rgpd.i3.text")}</span></li>
+                  <li className="flex gap-3"><CheckCircle2 className="size-5 shrink-0 text-teal-400" /><span><strong>{t("landing.compliance.rgpd.i4.strong")}</strong> {t("landing.compliance.rgpd.i4.text")}</span></li>
+                </ul>
+              </div>
+
+              <div className="rounded-3xl border border-white/5 bg-white/[0.02] p-8 transition-colors hover:bg-white/[0.04]">
+                <div className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-rose-500/10"><Globe className="size-6 text-rose-400" /></div>
+                <h3 className="mb-3 text-xl font-semibold text-white">{t("landing.compliance.na.title")}</h3>
+                <ul className="space-y-3 text-sm text-slate-400">
+                  <li className="flex gap-3"><CheckCircle2 className="size-5 shrink-0 text-teal-400" /><span><strong>{t("landing.compliance.na.i1.strong")}</strong> {t("landing.compliance.na.i1.text")}</span></li>
+                  <li className="flex gap-3"><CheckCircle2 className="size-5 shrink-0 text-teal-400" /><span><strong>{t("landing.compliance.na.i2.strong")}</strong> {t("landing.compliance.na.i2.text")}</span></li>
+                  <li className="flex gap-3"><CheckCircle2 className="size-5 shrink-0 text-teal-400" /><span><strong>{t("landing.compliance.na.i3.strong")}</strong> {t("landing.compliance.na.i3.text")}</span></li>
+                  <li className="flex gap-3"><CheckCircle2 className="size-5 shrink-0 text-teal-400" /><span><strong>{t("landing.compliance.na.i4.strong")}</strong> {t("landing.compliance.na.i4.text")}</span></li>
+                </ul>
+              </div>
             </div>
-            <h2 className="text-4xl lg:text-6xl font-bold tracking-tighter mb-8">
-              Prêt à faire battre<br />votre cabinet plus fort ?
-            </h2>
-            <Link to="/login">
-              <Button className="h-14 px-10 bg-teal-400 hover:bg-teal-300 text-black rounded-full text-lg font-semibold shadow-[0_0_40px_-10px_rgba(45,212,191,0.6)] transition-transform hover:scale-105">
-                Démarrer maintenant <TrendingUp className="ml-2 size-4" />
-              </Button>
-            </Link>
+
+            <p className="mt-14 max-w-3xl text-xs leading-relaxed text-slate-500">
+              {t("landing.security.disclaimer")}
+            </p>
+          </div>
+        </section>
+
+        {/* Dossier patient */}
+        <section className="px-6 py-28">
+          <div className="mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-2">
+            <div>
+              <Head k={t("landing.patient_record.kicker")} title={t("landing.patient_record.title")} sub={t("landing.patient_record.subtitle")} />
+              <ul className="space-y-4 text-sm text-slate-300">
+                {[t("landing.patient_record.bullets.0"), t("landing.patient_record.bullets.1"), t("landing.patient_record.bullets.2"), t("landing.patient_record.bullets.3")].map((bullet) => (
+                  <li key={bullet} className="flex items-center gap-3"><CheckCircle2 className="size-4 shrink-0 text-teal-400" />{bullet}</li>
+                ))}
+              </ul>
+            </div>
+            <motion.div {...reveal}>
+              <Tilt className="p-4 sm:p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <span className="text-sm font-semibold">{t("landing.patient_record.demo.title")}</span>
+                  <span className="text-xs text-slate-500">{t("landing.patient_record.demo.subtitle")}</span>
+                </div>
+                <div className="mb-4 grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl border border-white/10 p-3 sm:p-4"><div className="text-xs text-slate-400">{t("landing.patient_record.demo.bp")}</div><div className="mt-1 text-2xl font-semibold tabular-nums sm:text-3xl">128<span className="text-slate-500">/</span>82</div><div className="text-xs text-amber-300">{t("landing.patient_record.demo.bp_status")}</div></div>
+                  <div className="rounded-2xl border border-white/10 p-3 sm:p-4"><div className="text-xs text-slate-400">{t("landing.patient_record.demo.hr")}</div><div className="mt-1 text-2xl font-semibold tabular-nums sm:text-3xl">72 <span className="text-sm text-slate-500">bpm</span></div><div className="text-xs text-emerald-300">{t("landing.patient_record.demo.hr_status")}</div></div>
+                </div>
+                <div className="h-16"><Pulse className="h-full w-full" /></div>
+              </Tilt>
+            </motion.div>
+          </div>
+        </section>
+
+        {/* Tarifs */}
+        <section id="tarifs" className="border-t border-white/5 bg-black/20 px-6 py-28">
+          <div className="mx-auto max-w-5xl">
+            <Head k={t("nav.pricing")} title={t("landing.pricing.title")} sub={t("landing.pricing.subtitle")} />
+            <div className="grid items-center gap-8 lg:grid-cols-3 lg:gap-6">
+              {PLANS.map((p, i) => (
+                <motion.div key={p.name} {...reveal} transition={{ delay: i * 0.1, duration: 0.5 }} className={`mx-auto w-full max-w-md lg:max-w-none ${p.hi ? "lg:-translate-y-4" : ""}`}>
+                  <Tilt className={`p-6 sm:p-8 ${p.hi ? "border-teal-400/50 shadow-2xl shadow-teal-500/10" : ""}`}>
+                    {p.hi && <span className="absolute -top-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-teal-400 px-3 py-1 text-xs font-bold text-black"><Star className="size-3" /> {t("landing.plans.popular") || "Populaire"}</span>}
+                    <h3 className={`text-lg font-medium ${p.hi ? "text-teal-300" : "text-slate-300"}`}>{p.name}</h3>
+                    <div className="mt-4 flex items-baseline text-5xl font-extrabold tabular-nums">{p.price}<span className="ml-1 text-xl font-medium text-slate-500">TND</span><span className="ml-1 text-sm font-normal text-slate-500">/mois</span></div>
+                    <p className="mt-4 text-sm text-slate-400">{p.tagline}</p>
+                    <ul className="mt-8 space-y-3.5">
+                      {p.features.map((f) => <li key={f} className="flex items-center gap-3 text-sm text-slate-300"><CheckCircle2 className={`size-4 ${p.hi ? "text-teal-400" : "text-slate-500"}`} />{f}</li>)}
+                    </ul>
+                    {p.hi ? (
+                      <Button onClick={() => setSelectedPlan(p.name)} className="mt-8 w-full rounded-full bg-teal-400 font-bold text-black hover:bg-teal-300">{p.cta}</Button>
+                    ) : (
+                      <Button onClick={() => setSelectedPlan(p.name)} variant="outline" className="mt-8 w-full rounded-full border-white/20 bg-transparent text-slate-200 hover:bg-white/10">{p.cta}</Button>
+                    )}
+                  </Tilt>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* CTA final */}
+        <section className="relative overflow-hidden px-6 py-32">
+          <div className="absolute inset-0 flex items-center justify-center opacity-20"><Pulse className="h-24 w-full max-w-3xl" /></div>
+          <motion.div {...reveal} className="relative mx-auto max-w-2xl text-center">
+            <h2 className="mb-8 text-4xl font-bold tracking-tighter lg:text-6xl"><Reveal text={t("landing.cta.title")} /></h2>
+            <Link to="/login"><Button className="h-14 rounded-full bg-teal-400 px-10 text-lg font-semibold text-black shadow-[0_0_40px_-10px_rgba(45,212,191,.7)] transition-transform hover:scale-105 hover:bg-teal-300">{t("nav.start")} {t("landing.cta.now")} <TrendingUp className="ml-2 size-4" /></Button></Link>
           </motion.div>
         </section>
       </main>
 
-      {/* ────────────────────────────── Footer ────────────────────────────── */}
-      <footer className="border-t border-slate-200 dark:border-white/5 relative z-10 bg-slate-50 dark:bg-black/40 pt-16 pb-8 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col md:flex-row justify-between gap-10 pb-10">
+      {/* Footer */}
+      <footer className="relative z-10 border-t border-white/5 bg-black/40 px-6 pb-8 pt-16">
+        <div className="mx-auto max-w-7xl">
+          <div className="flex flex-col justify-between gap-10 pb-10 md:flex-row">
             <div className="max-w-xs">
-              <div className="flex items-center gap-2.5 mb-4">
-                <Activity className="size-5 text-teal-400" />
-                <span className="font-bold text-xl">
-                  Medical<span className="text-teal-400">AI</span>
-                </span>
-              </div>
-              <p className="text-sm text-slate-500 leading-relaxed">
-                L'assistant WhatsApp qui garde votre cabinet actif, même quand vous ne l'êtes pas.
-              </p>
+              <div className="mb-4 flex items-center gap-2.5"><Activity className="size-5 text-teal-400" /><span className="text-xl font-bold">Docteur<span className="text-teal-400">Rendezvous</span></span></div>
+              <p className="text-sm leading-relaxed text-slate-500">{t("landing.footer.desc")}</p>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-10 text-sm">
+            <div className="grid grid-cols-2 gap-10 text-sm sm:grid-cols-4">
+              <div><div className="mb-4 font-medium text-slate-300">{t("landing.footer.product")}</div><ul className="space-y-3 text-slate-500"><li><a href="#fonctionnalites" className="hover:text-white">{t("nav.features")}</a></li><li><a href="#tarifs" className="hover:text-white">{t("nav.pricing")}</a></li><li className="cursor-pointer hover:text-white">{t("landing.footer.demo")}</li></ul></div>
               <div>
-                <div className="font-mono text-[11px] uppercase tracking-widest text-slate-600 mb-4">Produit</div>
-                <ul className="space-y-3 text-slate-500 dark:text-slate-400">
-                  <li className="hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer">Fonctionnalités</li>
-                  <li className="hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer">Tarifs</li>
-                  <li className="hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer">Démo</li>
+                <div className="mb-4 font-medium text-slate-300">
+                  {i18n.language.startsWith('ar') ? 'التخصصات' : i18n.language.startsWith('en') ? 'Specialties' : 'Spécialités'}
+                </div>
+                <ul className="space-y-3 text-slate-500">
+                  <li><a href="/solutions/dentistes" className="hover:text-white">{i18n.language.startsWith('ar') ? 'أطباء الأسنان' : i18n.language.startsWith('en') ? 'Dentists' : 'Dentistes'}</a></li>
+                  <li><a href="/solutions/pediatrie" className="hover:text-white">{i18n.language.startsWith('ar') ? 'طب الأطفال' : i18n.language.startsWith('en') ? 'Pediatrics' : 'Pédiatrie'}</a></li>
+                  <li><a href="/solutions/cardiologie" className="hover:text-white">{i18n.language.startsWith('ar') ? 'أمراض القلب' : i18n.language.startsWith('en') ? 'Cardiology' : 'Cardiologie'}</a></li>
+                  <li><a href="/solutions/esthetique" className="hover:text-white">{i18n.language.startsWith('ar') ? 'الطب التجميلي والجلدية' : i18n.language.startsWith('en') ? 'Aesthetics & Derma' : 'Esthétique & Derma'}</a></li>
+                  <li><a href="/solutions/gynecologie" className="hover:text-white">{i18n.language.startsWith('ar') ? 'أمراض النساء' : i18n.language.startsWith('en') ? 'Gynecology' : 'Gynécologie'}</a></li>
+                  <li><a href="/solutions/ophtalmologie" className="hover:text-white">{i18n.language.startsWith('ar') ? 'طب العيون' : i18n.language.startsWith('en') ? 'Ophthalmology' : 'Ophtalmologie'}</a></li>
                 </ul>
               </div>
-              <div>
-                <div className="font-mono text-[11px] uppercase tracking-widest text-slate-600 mb-4">Société</div>
-                <ul className="space-y-3 text-slate-500 dark:text-slate-400">
-                  <li className="hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer">À propos</li>
-                  <li className="hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer">Contact</li>
-                </ul>
-              </div>
-              <div>
-                <div className="font-mono text-[11px] uppercase tracking-widest text-slate-600 mb-4">Légal</div>
-                <ul className="space-y-3 text-slate-500 dark:text-slate-400">
-                  <li className="hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer">Confidentialité</li>
-                  <li className="hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer">CGU</li>
-                </ul>
-              </div>
+              <div><div className="mb-4 font-medium text-slate-300">{t("landing.footer.company")}</div><ul className="space-y-3 text-slate-500"><li className="cursor-pointer hover:text-white">{t("landing.footer.about")}</li><li className="cursor-pointer hover:text-white">{t("landing.footer.contact")}</li></ul></div>
+              <div><div className="mb-4 font-medium text-slate-300">{t("landing.footer.legal")}</div><ul className="space-y-3 text-slate-500"><li><a href="#securite" className="hover:text-white">{t("landing.footer.security_privacy")}</a></li><li className="cursor-pointer hover:text-white">{t("landing.footer.terms")}</li></ul></div>
             </div>
           </div>
-          <div className="pt-8 border-t border-slate-200 dark:border-white/5 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-slate-500">
-            <span>© 2026 Medical AI. Tous droits réservés. Construit pour les visionnaires.</span>
-            <span className="font-mono text-[11px] uppercase tracking-widest text-teal-500/60">Tunis · 🇹🇳</span>
+          <div className="flex flex-col items-center justify-between gap-4 border-t border-white/5 pt-8 text-center text-sm text-slate-500 md:flex-row">
+            <span>{t("landing.footer.copyright")}</span>
+            <span>{t("landing.footer.country") || "Tunisie 🇹🇳"}</span>
           </div>
         </div>
       </footer>
+      {/* Subscription Modal */}
+        <Dialog open={!!selectedPlan} onOpenChange={(o) => !o && setSelectedPlan(null)}>
+          <DialogContent className="sm:max-w-md bg-slate-900 border-white/10 text-white">
+            <DialogHeader>
+              <DialogTitle>{t("landing.footer.subModalTitle")}</DialogTitle>
+              <DialogDescription className="text-slate-400">
+                {t("landing.footer.subModalDesc")} <strong className="text-white">{selectedPlan}</strong>{t("landing.footer.subModalDesc2")}
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubscriptionSubmit} className="space-y-4 mt-4 text-slate-200">
+              <div className="space-y-2">
+                <Label htmlFor="name">{t("landing.footer.subName")}</Label>
+                <Input id="name" required value={subForm.name} onChange={(e) => setSubForm({...subForm, name: e.target.value})} placeholder={t("landing.footer.subNamePlaceholder")} className="bg-slate-800 border-white/10" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">{t("landing.footer.subEmail")}</Label>
+                  <Input id="email" type="email" required value={subForm.email} onChange={(e) => setSubForm({...subForm, email: e.target.value})} placeholder={t("landing.footer.subEmailPlaceholder")} className="bg-slate-800 border-white/10" />
+                </div>
+                <div className="space-y-2 flex flex-col">
+                  <Label htmlFor="phone">{t("landing.footer.subPhone")}</Label>
+                  <PhoneInput
+                    id="phone"
+                    value={subForm.phone}
+                    onChange={(val) => setSubForm({...subForm, phone: val || ""})}
+                    placeholder={t("landing.footer.subPhonePlaceholder")}
+                    defaultCountry={defaultCountry}
+                    className="flex h-10 w-full rounded-md border border-white/10 bg-slate-800 px-3 py-2 text-sm text-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2 flex flex-col">
+                <Label>{t("landing.footer.subCountry")}</Label>
+                <Popover open={openCountry} onOpenChange={setOpenCountry}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openCountry}
+                      className="w-full justify-between bg-slate-800 border-white/10 text-white font-normal hover:bg-slate-700 hover:text-white"
+                    >
+                      {subForm.country
+                        ? countriesList.find((c: any) => c.value === subForm.country)?.label
+                        : t("landing.footer.subCountrySearch")}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0 bg-slate-800 border-white/10">
+                    <Command className="bg-slate-800 text-white">
+                      <CommandInput placeholder={t("landing.footer.subCountrySearch")} className="text-white placeholder:text-slate-400 border-none outline-none" />
+                      <CommandList>
+                        <CommandEmpty>{t("landing.footer.subCountryEmpty")}</CommandEmpty>
+                        <CommandGroup>
+                          {countriesList.map((country: any) => (
+                            <CommandItem
+                              key={country.value}
+                              value={country.label}
+                              onSelect={() => {
+                                setSubForm({...subForm, country: country.value});
+                                setOpenCountry(false);
+                              }}
+                              className="text-white hover:bg-slate-700 cursor-pointer"
+                            >
+                              <CheckCircle2
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  subForm.country === country.value ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {country.label}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="message">{t("landing.footer.subMessage")}</Label>
+                <Textarea id="message" value={subForm.message} onChange={(e) => setSubForm({...subForm, message: e.target.value})} placeholder={t("landing.footer.subMessagePlaceholder")} rows={3} className="bg-slate-800 border-white/10" />
+              </div>
+              <div className="pt-2 flex justify-end gap-3">
+                <Button type="button" variant="outline" onClick={() => setSelectedPlan(null)} className="border-white/10 hover:bg-slate-800 text-slate-300">{t("landing.footer.subCancel")}</Button>
+                <Button type="submit" disabled={isSubmitting} className="bg-teal-500 text-black hover:bg-teal-400">{isSubmitting ? t("landing.footer.subSubmitting") : t("landing.footer.subSubmit")}</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
     </div>
   );
 }

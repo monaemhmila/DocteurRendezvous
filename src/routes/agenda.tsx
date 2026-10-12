@@ -46,7 +46,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { addDays, formatLongDate, formatShortDate, money, startOfWeek, parseISO } from "@/lib/format";
+import { addDays, formatLongDate, formatShortDate, money, startOfWeek, parseISO, relativeDay } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useAppState } from "@/hooks/use-app-state";
 import { useAdmin } from "@/contexts/admin-context";
@@ -64,7 +64,7 @@ const TODAY = isoDay(0);
 export const Route = createFileRoute("/agenda")({
   head: () => ({
     meta: [
-      { title: "Agenda Médical Pro — Dental AI" },
+      { title: "Agenda Médical Pro — Sanovia AI" },
       {
         name: "description",
         content:
@@ -104,7 +104,7 @@ function AgendaPage() {
   const [isEditingPrice, setIsEditingPrice] = useState<boolean>(false);
   const [editedPriceVal, setEditedPriceVal] = useState<string>("");
 
-  const { t } = useAppState();
+  const { t, language } = useAppState();
   const { isAdminUnlocked } = useAdmin();
 
   const queryWindow = useMemo(() => {
@@ -451,7 +451,7 @@ function AgendaPage() {
                   <div className="grid gap-4 py-4">
                     {/* Patient selector */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold">Patient</Label>
+                      <Label className="text-xs font-semibold">{language === "ar" ? "المريض" : language === "en" ? "Patient" : "Patient"}</Label>
                       <select
                         name="patientId"
                         className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
@@ -480,7 +480,7 @@ function AgendaPage() {
 
                     {/* Treatment quick picker from catalog */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold">Prestation prédéfinie (catalogue)</Label>
+                      <Label className="text-xs font-semibold">{language === "ar" ? "الخدمة المحددة مسبقًا (الكتالوج)" : language === "en" ? "Predefined service (catalog)" : "Prestation prédéfinie (catalogue)"}</Label>
                       <select
                         className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         value={newApptTreatment}
@@ -494,7 +494,7 @@ function AgendaPage() {
                           }
                         }}
                       >
-                        <option value="">Sélectionner dans le catalogue de soins...</option>
+                        <option value="">{language === "ar" ? "اختر من دليل الخدمات..." : language === "en" ? "Select from the catalog..." : "Sélectionner dans le catalogue de soins..."}</option>
                         {servicesCatalog.map((s) => (
                           <option key={s.name} value={s.name}>
                             {s.name} — {s.durationMin} min {isAdminUnlocked && s.price ? `(${s.price} DT)` : ""}
@@ -737,12 +737,18 @@ function AgendaPage() {
               <span className="text-base font-bold text-foreground">{formatLongDate(day)}</span>
               {day === TODAY && (
                 <Badge variant="default" className="bg-emerald-600 text-white text-[10px] uppercase font-bold tracking-wider">
-                  Aujourd'hui
+                  {relativeDay(day)}
                 </Badge>
               )}
             </div>
             <span className="text-xs text-muted-foreground font-medium">
-              {dayAppointments.length} consultation{dayAppointments.length > 1 ? "s" : ""} programmée{dayAppointments.length > 1 ? "s" : ""}
+              {dayAppointments.length} {
+                language === "ar" 
+                  ? (dayAppointments.length === 1 ? "موعد مبرمج" : "مواعيد مبرمجة")
+                  : language === "en"
+                    ? (dayAppointments.length === 1 ? "scheduled appointment" : "scheduled appointments")
+                    : (dayAppointments.length === 1 ? "consultation programmée" : "consultations programmées")
+              }
             </span>
           </div>
 
@@ -871,15 +877,13 @@ function AgendaPage() {
                   }}
                 >
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    {parseISO(d).toLocaleDateString("fr-FR", { weekday: "short" })}
+                    {parseISO(d).toLocaleDateString(language === "ar" ? "ar-EG" : language === "en" ? "en-US" : "fr-FR", { weekday: "short" })}
                   </p>
                   <p className="text-lg font-bold text-foreground mt-0.5">
                     {parseISO(d).getDate()}
                   </p>
                   <div className="flex flex-col items-center gap-0.5 mt-0.5">
-                    <span className="text-[10px] text-muted-foreground font-medium">
-                      {list.length} RDV
-                    </span>
+                    <span className="text-[10px] text-muted-foreground font-medium">{list.length} {language === "ar" ? (list.length === 1 ? "موعد" : "مواعيد") : language === "en" ? (list.length === 1 ? "Appt" : "Appts") : "RDV"}</span>
                     {list.length > 0 && isAdminUnlocked && (
                       <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200/50">
                         {money(list.filter(a => a.status !== 'cancelled' && a.status !== 'no_show').reduce((sum, a) => sum + getAppointmentValue(a), 0))}
@@ -895,7 +899,7 @@ function AgendaPage() {
                       className="h-full flex flex-col items-center justify-center p-4 text-center cursor-pointer hover:bg-muted/30 rounded-lg group"
                       onClick={() => handleOpenQuickBook(d, "09:00")}
                     >
-                      <span className="text-xs text-muted-foreground">Journée libre</span>
+                      <span className="text-xs text-muted-foreground">{language === "ar" ? "يوم حر" : language === "en" ? "Free day" : "Journée libre"}</span>
                       <Plus className="size-4 text-emerald-600 mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                   ) : (
@@ -938,8 +942,7 @@ function AgendaPage() {
                     className="w-full text-xs h-7 text-muted-foreground hover:text-emerald-700"
                     onClick={() => handleOpenQuickBook(d, "09:00")}
                   >
-                    <Plus className="size-3 mr-1" /> Ajouter
-                  </Button>
+                    <Plus className="size-3 mr-1" />{language === "ar" ? "إضافة" : language === "en" ? "Add" : "Ajouter"}</Button>
                 </div>
               </div>
             );
@@ -1043,14 +1046,14 @@ function AgendaPage() {
                 <thead className="bg-muted/40 border-b text-muted-foreground font-semibold">
                   <tr>
                     <th className="p-3">Date & Heure</th>
-                    <th className="p-3">Patient</th>
-                    <th className="p-3">Téléphone</th>
-                    <th className="p-3">Prestation / Soin</th>
-                    <th className="p-3">Durée</th>
+                    <th className="p-3">{language === "ar" ? "المريض" : "Patient"}</th>
+                    <th className="p-3">{language === "ar" ? "الهاتف" : language === "en" ? "Phone" : "Téléphone"}</th>
+                    <th className="p-3">{language === "ar" ? "الخدمة / العلاج" : language === "en" ? "Treatment" : "Prestation / Soin"}</th>
+                    <th className="p-3">{language === "ar" ? "المدة" : language === "en" ? "Duration" : "Durée"}</th>
                     {isAdminUnlocked && <th className="p-3">Tarif</th>}
-                    <th className="p-3">Source</th>
-                    <th className="p-3">Statut</th>
-                    <th className="p-3 text-right">Actions</th>
+                    <th className="p-3">{language === "ar" ? "المصدر" : "Source"}</th>
+                    <th className="p-3">{language === "ar" ? "الحالة" : "Status"}</th>
+                    <th className="p-3 text-right">{language === "ar" ? "إجراءات" : "Actions"}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
@@ -1275,12 +1278,14 @@ function AgendaPage() {
                         type="button"
                         size="sm"
                         variant={selected.status === "completed" ? "default" : "outline"}
-                        disabled={isUpdating || selected.status === "completed"}
+                        disabled={isUpdating || selected.status === "completed" || selected.status === "scheduled"}
+                        title={selected.status === "scheduled" ? "Confirmez d'abord le rendez-vous avant de le marquer Terminé" : undefined}
                         onClick={() => updateStatus.mutate({ id: (selected._id || selected.id)!, status: "completed" })}
                         className="w-full text-xs h-8"
                       >
                         <Check className="mr-1.5 size-3.5 text-blue-500" /> Terminé
                       </Button>
+
 
                       <Button
                         type="button"

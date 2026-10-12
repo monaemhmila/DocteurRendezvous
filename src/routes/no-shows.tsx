@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useAppState } from "@/hooks/use-app-state";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { PageHeader, SectionCard, PatientAvatar, EmptyState } from "@/components/shared/ui-kit";
@@ -24,7 +25,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/no-shows")({
   head: () => ({
     meta: [
-      { title: "Gestion des No-Shows & Lapins — Dental AI" },
+      { title: "Gestion des No-Shows & Lapins — Sanovia AI" },
       {
         name: "description",
         content: "Détection, relance automatique WhatsApp et récupération des patients absents.",
@@ -51,17 +52,18 @@ interface INoShowAppointment {
   recoveryId?: string;
 }
 
-const recoveryStatusConfig: Record<string, { label: string; color: string }> = {
-  identified: { label: "⏳ En attente de relance", color: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800" },
-  contacted: { label: "💬 Relancé par WhatsApp", color: "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800" },
-  responded: { label: "📩 A répondu à l'IA", color: "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800" },
-  booked: { label: "🎉 RDV Replanifié", color: "bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800" },
-  visited: { label: "🏥 Venu au cabinet", color: "bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800" },
-  no_response: { label: "❌ Sans réponse", color: "bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800" },
-  dismissed: { label: "🚫 Écarté", color: "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800" },
-};
+const getRecoveryStatusConfig = (t: any): Record<string, { label: string; color: string }> => ({
+  identified: { label: t.noShowsPage.statusIdentified, color: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800" },
+  contacted: { label: t.noShowsPage.statusContacted, color: "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800" },
+  responded: { label: t.noShowsPage.statusResponded, color: "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800" },
+  booked: { label: t.noShowsPage.statusBooked, color: "bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800" },
+  visited: { label: t.noShowsPage.statusVisited, color: "bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800" },
+  no_response: { label: t.noShowsPage.statusNoResponse, color: "bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800" },
+  dismissed: { label: t.noShowsPage.statusDismissed, color: "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800" },
+});
 
 function NoShowsPage() {
+  const { t } = useAppState();
   const [filterPeriod, setFilterPeriod] = useState<"all" | "today" | "week" | "pending_recovery">("all");
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
@@ -113,18 +115,18 @@ function NoShowsPage() {
   return (
     <div className="mx-auto max-w-[1400px] space-y-6 pb-20">
       <PageHeader
-        title="Gestion des No-Shows & Lapins 🐰"
-        subtitle="Suivi des absences, relances automatiques par WhatsApp et réattribution intelligente des créneaux."
+        title={t.pages.noShowsTitle}
+        subtitle={t.pages.noShowsSubtitle}
         actions={
           <div className="flex items-center gap-2">
             <Button asChild variant="outline" size="sm" className="gap-1.5 text-xs">
               <Link to="/agenda">
-                <Calendar className="size-3.5" /> Voir l'Agenda
+                <Calendar className="size-3.5" /> {t.noShowsPage.viewAgenda}
               </Link>
             </Button>
             <Button asChild size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
               <Link to="/recovery">
-                <Sparkles className="size-3.5" /> Module Recovery IA
+                <Sparkles className="size-3.5" /> {t.noShowsPage.recoveryModule}
               </Link>
             </Button>
           </div>
@@ -135,7 +137,7 @@ function NoShowsPage() {
       <div className="grid gap-4 sm:grid-cols-4">
         <div className="panel p-5">
           <div className="flex items-center justify-between">
-            <p className="text-[13px] font-medium text-muted-foreground">Absences aujourd'hui</p>
+            <p className="text-[13px] font-medium text-muted-foreground">{t.noShowsPage.absencesToday}</p>
             <span className="p-2 rounded-lg bg-rose-50 text-rose-600 dark:bg-rose-950/30">
               <AlertCircle className="size-4" />
             </span>
@@ -145,12 +147,12 @@ function NoShowsPage() {
           ) : (
             <p className="mt-2 text-3xl font-bold text-foreground">{dashboardStats?.noShowsToday ?? 0}</p>
           )}
-          <p className="mt-1 text-xs text-muted-foreground">Rendez-vous manqués ce jour</p>
+          <p className="mt-1 text-xs text-muted-foreground">{t.noShowsPage.missedToday}</p>
         </div>
 
         <div className="panel p-5">
           <div className="flex items-center justify-between">
-            <p className="text-[13px] font-medium text-muted-foreground">Cette semaine</p>
+            <p className="text-[13px] font-medium text-muted-foreground">{t.noShowsPage.thisWeek}</p>
             <span className="p-2 rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-950/30">
               <Calendar className="size-4" />
             </span>
@@ -160,23 +162,23 @@ function NoShowsPage() {
           ) : (
             <p className="mt-2 text-3xl font-bold text-foreground">{dashboardStats?.noShowsThisWeek ?? 0}</p>
           )}
-          <p className="mt-1 text-xs text-muted-foreground">Cumul sur la semaine en cours</p>
+          <p className="mt-1 text-xs text-muted-foreground">{t.noShowsPage.weekTotal}</p>
         </div>
 
         <div className="panel p-5">
           <div className="flex items-center justify-between">
-            <p className="text-[13px] font-medium text-muted-foreground">Patients Récupérés</p>
+            <p className="text-[13px] font-medium text-muted-foreground">{t.noShowsPage.recoveredPatients}</p>
             <span className="p-2 rounded-lg bg-purple-50 text-purple-600 dark:bg-purple-950/30">
               <CheckCircle2 className="size-4" />
             </span>
           </div>
           <p className="mt-2 text-3xl font-bold text-purple-600 dark:text-purple-400">{recoveredCount}</p>
-          <p className="mt-1 text-xs text-muted-foreground">RDV repris après relance WhatsApp</p>
+          <p className="mt-1 text-xs text-muted-foreground">{t.noShowsPage.recoveredDesc}</p>
         </div>
 
         <div className="panel p-5">
           <div className="flex items-center justify-between">
-            <p className="text-[13px] font-medium text-muted-foreground">Taux de récupération</p>
+            <p className="text-[13px] font-medium text-muted-foreground">{t.noShowsPage.recoveryRate}</p>
             <span className="p-2 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30">
               <RotateCcw className="size-4" />
             </span>
@@ -188,14 +190,14 @@ function NoShowsPage() {
               {analyticsStats?.noShowRecoveryRate != null ? Math.round(analyticsStats.noShowRecoveryRate) : 0}%
             </p>
           )}
-          <p className="mt-1 text-xs text-muted-foreground">Des No-Shows convertis en nouveau RDV</p>
+          <p className="mt-1 text-xs text-muted-foreground">{t.noShowsPage.recoveryRateDesc}</p>
         </div>
       </div>
 
       {/* Main Table Section */}
       <SectionCard
-        title="Historique des rendez-vous manqués"
-        description="Chaque absence déclenche automatiquement une opportunité de reconquête par WhatsApp."
+        title={t.noShowsPage.historyTitle}
+        description={t.noShowsPage.historyDesc}
         bodyClassName="p-0"
       >
         {/* Filter Bar */}
@@ -203,9 +205,9 @@ function NoShowsPage() {
           {/* Quick tabs */}
           <div className="flex items-center gap-1.5 overflow-x-auto">
             {[
-              { key: "all", label: `Tous (${noShows.length})` },
-              { key: "today", label: "Aujourd'hui" },
-              { key: "pending_recovery", label: "En cours de relance" },
+              { key: "all", label: `${t.noShowsPage.filterAll} (${noShows.length})` },
+              { key: "today", label: t.noShowsPage.filterToday },
+              { key: "pending_recovery", label: t.noShowsPage.filterPending },
             ].map((tab) => (
               <button
                 key={tab.key}
@@ -227,7 +229,7 @@ function NoShowsPage() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Rechercher patient, soin..."
+              placeholder={t.noShowsPage.searchPlaceholder}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="h-8 w-full pl-8 pr-3 rounded-lg border border-input bg-background text-xs shadow-2xs focus:outline-none"
@@ -245,20 +247,20 @@ function NoShowsPage() {
 
         {isLoadingNoShows ? (
           <div className="p-12 text-center text-muted-foreground animate-pulse">
-            Chargement des rendez-vous manqués...
+            {t.noShowsPage.loading}
           </div>
         ) : isErrorNoShows ? (
           <div className="p-12 text-center text-destructive">
-            Une erreur est survenue lors du chargement des données.
+            {t.noShowsPage.errorLoading}
           </div>
         ) : filteredNoShows.length === 0 ? (
           <EmptyState
             icon={Calendar}
-            title="Aucune absence trouvée"
+            title={t.noShowsPage.noAbsencesTitle}
             description={
               search || filterPeriod !== "all"
-                ? "Aucun résultat ne correspond à vos filtres de recherche."
-                : "Félicitations ! Aucun rendez-vous manqué n'a été enregistré."
+                ? t.noShowsPage.noAbsencesDescFilter
+                : t.noShowsPage.noAbsencesDesc
             }
           />
         ) : (
@@ -266,17 +268,18 @@ function NoShowsPage() {
             <table className="w-full text-left text-xs whitespace-nowrap">
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
-                  <th className="px-5 py-3">Patient</th>
-                  <th className="px-5 py-3">Date du RDV</th>
-                  <th className="px-5 py-3">Créneau</th>
-                  <th className="px-5 py-3">Motif de consultation</th>
-                  <th className="px-5 py-3 text-center">Score d'absences</th>
-                  <th className="px-5 py-3">Statut Relance WhatsApp</th>
-                  <th className="px-5 py-3 text-right">Actions rapides</th>
+                  <th className="px-5 py-3">{t.noShowsPage.colPatient}</th>
+                  <th className="px-5 py-3">{t.noShowsPage.colDate}</th>
+                  <th className="px-5 py-3">{t.noShowsPage.colSlot}</th>
+                  <th className="px-5 py-3">{t.noShowsPage.colTreatment}</th>
+                  <th className="px-5 py-3 text-center">{t.noShowsPage.colScore}</th>
+                  <th className="px-5 py-3">{t.noShowsPage.colStatus}</th>
+                  <th className="px-5 py-3 text-right">{t.noShowsPage.colActions}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {filteredNoShows.map((n) => {
+                  const recoveryStatusConfig = getRecoveryStatusConfig(t);
                   const statusKey = (n.recoveryStatus && recoveryStatusConfig[n.recoveryStatus]) ? n.recoveryStatus : "identified";
                   const statusConf = recoveryStatusConfig[statusKey] ?? recoveryStatusConfig["identified"]!;
                   const cleanPhone = (n.phone || "").replace(/[^0-9]/g, "");
@@ -335,11 +338,11 @@ function NoShowsPage() {
                       <td className="px-5 py-3.5 text-center">
                         {n.noShowCount > 1 ? (
                           <span className="inline-flex items-center gap-1 font-bold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 px-2.5 py-0.5 rounded-full text-[11px]">
-                            <AlertCircle className="size-3" /> {n.noShowCount} lapins
+                            <AlertCircle className="size-3" /> {t.noShowsPage.multipleAbsences.replace("{count}", n.noShowCount.toString())}
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-muted-foreground bg-muted/60 px-2.5 py-0.5 rounded-full text-[11px]">
-                            1ère absence
+                            {t.noShowsPage.firstAbsence}
                           </span>
                         )}
                       </td>
@@ -368,7 +371,7 @@ function NoShowsPage() {
                           )}
                           <Button asChild variant="outline" size="sm" className="h-7 text-xs gap-1">
                             <Link to="/agenda">
-                              <CalendarPlus className="size-3" /> Replanifier
+                              <CalendarPlus className="size-3" /> {t.noShowsPage.btnReschedule}
                             </Link>
                           </Button>
                           <Button asChild variant="ghost" size="sm" className="h-7 text-xs">

@@ -19,6 +19,7 @@ import {
   Users,
   Wallet,
   ListTodo,
+  ShieldCheck,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -44,7 +45,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { user, hasPermission } = useAuth();
-  const { t } = useAppState();
+  const { t, language } = useAppState();
   const { setShowPinModal, lockAdmin, isAdminUnlocked } = useAdmin();
   const [clickCount, setClickCount] = useState(0);
 
@@ -93,8 +94,9 @@ export function AppSidebar() {
           hasPermission("settings") && { title: t.nav.team, url: "/settings/team", icon: UserCog },
           hasPermission("aiConfig") && { title: t.nav.aiSettings, url: "/settings/ai", icon: Cog },
           hasPermission("settings") && { title: t.nav.communication, url: "/settings/communication", icon: Activity },
-          isAdminUnlocked && { title: "Catalogue (Soins)", url: "/settings/catalog", icon: ListTodo },
+          isAdminUnlocked && { title: t.nav.catalog || (language === "ar" ? "الكتالوج" : language === "en" ? "Catalog" : "Catalogue"), url: "/settings/catalog", icon: ListTodo },
           hasPermission("settings") && { title: t.nav.integrations, url: "/settings/integrations", icon: Plug },
+          isAdminUnlocked && { title: t.nav.securityAndAudit || (language === "ar" ? "الأمان والسجلات" : language === "en" ? "Security & Audit" : "Sécurité & Audit"), url: "/settings/audit", icon: ShieldCheck },
         ].filter(Boolean) as any[],
       },
     ].filter(g => g.items.length > 0),
@@ -141,7 +143,7 @@ export function AppSidebar() {
           </span>
           {!collapsed && (
             <span className="flex flex-col leading-none">
-              <span className="text-sm font-semibold text-sidebar-foreground">Medical AI</span>
+              <span className="text-sm font-semibold text-sidebar-foreground">Sanovia AI</span>
               <span className="mt-0.5 text-[11px] text-muted-foreground">
                 {t.nav.patientRecovery}
               </span>

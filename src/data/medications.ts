@@ -1,20 +1,45 @@
 /**
- * Référentiel médicaments — DocteurRendezvous
+ * Référentiel médicaments — Sanovia AI
  *
- * IMPORTANT : ce fichier est un catalogue de recherche et de préparation de prescription.
- * Il ne remplace ni le RCP, ni la notice, ni la base réglementaire tunisienne à jour,
- * ni la validation du médecin/pharmacien. Les posologies ne sont volontairement PAS
- * automatisées : elles dépendent de l'indication, l'âge, le poids, la fonction rénale/
- * hépatique, la grossesse, les allergies, les interactions et la présentation exacte.
+ * ⚠️  AVERTISSEMENT MÉDICAL ET RÉGLEMENTAIRE ⚠️
  *
- * Pour la production : synchroniser régulièrement les produits, AMM, prix, disponibilités,
- * présentations et restrictions avec une source réglementaire contractuelle et versionnée.
- * Sources de référence à contrôler avant publication :
- * - OMS — Dénominations communes internationales (DCI/INN)
- * - Autorité tunisienne compétente / registre tunisien des médicaments
- * - RCP et notices validés du produit réellement commercialisé
- * - EMA/FDA ou autorité locale pour les références internationales
+ * Ce fichier est un OUTIL D'AIDE À LA PRESCRIPTION réservé aux professionnels
+ * de santé habilités. Il ne constitue pas une source réglementaire exhaustive
+ * et ne remplace en aucun cas :
+ *   - Le Résumé des Caractéristiques du Produit (RCP) officiel
+ *   - La notice approuvée par l'autorité compétente
+ *   - La base de données tunisienne de référence (registre national des médicaments)
+ *   - La validation clinique du médecin prescripteur et du pharmacien
+ *
+ * Les posologies ne sont JAMAIS automatiquement appliquées. Elles dépendent
+ * systématiquement de l'indication, de l'âge, du poids, de la fonction rénale
+ * et hépatique, de la grossesse/allaitement, des allergies, des interactions
+ * médicamenteuses et de la présentation exacte du produit commercialisé.
+ *
+ * MAINTENANCE OBLIGATOIRE AVANT TOUTE MISE EN PRODUCTION :
+ *   - Mettre à jour CATALOG_LAST_VERIFIED ci-dessous
+ *   - Vérifier produits, AMM, prix, disponibilités et restrictions avec :
+ *       • Registre tunisien des médicaments (autorité compétente tunisienne)
+ *       • OMS — Dénominations Communes Internationales (DCI/INN)
+ *       • RCP et notices validés du produit réellement commercialisé
+ *       • EMA / FDA ou autorité locale pour les références internationales
+ *   - Incrémenter CATALOG_VERSION après chaque révision validée
+ *
+ * @version voir CATALOG_VERSION ci-dessous
  */
+
+/**
+ * Version du catalogue — incrémenter à chaque révision validée par un professionnel.
+ * Format : YYYY-MM-DD.<révision>
+ */
+export const CATALOG_VERSION = "2024-01-01.1" as const;
+
+/**
+ * Date de dernière vérification réglementaire.
+ * ⚠️  Si cette date dépasse 6 mois, le catalogue doit être revalidé avant usage clinique.
+ */
+export const CATALOG_LAST_VERIFIED = "2024-01-01" as const;
+
 
 export type MedicationAvailability = "tunisia" | "international" | "both" | "unknown";
 export type MedicationForm =

@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import { Sparkles, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { useAppState } from "@/hooks/use-app-state";
 import type {
   AppointmentStatus,
   PatientStatus,
@@ -139,15 +140,15 @@ export function Dot({ className }: { className?: string }) {
   return <span className={cn("size-1.5 rounded-full bg-current", className)} />;
 }
 
-export const appointmentStatusLabel: Record<AppointmentStatus, string> = {
-  confirmed: "Confirmé",
-  scheduled: "À confirmer",
-  cancelled: "Annulé",
-  completed: "Terminé",
-  no_show: "Absence",
-};
-
 export function AppointmentStatusBadge({ status }: { status: AppointmentStatus }) {
+  const { t, language } = useAppState();
+  const appointmentStatusLabel: Record<AppointmentStatus, string> = {
+    confirmed: language === "ar" ? "مؤكد" : language === "en" ? "Confirmed" : "CONFIRMÉ",
+    scheduled: language === "ar" ? "مبرمج" : language === "en" ? "Scheduled" : "PRÉVU",
+    cancelled: language === "ar" ? "ملغى" : language === "en" ? "Cancelled" : "ANNULÉ",
+    completed: language === "ar" ? "مكتمل" : language === "en" ? "Completed" : "EFFECTUÉ",
+    no_show: language === "ar" ? "غياب" : language === "en" ? "No-Show" : "NO-SHOW",
+  };
   const styles: Record<AppointmentStatus, string> = {
     confirmed: "bg-success-soft text-success",
     scheduled: "bg-warning-soft text-warning",
@@ -163,13 +164,13 @@ export function AppointmentStatusBadge({ status }: { status: AppointmentStatus }
   );
 }
 
-export const patientStatusLabel: Record<PatientStatus, string> = {
-  active: "Actif",
-  inactive: "Inactif",
-  at_risk: "À risque",
-};
-
 export function PatientStatusBadge({ status }: { status: PatientStatus }) {
+  const { t, language } = useAppState();
+  const patientStatusLabel: Record<PatientStatus, string> = {
+    active: language === "ar" ? "نشط" : language === "en" ? "Active" : "Actif",
+    inactive: language === "ar" ? "غير نشط" : language === "en" ? "Inactive" : "Inactif",
+    at_risk: language === "ar" ? "في خطر" : language === "en" ? "At Risk" : "À Risque",
+  };
   const styles: Record<PatientStatus, string> = {
     active: "bg-success-soft text-success",
     inactive: "bg-muted text-muted-foreground",
@@ -183,13 +184,13 @@ export function PatientStatusBadge({ status }: { status: PatientStatus }) {
   );
 }
 
-export const priorityLabel: Record<Priority, string> = {
-  high: "Haute",
-  medium: "Moyenne",
-  low: "Basse",
-};
-
 export function PriorityBadge({ priority }: { priority: Priority }) {
+  const { t } = useAppState();
+  const priorityLabel: Record<Priority, string> = {
+    high: t.followupsPage.priorityHigh,
+    medium: t.followupsPage.priorityMedium,
+    low: t.followupsPage.priorityLow,
+  };
   const styles: Record<Priority, string> = {
     high: "bg-destructive-soft text-destructive",
     medium: "bg-warning-soft text-warning",
@@ -198,17 +199,17 @@ export function PriorityBadge({ priority }: { priority: Priority }) {
   return <span className={cn(pill, styles[priority])}>{priorityLabel[priority]}</span>;
 }
 
-export const reasonLabel: Record<RecoveryReason, string> = {
-  inactive: "Patient inactif",
-  treatment_interrupted: "Traitement interrompu",
-  quote_pending: "Devis en attente",
-  no_show: "Rendez-vous manqué",
-  checkup_overdue: "Contrôle dépassé",
-  cancellation: "Annulation",
-  follow_up: "Suivi",
-};
-
 export function ReasonBadge({ reason }: { reason: RecoveryReason }) {
+  const { t } = useAppState();
+  const reasonLabel: Record<RecoveryReason, string> = {
+    inactive: t.uiKit.reasonInactive,
+    treatment_interrupted: t.uiKit.reasonInterrupted,
+    quote_pending: t.uiKit.reasonQuote,
+    no_show: t.uiKit.reasonNoShow,
+    checkup_overdue: t.uiKit.reasonOverdue,
+    cancellation: t.uiKit.reasonCancel,
+    follow_up: t.uiKit.reasonFollowUp,
+  };
   return (
     <span className={cn(pill, "bg-secondary text-secondary-foreground")}>
       {reasonLabel[reason]}
@@ -223,6 +224,7 @@ export function AIStatusBadge({
   active: boolean;
   label?: string;
 }) {
+  const { t } = useAppState();
   return (
     <span
       className={cn(
@@ -231,7 +233,7 @@ export function AIStatusBadge({
       )}
     >
       <Sparkles className="size-3" />
-      {label ?? (active ? "IA active" : "IA en pause")}
+      {label ?? (active ? t.uiKit.aiActive : t.uiKit.aiPaused)}
     </span>
   );
 }

@@ -653,11 +653,11 @@ function SuperAdminDashboard() {
                 <DialogTitle className="text-center text-xl">Cabinet cree !</DialogTitle>
                 <DialogDescription className="text-center">Transmettez ces identifiants au medecin :</DialogDescription>
               </DialogHeader>
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 space-y-3">
+              <div className="rounded-xl border border-emerald-200 dark:border-emerald-900/30 bg-emerald-50/70 dark:bg-emerald-900/10 p-4 space-y-3">
                 {[{label:"Email",value:createdCredentials.email},{label:"Mot de passe",value:createdCredentials.password}].map(({label,value}) => (
                   <div key={label}>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 mb-1">{label}</p>
-                    <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-white px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-400 mb-1">{label}</p>
+                    <div className="flex items-center justify-between rounded-lg border border-emerald-200 dark:border-emerald-900/50 bg-card px-3 py-2">
                       <span className="font-mono text-sm select-all">{value}</span>
                       <Button size="sm" variant="ghost" className="size-7 p-0 text-emerald-700" onClick={() => copyToClipboard(value, label)}><Copy className="size-3.5" /></Button>
                     </div>

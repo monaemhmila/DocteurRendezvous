@@ -14,7 +14,9 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-  headers.set("Content-Type", "application/json");
+  if (!(options.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
 
   let response = await fetch(`${API_URL}${endpoint}`, {
     ...options,
@@ -73,7 +75,23 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
 
 export const api = {
   get: (endpoint: string) => fetchWithAuth(endpoint),
-  post: (endpoint: string, body: any) => fetchWithAuth(endpoint, { method: "POST", body: JSON.stringify(body) }),
+  download: async (endpoint: string) => {
+    let token = null;
+    try { token = localStorage.getItem("auth_token"); } catch {}
+    const headers = new Headers();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const response = await fetch(`${API_URL}${endpoint}`, { headers });
+    if (!response.ok) throw new Error("Download failed");
+    return response.blob();
+  },
+  post: (endpoint: string, body: any, customOptions?: RequestInit) => {
+    const isFormData = body instanceof FormData;
+    return fetchWithAuth(endpoint, { 
+      method: "POST", 
+      body: isFormData ? body : JSON.stringify(body),
+      ...customOptions
+    });
+  },
   put: (endpoint: string, body: any) => fetchWithAuth(endpoint, { method: "PUT", body: JSON.stringify(body) }),
   patch: (endpoint: string, body: any) => fetchWithAuth(endpoint, { method: "PATCH", body: JSON.stringify(body) }),
   delete: (endpoint: string) => fetchWithAuth(endpoint, { method: "DELETE" }),

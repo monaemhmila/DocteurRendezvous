@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useAppState } from "@/hooks/use-app-state";
 import { api } from "@/lib/api";
 import { IFollowUpTask, IWaitlistEntry, IPatient } from "@/types/api";
 import { PageHeader, SectionCard, PatientAvatar, PriorityBadge } from "@/components/shared/ui-kit";
@@ -67,6 +68,7 @@ const DAYS_OF_WEEK = [
 ];
 
 function WaitlistPage() {
+  const { t } = useAppState();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
@@ -180,8 +182,8 @@ function WaitlistPage() {
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 pb-20">
       <PageHeader
-        title="Liste d'attente & Remplissage intelligent"
-        subtitle="Dès qu'un créneau se libère ou est annulé, l'IA identifie automatiquement le meilleur patient en attente et lui propose le créneau par WhatsApp."
+        title={t.pages.waitlistTitle}
+        subtitle={t.pages.waitlistSubtitle}
         actions={
           <div className="flex items-center gap-2.5">
             <Button
@@ -192,7 +194,7 @@ function WaitlistPage() {
               className="gap-2 text-xs border-dashed border-primary/40 text-primary hover:bg-primary/5"
             >
               <Zap className="size-3.5" />
-              Simuler un désistement
+              {t.waitlistPage.simulateCancel}
             </Button>
             <AddWaitlistDialog />
           </div>
@@ -204,65 +206,65 @@ function WaitlistPage() {
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Patients en attente
+              {t.waitlistPage.waitingPatients}
             </span>
             <User className="size-4 text-primary" />
           </div>
           <p className="mt-2 text-2xl font-bold text-foreground">{waitlistMeta?.total ?? waitlist.length}</p>
-          <p className="text-xs text-muted-foreground">Demandes actives</p>
+          <p className="text-xs text-muted-foreground">{t.waitlistPage.activeRequests}</p>
         </div>
 
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-amber-600">
-              Priorité Haute / Urgences
+              {t.waitlistPage.highPriority}
             </span>
             <AlertCircle className="size-4 text-amber-600" />
           </div>
           <p className="mt-2 text-2xl font-bold text-amber-600">{highPriorityCount}</p>
-          <p className="text-xs text-muted-foreground">À contacter en priorité</p>
+          <p className="text-xs text-muted-foreground">{t.waitlistPage.contactFirst}</p>
         </div>
 
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-primary">
-              Patients Ciblés (IA)
+              {t.waitlistPage.aiTargeted}
             </span>
             <Sparkles className="size-4 text-primary" />
           </div>
           <p className="mt-2 text-2xl font-bold text-primary">{patientOfferGroups.length}</p>
-          <p className="text-xs text-muted-foreground">{openOffers.length} créneau(x) libre(s) à attribuer</p>
+          <p className="text-xs text-muted-foreground">{t.waitlistPage.freeSlots.replace("{count}", openOffers.length.toString())}</p>
         </div>
 
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600">
-              Remplissage IA
+              {t.waitlistPage.aiFill}
             </span>
             <CheckCircle2 className="size-4 text-emerald-600" />
           </div>
           <p className="mt-2 text-2xl font-bold text-emerald-600">100%</p>
-          <p className="text-xs text-muted-foreground">Algorithme automatisé 24/7</p>
+          <p className="text-xs text-muted-foreground">{t.waitlistPage.algo247}</p>
         </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* ── Left Panel - Active Offers (Grouped by Patient) ─── */}
         <SectionCard
-          title="Offres de créneau libéré (IA)"
-          description={`${patientOfferGroups.length} patient(s) ciblé(s) · ${openOffers.length} créneau(x) disponible(s)`}
+          title={t.waitlistPage.freedSlotsAI}
+          description={t.waitlistPage.targetedPatientsCount.replace('{patients}', String(patientOfferGroups.length)).replace('{slots}', String(openOffers.length))}
         >
           <div className="space-y-4">
             {isLoadingTasks ? (
-              <p className="text-sm text-muted-foreground text-center py-8">Chargement des offres...</p>
+              <p className="text-sm text-muted-foreground text-center py-8">{t.waitlistPage.loadingOffers}</p>
             ) : patientOfferGroups.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
                 <div className="size-12 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center mb-3">
                   <CheckCircle2 className="size-6" />
                 </div>
-                <p className="text-sm font-semibold text-foreground">Tous vos créneaux sont occupés</p>
+                <p className="text-sm font-semibold text-foreground">{t.waitlistPage.allSlotsFull}</p>
                 <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                  Dès qu'un patient annule son rendez-vous, l'IA proposera instantanément la place libérée au patient en attente le plus pertinent.
+                  {t.waitlistPage.aiSuggests}
                 </p>
                 <Button
                   variant="outline"
@@ -271,7 +273,7 @@ function WaitlistPage() {
                   className="mt-4 gap-1.5 text-xs"
                 >
                   <Zap className="size-3.5 text-primary" />
-                  Tester avec une annulation
+                  {t.waitlistPage.testWithCancel}
                 </Button>
               </div>
             ) : (
@@ -284,15 +286,15 @@ function WaitlistPage() {
 
         {/* ── Right Panel - Waiting Patients ─────────────────── */}
         <SectionCard
-          title="Patients inscrits en liste d'attente"
-          description={`${filteredWaitlist.length} patient(s) en attente d'un créneau`}
+          title={t.waitlistPage.patientsInWaitlist}
+          description={`${t.waitlistPage.waitingForSlot.replace("{count}", filteredWaitlist.length.toString())}`}
         >
           {/* Search & Filter bar inside the card */}
           <div className="flex flex-col sm:flex-row items-center gap-2 mb-4">
             <div className="relative w-full flex-1">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
               <Input
-                placeholder="Filtrer par nom, soin, téléphone..."
+                placeholder={t.waitlistPage.filterPlaceholder}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-8 h-8 text-xs bg-card"
@@ -311,7 +313,7 @@ function WaitlistPage() {
                       : "bg-muted text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {p === "all" ? "Tous" : p === "high" ? "Haute" : p === "medium" ? "Moy." : "Basse"}
+                  {p === "all" ? t.waitlistPage.filterAll : p === "high" ? t.waitlistPage.filterHigh : p === "medium" ? t.waitlistPage.filterMedium : t.waitlistPage.filterLow}
                 </button>
               ))}
             </div>
@@ -319,10 +321,10 @@ function WaitlistPage() {
 
           <div className="divide-y divide-border -mx-5 -mb-5">
             {isLoadingWaitlist ? (
-              <p className="text-sm text-muted-foreground text-center py-8">Chargement...</p>
+              <p className="text-sm text-muted-foreground text-center py-8">{t.waitlistPage.loading}</p>
             ) : filteredWaitlist.length === 0 ? (
               <div className="text-center py-10 text-muted-foreground">
-                <p className="text-sm">Aucun patient correspondant.</p>
+                <p className="text-sm">{t.waitlistPage.noMatchingPatients}</p>
               </div>
             ) : (
               filteredWaitlist.map((entry, idx) => {
@@ -358,7 +360,7 @@ function WaitlistPage() {
                               target="_blank"
                               rel="noreferrer"
                               className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50"
-                              title="Contacter par WhatsApp"
+                              title={t.waitlistPage.contactWhatsApp}
                             >
                               <MessageSquare className="size-3.5" />
                             </a>
@@ -368,7 +370,7 @@ function WaitlistPage() {
                             size="icon"
                             className="size-7 text-muted-foreground hover:text-destructive"
                             onClick={() => deleteEntryMutation.mutate(entry._id)}
-                            title="Retirer de la liste d'attente"
+                            title={t.waitlistPage.removeFromWaitlist}
                           >
                             <Trash2 className="size-3.5" />
                           </Button>
@@ -422,8 +424,7 @@ function WaitlistPage() {
 
           {waitlistMeta && waitlistMeta.totalPages > 1 && (
             <div className="flex justify-between items-center py-4 border-t border-border mt-4">
-              <span className="text-sm text-muted-foreground">
-                Page {waitlistMeta.page} sur {waitlistMeta.totalPages} — {waitlistMeta.total} patient{waitlistMeta.total > 1 ? "s" : ""}
+              <span className="text-sm text-muted-foreground">{t.waitlistPage.page} {waitlistMeta.page} {t.waitlistPage.of} {waitlistMeta.totalPages} — {waitlistMeta.total} patient{waitlistMeta.total > 1 ? "s" : ""}
               </span>
               <div className="flex gap-2">
                 <Button
@@ -432,15 +433,13 @@ function WaitlistPage() {
                   disabled={waitlistMeta.page <= 1}
                   onClick={() => setWaitlistPage(p => Math.max(1, p - 1))}
                 >
-                  <ChevronLeft className="size-4 mr-1" /> Précédent
-                </Button>
+                  <ChevronLeft className="size-4 mr-1" />{t.waitlistPage.prev}</Button>
                 <Button
                   variant="outline"
                   size="sm"
                   disabled={waitlistMeta.page >= waitlistMeta.totalPages}
                   onClick={() => setWaitlistPage(p => p + 1)}
-                >
-                  Suivant <ChevronRight className="size-4 ml-1" />
+                >{t.waitlistPage.next}<ChevronRight className="size-4 ml-1" />
                 </Button>
               </div>
             </div>
@@ -460,6 +459,7 @@ function PatientGroupOfferCard({
     tasks: Array<{ task: IFollowUpTask; sourceAppt: any }>;
   };
 }) {
+  const { t } = useAppState();
   const queryClient = useQueryClient();
   const [selectedIndex, setSelectedIndex] = useState(0);
 
@@ -539,7 +539,7 @@ function PatientGroupOfferCard({
                 {patientName}
               </Link>
               <span className="inline-flex items-center gap-1 rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                <Sparkles className="size-3" /> IA Recommandé
+                <Sparkles className="size-3" /> {t.waitlistPage.aiRecommended}
               </span>
             </div>
 
@@ -561,11 +561,10 @@ function PatientGroupOfferCard({
         <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
           <span className="flex items-center gap-1">
             <Clock className="size-3 text-primary" />
-            {group.tasks.length > 1 ? "Choisir le créneau à attribuer :" : "Créneau disponible :"}
+            {group.tasks.length > 1 ? t.waitlistPage.chooseSlot : t.waitlistPage.availableSlot}
           </span>
           {group.tasks.length > 1 && (
-            <span className="text-[11px] text-primary font-semibold">
-              Option {safeIndex + 1} sur {group.tasks.length}
+            <span className="text-[11px] text-primary font-semibold">{t.waitlistPage.option} {safeIndex + 1} ${t.waitlistPage.of} {group.tasks.length}
             </span>
           )}
         </div>
@@ -627,7 +626,7 @@ function PatientGroupOfferCard({
           className="gap-1.5 text-xs shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
         >
           <CheckCircle2 className="size-3.5" />
-          {fulfillMutation.isPending ? "Réservation..." : "Valider ce créneau"}
+          {fulfillMutation.isPending ? t.waitlistPage.booking : t.waitlistPage.validateSlot}
         </Button>
       </div>
     </div>
@@ -635,6 +634,7 @@ function PatientGroupOfferCard({
 }
 
 function JournalDialog({ task }: { task: IFollowUpTask }) {
+  const { t } = useAppState();
   const [open, setOpen] = useState(false);
   const [channel, setChannel] = useState("phone");
   const [outcome, setOutcome] = useState("spoken_agreed");
@@ -672,19 +672,19 @@ function JournalDialog({ task }: { task: IFollowUpTask }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" variant="secondary" className="text-xs">
-          Journal d'échange
+          {t.waitlistPage.contactLogBtn}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Journal de contact (Liste d'attente)</DialogTitle>
+          <DialogTitle>{t.waitlistPage.contactLogTitle}</DialogTitle>
           <DialogDescription>
-            Enregistrez le retour du patient suite à la proposition du créneau.
+            {t.waitlistPage.contactLogDesc}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           <div className="space-y-2">
-            <label className="text-xs font-semibold">Canal de contact</label>
+            <label className="text-xs font-semibold">{t.waitlistPage.contactChannel}</label>
             <div className="grid grid-cols-5 gap-2">
               {[
                 { id: "phone", icon: Phone, label: "Appel" },
@@ -712,7 +712,7 @@ function JournalDialog({ task }: { task: IFollowUpTask }) {
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-semibold">Résultat de l'échange</label>
+            <label className="text-xs font-semibold">{t.waitlistPage.exchangeOutcome}</label>
             <select
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
               value={outcome}
@@ -727,20 +727,18 @@ function JournalDialog({ task }: { task: IFollowUpTask }) {
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-semibold">Notes / Détails (optionnel)</label>
+            <label className="text-xs font-semibold">{t.waitlistPage.notesOptional}</label>
             <Textarea
-              placeholder="Ex: Le patient confirme être disponible et viendra 10 min en avance..."
+              placeholder={t.waitlistPage.notesPlaceholder}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Annuler
-            </Button>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>{t.waitlistPage.cancel}</Button>
             <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "Enregistrement..." : "Enregistrer la tentative"}
+              {mutation.isPending ? t.waitlistPage.saving : t.waitlistPage.saveAttempt}
             </Button>
           </DialogFooter>
         </form>
@@ -752,6 +750,7 @@ function JournalDialog({ task }: { task: IFollowUpTask }) {
 function AddWaitlistDialog() {
   const [open, setOpen] = useState(false);
   const [patientId, setPatientId] = useState("");
+  const { t, language } = useAppState();
   const [treatment, setTreatment] = useState("");
   const [priority, setPriority] = useState("medium");
   const [notes, setNotes] = useState("");
@@ -807,26 +806,26 @@ function AddWaitlistDialog() {
       <DialogTrigger asChild>
         <Button className="gap-2 shadow-sm">
           <UserPlus className="size-4" />
-          Ajouter à la liste
+          {language === "ar" ? "إضافة للقائمة" : language === "en" ? "Add to list" : "Ajouter à la liste"}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Ajouter un patient en liste d'attente</DialogTitle>
+          <DialogTitle>{language === "ar" ? "إضافة مريض إلى قائمة الانتظار" : language === "en" ? "Add patient to waitlist" : "Ajouter un patient en liste d'attente"}</DialogTitle>
           <DialogDescription>
-            Inscrivez un patient pour lui attribuer automatiquement les prochains désistements.
+            {language === "ar" ? "تسجيل مريض لتعيين الإلغاءات القادمة له تلقائيًا." : language === "en" ? "Register a patient to automatically assign them the next cancellations." : "Inscrivez un patient pour lui attribuer automatiquement les prochains désistements."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold">Patient *</label>
+            <label className="text-xs font-semibold">{language === "ar" ? "المريض *" : language === "en" ? "Patient *" : "Patient *"}</label>
             <select
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
               value={patientId}
               onChange={(e) => setPatientId(e.target.value)}
               required
             >
-              <option value="">Sélectionner un patient...</option>
+              <option value="">{language === "ar" ? "اختر مريضًا..." : language === "en" ? "Select a patient..." : "Sélectionner un patient..."}</option>
               {patients.map((p, idx) => (
                 <option key={p._id || (p as any).id || `pat-opt-${idx}`} value={p._id || (p as any).id}>
                   {p.firstName} {p.lastName} ({p.phone || "Sans tél"})
@@ -836,12 +835,12 @@ function AddWaitlistDialog() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold">Soin / Traitement souhaité *</label>
+            <label className="text-xs font-semibold">{language === "ar" ? "العلاج المطلوب *" : language === "en" ? "Desired Treatment *" : "Soin / Traitement souhaité *"}</label>
             <Input
               required
               value={treatment}
               onChange={(e) => setTreatment(e.target.value)}
-              placeholder="Ex: Détartrage, Urgence, Implant..."
+              placeholder={language === "ar" ? "مثال: تنظيف، طوارئ، زرع..." : language === "en" ? "Ex: Cleaning, Emergency, Implant..." : "Ex: Détartrage, Urgence, Implant..."}
             />
             {/* Quick chips */}
             <div className="flex flex-wrap gap-1 mt-1">
@@ -859,20 +858,20 @@ function AddWaitlistDialog() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold">Degré de priorité</label>
+            <label className="text-xs font-semibold">{language === "ar" ? "مستوى الأولوية" : language === "en" ? "Priority Level" : "Degré de priorité"}</label>
             <select
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
             >
-              <option value="high">Haute (Urgence / Patient très réactif)</option>
-              <option value="medium">Moyenne (Standard)</option>
-              <option value="low">Basse (Non urgent / Simple contrôle)</option>
+              <option value="high">{t.waitlistPage.filterHigh} (Urgence / Patient très réactif)</option>
+              <option value="medium">{language === "ar" ? "متوسط (عادي)" : language === "en" ? "Medium (Standard)" : "Moyenne (Standard)"}</option>
+              <option value="low">{t.waitlistPage.filterLow} (Non urgent / Simple contrôle)</option>
             </select>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold">Jours de préférence (optionnel)</label>
+            <label className="text-xs font-semibold">{language === "ar" ? "أيام التفضيل (اختياري)" : language === "en" ? "Preferred Days (optional)" : "Jours de préférence (optionnel)"}</label>
             <div className="flex flex-wrap gap-1.5">
               {DAYS_OF_WEEK.map((d) => {
                 const isSelected = selectedDays.includes(d.id);
@@ -896,20 +895,18 @@ function AddWaitlistDialog() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold">Notes / Remarques (optionnel)</label>
+            <label className="text-xs font-semibold">{language === "ar" ? "ملاحظات (اختياري)" : language === "en" ? "Notes / Remarks (optional)" : "Notes / Remarques (optionnel)"}</label>
             <Textarea
-              placeholder="Ex: Disponible à partir de 14h, habite près du cabinet..."
+              placeholder={language === "ar" ? "مثال: متاح بعد الساعة 2 ظهرًا، يسكن بالقرب من العيادة..." : language === "en" ? "Ex: Available after 2 PM, lives near clinic..." : "Ex: Disponible à partir de 14h, habite près du cabinet..."}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Annuler
-            </Button>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>{t.waitlistPage.cancel}</Button>
             <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "Ajout..." : "Inscrire sur la liste"}
+              {mutation.isPending ? (language === "ar" ? "جاري الإضافة..." : language === "en" ? "Adding..." : "Ajout...") : (language === "ar" ? "إضافة للقائمة" : language === "en" ? "Add to list" : "Inscrire sur la liste")}
             </Button>
           </DialogFooter>
         </form>

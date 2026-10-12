@@ -1,9 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { ArrowRight, Building2, Lock, Sparkles, AlertCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Building2, Lock, Sparkles, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/auth-context";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/login")({
@@ -17,6 +18,8 @@ function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
+  const isRTL = i18n.language.startsWith('ar');
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -30,26 +33,21 @@ function LoginPage() {
         navigate({ to: "/" });
       }
     } catch (err: any) {
-      setError(err.message || "Erreur de connexion.");
+      setError(err.message || t("login.error_default"));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen bg-surface">
+    <div className="flex min-h-screen bg-surface" dir={isRTL ? "rtl" : "ltr"}>
       {/* ── Left panel – Form ───────────────────────────── */}
       <div className="relative z-10 flex w-full flex-col justify-between border-r border-border bg-background px-8 shadow-2xl md:w-[480px] lg:px-12">
         {/* Header logo */}
         <div className="pt-10">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-              <Sparkles className="size-5" />
-            </div>
-            <div className="leading-none">
-              <p className="text-base font-bold tracking-tight text-foreground">Medical AI</p>
-              <p className="text-[11px] text-muted-foreground">Plateforme médicale intelligente</p>
-            </div>
+            <img src="/logo-light.png" alt="Sanovia AI Logo" className="h-10 w-auto dark:hidden" />
+            <img src="/logo-dark.png" alt="Sanovia AI Logo" className="h-10 w-auto hidden dark:block" />
           </div>
         </div>
 
@@ -57,16 +55,16 @@ function LoginPage() {
         <div className="mx-auto w-full max-w-sm py-12">
           <div className="mb-8">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              Bon retour parmi nous
+              {t("login.title")}
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Connectez-vous à l'espace de votre cabinet médical ou clinique.
+              {t("login.subtitle")}
             </p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Adresse email</label>
+              <label className="text-sm font-medium text-foreground">{t("login.email")}</label>
               <Input
                 type="email"
                 placeholder="dr.dupont@cabinet.com"
@@ -80,9 +78,9 @@ function LoginPage() {
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-foreground">Mot de passe</label>
+                <label className="text-sm font-medium text-foreground">{t("login.password")}</label>
                 <a href="#" className="text-xs font-medium text-primary hover:underline">
-                  Mot de passe oublié ?
+                  {t("login.forgot_password")}
                 </a>
               </div>
               <Input
@@ -110,12 +108,12 @@ function LoginPage() {
               {loading ? (
                 <span className="flex items-center gap-2">
                   <span className="size-4 animate-spin rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground" />
-                  Connexion…
+                  {t("login.loading")}
                 </span>
               ) : (
                 <>
-                  Se connecter
-                  <ArrowRight className="ml-2 size-4" />
+                  {t("login.submit")}
+                  {!isRTL ? <ArrowRight className="ml-2 size-4" /> : <ArrowLeft className="mr-2 size-4" />}
                 </>
               )}
             </Button>
@@ -147,9 +145,15 @@ function LoginPage() {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-center gap-2 pb-8 text-xs text-muted-foreground">
-          <Lock className="size-3" />
-          Données médicales sécurisées de bout en bout
+        <div className="flex items-center justify-between pb-8 text-xs text-muted-foreground">
+          <Button variant="ghost" className="h-8 text-xs text-muted-foreground" onClick={() => navigate({ to: "/landing" })}>
+            {!isRTL ? <ArrowLeft className="mr-2 size-3" /> : <ArrowRight className="ml-2 size-3" />}
+            {t("login.back")}
+          </Button>
+          <div className="flex items-center gap-2">
+            <Lock className="size-3" />
+            Données médicales sécurisées
+          </div>
         </div>
       </div>
 

@@ -30,7 +30,7 @@ export function SuperAdminShell({ children }: { children: ReactNode }) {
           <Sparkles className="size-4" />
         </div>
         <div className="leading-none">
-          <p className="text-sm font-bold text-foreground">Medical AI</p>
+          <p className="text-sm font-bold text-foreground">Sanovia AI</p>
           <p className="text-[11px] font-medium text-primary">Super Admin</p>
         </div>
       </div>
@@ -84,7 +84,7 @@ export function SuperAdminShell({ children }: { children: ReactNode }) {
           <div className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Sparkles className="size-3.5" />
           </div>
-          <p className="text-sm font-bold text-foreground">Medical AI</p>
+          <p className="text-sm font-bold text-foreground">Sanovia AI</p>
         </div>
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>

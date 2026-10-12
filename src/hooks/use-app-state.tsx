@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Language, translations, Translations } from "@/lib/i18n";
+import i18n from "@/i18n";
 
 export type Notification = {
   id: string;
@@ -7,6 +8,7 @@ export type Notification = {
   detail?: string;
   time: string;
   read: boolean;
+
   link?: string;
 };
 
@@ -43,6 +45,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") {
       try {
         localStorage.setItem("medical_ai_lang", l);
+        i18n.changeLanguage(l);
       } catch {
         // Ignore in SSR
       }
@@ -52,11 +55,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof document !== "undefined") {
       document.documentElement.lang = language;
-      if (language === "ar") {
-        document.documentElement.dir = "rtl";
-      } else {
-        document.documentElement.dir = "ltr";
-      }
+      document.documentElement.dir = "ltr";
     }
   }, [language]);
 

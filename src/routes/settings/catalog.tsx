@@ -1,3 +1,4 @@
+import { useAppState } from "@/hooks/use-app-state";
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -30,6 +31,7 @@ export interface IClinicService {
 }
 
 function CatalogSettings() {
+  const { t } = useAppState();
   const { isAdminUnlocked } = useAdmin();
   const queryClient = useQueryClient();
 
@@ -46,7 +48,7 @@ function CatalogSettings() {
       return await api.put("/tenants/settings", { services });
     },
     onSuccess: () => {
-      toast.success("Catalogue mis à jour avec succès !");
+      toast.success(t.catalogPage.toastSuccess);
       queryClient.invalidateQueries({ queryKey: ["currentTenant"] });
       setIsModalOpen(false);
       setEditingService(null);
@@ -100,7 +102,7 @@ function CatalogSettings() {
   };
 
   const handleDeleteService = (id: string) => {
-    if (window.confirm("Êtes-vous sûr de vouloir supprimer ce soin du catalogue ?")) {
+    if (window.confirm(t.catalogPage.confirmDelete)) {
       const newServices = services.filter(s => s.id !== id);
       updateSettingsMutation.mutate(newServices);
     }
@@ -117,28 +119,28 @@ function CatalogSettings() {
   return (
     <div className="mx-auto max-w-[900px] space-y-6">
       <div className="flex items-center justify-between">
-        <PageHeader title="Catalogue des Soins" />
+        <PageHeader title={t.catalogPage.title} />
         <Button onClick={() => handleOpenModal()} className="gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md hover:shadow-lg">
-          <Plus className="size-4" /> Ajouter un soin
+          <Plus className="size-4" /> {t.catalogPage.btnAdd}
         </Button>
       </div>
 
       <SectionCard 
-        title="Soins & Consultations" 
-        description="Ces soins seront proposés par l'Assistant IA lors des prises de rendez-vous."
+        title={t.catalogPage.sectionTitle} 
+        description={t.catalogPage.sectionDesc}
       >
         {services.length === 0 ? (
           <EmptyState
             icon={ListTodo}
-            title="Aucun soin défini"
-            description="Ajoutez des soins pour que l'IA puisse proposer des créneaux de durée appropriée."
+            title={t.catalogPage.noServicesTitle}
+            description={t.catalogPage.noServicesDesc}
           />
         ) : (
           <div className="rounded-xl border border-border overflow-hidden bg-card">
             <div className="grid grid-cols-[2fr_1fr_1fr_auto] gap-4 p-4 border-b border-border bg-muted/30 font-semibold text-sm text-muted-foreground">
-              <div>Soin</div>
-              <div>Durée</div>
-              <div>Prix Indicatif</div>
+              <div>{t.catalogPage.colService}</div>
+              <div>{t.catalogPage.colDuration}</div>
+              <div>{t.catalogPage.colPrice}</div>
               <div className="w-20 text-right">Actions</div>
             </div>
             <div className="divide-y divide-border">
@@ -148,9 +150,9 @@ function CatalogSettings() {
                     <p className="font-semibold text-sm text-foreground">{s.name}</p>
                     {s.description && <p className="text-xs text-muted-foreground truncate">{s.description}</p>}
                   </div>
-                  <div className="text-sm font-medium">{s.durationMin} min</div>
+                  <div className="text-sm font-medium">{s.durationMin} {t.catalogPage.durationMin}</div>
                   <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                    {s.price ? `${s.price} TND` : "Sur devis"}
+                    {s.price ? `${s.price} ${tenant?.currency || 'TND'}` : t.catalogPage.onEstimate}
                   </div>
                   <div className="flex items-center justify-end gap-2">
                     <Button variant="ghost" size="sm" className="size-8 p-0 text-muted-foreground hover:text-foreground" onClick={() => handleOpenModal(s)}>
@@ -170,34 +172,34 @@ function CatalogSettings() {
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingService?.name ? "Modifier le soin" : "Nouveau soin"}</DialogTitle>
+            <DialogTitle>{editingService?.name ? t.catalogPage.modalEdit : t.catalogPage.modalNew}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSaveService} className="space-y-4 py-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Nom du soin *</label>
-              <Input name="name" defaultValue={editingService?.name} required placeholder="Ex: Consultation Dentaire" />
+              <label className="text-xs font-semibold text-foreground">{t.catalogPage.labelName}</label>
+              <Input name="name" defaultValue={editingService?.name} required placeholder={t.catalogPage.placeName} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">Durée (minutes) *</label>
+                <label className="text-xs font-semibold text-foreground">{t.catalogPage.labelDuration}</label>
                 <Input name="durationMin" type="number" min="5" step="5" defaultValue={editingService?.durationMin} required />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">Prix (TND)</label>
-                <Input name="price" type="number" min="0" step="10" defaultValue={editingService?.price} placeholder="0 pour 'Sur devis'" />
+                <label className="text-xs font-semibold text-foreground">{t.catalogPage.labelPrice.replace('{currency}', tenant?.currency || 'TND')}</label>
+                <Input name="price" type="number" min="0" step="10" defaultValue={editingService?.price} placeholder={t.catalogPage.placePrice} />
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Description / Consignes IA</label>
+              <label className="text-xs font-semibold text-foreground">{t.catalogPage.labelDesc}</label>
               <Textarea 
                 name="description" 
                 defaultValue={editingService?.description} 
-                placeholder="Ex: Soin de routine, vérifier antécédents..." 
+                placeholder={t.catalogPage.placeDesc} 
                 className="h-20 resize-none text-sm"
               />
             </div>
             <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Annuler</Button>
+              <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>{t.catalogPage.btnCancel}</Button>
               <Button type="submit" disabled={updateSettingsMutation.isPending} className="bg-primary text-primary-foreground">
                 {updateSettingsMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
                 Enregistrer

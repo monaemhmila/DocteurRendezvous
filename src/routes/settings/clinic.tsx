@@ -16,9 +16,15 @@ import {
   CalendarCheck,
   Plus,
   Trash2,
+  ChevronsUpDown,
+  Check,
+  DollarSign,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { PageHeader, SectionCard } from "@/components/shared/ui-kit";
 import { PlanUsageWidget } from "@/components/shared/plan-usage-widget";
 import { Button } from "@/components/ui/button";
@@ -42,20 +48,14 @@ const defaultBusinessHours: Record<string, Array<{start: string, end: string}>> 
   sunday: [],
 };
 
-const daysOfWeek = [
-  { key: "monday", label: "Lundi" },
-  { key: "tuesday", label: "Mardi" },
-  { key: "wednesday", label: "Mercredi" },
-  { key: "thursday", label: "Jeudi" },
-  { key: "friday", label: "Vendredi" },
-  { key: "saturday", label: "Samedi" },
-  { key: "sunday", label: "Dimanche" },
-];
+
+
+
 
 export const Route = createFileRoute("/settings/clinic")({
   head: () => ({
     meta: [
-      { title: "Paramètres du Cabinet — Medical AI" },
+      { title: "Paramètres du Cabinet — Sanovia AI" },
       { name: "description", content: "Gestion des coordonnées, spécialité et informations du cabinet médical." },
     ],
   }),
@@ -64,7 +64,17 @@ export const Route = createFileRoute("/settings/clinic")({
 
 function ClinicSettingsPage() {
   const queryClient = useQueryClient();
-  const { t, isRTL } = useAppState();
+  const { t, isRTL, language } = useAppState();
+
+  const daysOfWeek = [
+    { key: "monday", label: language === "ar" ? "الإثنين" : language === "en" ? "Monday" : "Lundi" },
+    { key: "tuesday", label: language === "ar" ? "الثلاثاء" : language === "en" ? "Tuesday" : "Mardi" },
+    { key: "wednesday", label: language === "ar" ? "الأربعاء" : language === "en" ? "Wednesday" : "Mercredi" },
+    { key: "thursday", label: language === "ar" ? "الخميس" : language === "en" ? "Thursday" : "Jeudi" },
+    { key: "friday", label: language === "ar" ? "الجمعة" : language === "en" ? "Friday" : "Vendredi" },
+    { key: "saturday", label: language === "ar" ? "السبت" : language === "en" ? "Saturday" : "Samedi" },
+    { key: "sunday", label: language === "ar" ? "الأحد" : language === "en" ? "Sunday" : "Dimanche" },
+  ];
   const { isAdminUnlocked } = useAdmin();
   const { hasPermission } = useAuth();
 
@@ -78,11 +88,19 @@ function ClinicSettingsPage() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
+  const [taxId, setTaxId] = useState("");
+  const [matriculeCnam, setMatriculeCnam] = useState("");
+  const [matriculeCnss, setMatriculeCnss] = useState("");
+  const [bank, setBank] = useState("");
+  const [rib, setRib] = useState("");
+  const [commercialRegister, setCommercialRegister] = useState("");
   const [businessHours, setBusinessHours] = useState<Record<string, Array<{start: string, end: string}>>>(defaultBusinessHours);
   const [noShowPolicyEnabled, setNoShowPolicyEnabled] = useState(false);
   const [noShowMaxAllowed, setNoShowMaxAllowed] = useState(2);
   const [noShowRejectionMessage, setNoShowRejectionMessage] = useState("Suite à plusieurs rendez-vous non honorés, la prise de rendez-vous automatique est suspendue. Merci d'appeler le secrétariat.");
   const [adminPin, setAdminPin] = useState("1234");
+  const [currency, setCurrency] = useState("TND");
+  const [openCurrency, setOpenCurrency] = useState(false);
 
   // Fetch Current Tenant
   const { data: tenant, isLoading, isError } = useQuery<any>({
@@ -98,6 +116,13 @@ function ClinicSettingsPage() {
       setPhone(tenant.phone || "");
       setEmail(tenant.email || "");
       setAddress(tenant.address || "");
+      setTaxId(tenant.taxId || "");
+      setMatriculeCnam(tenant.matriculeCnam || "");
+      setMatriculeCnss(tenant.matriculeCnss || "");
+      setBank(tenant.bank || "");
+      setRib(tenant.rib || "");
+      setCommercialRegister(tenant.commercialRegister || "");
+      setCurrency(tenant.currency || "TND");
       
       if (tenant.settings?.adminPin) {
         setAdminPin(tenant.settings.adminPin);
@@ -136,6 +161,13 @@ function ClinicSettingsPage() {
       phone,
       email,
       address,
+      taxId,
+      matriculeCnam,
+      matriculeCnss,
+      bank,
+      rib,
+      commercialRegister,
+      currency,
       settings: {
         ...tenant?.settings, // Preserve other settings like aiConfig
         adminPin,
@@ -312,6 +344,130 @@ function ClinicSettingsPage() {
                 className="bg-surface text-sm resize-none"
               />
             </div>
+
+            {/* Identifiants légaux et fiscaux */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="clinic-taxId" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Building2 className="size-3.5 text-muted-foreground" />
+                  {language === 'ar' ? 'المعرف الجبائي' : language === 'en' ? 'Tax ID / Matricule Fiscale' : 'Matricule Fiscale'}
+                </Label>
+                <Input
+                  id="clinic-taxId"
+                  value={taxId}
+                  onChange={(e) => setTaxId(e.target.value)}
+                  placeholder={language === 'ar' ? 'مثال: 1234567M/A/M/000' : 'Ex: 1234567M/A/M/000'}
+                  className="h-10 bg-surface text-sm"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="clinic-cnam" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Building2 className="size-3.5 text-muted-foreground" />
+                  {language === 'ar' ? 'معرف الكنام' : language === 'en' ? 'CNAM ID' : 'Matricule CNAM'}
+                </Label>
+                <Input
+                  id="clinic-cnam"
+                  value={matriculeCnam}
+                  onChange={(e) => setMatriculeCnam(e.target.value)}
+                  placeholder={language === 'ar' ? 'رقم الكنام...' : 'Ex: 123456-78'}
+                  className="h-10 bg-surface text-sm"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="clinic-cnss" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Building2 className="size-3.5 text-muted-foreground" />
+                  {language === 'ar' ? 'معرف الضمان الاجتماعي' : language === 'en' ? 'CNSS ID' : 'Matricule CNSS'}
+                </Label>
+                <Input
+                  id="clinic-cnss"
+                  value={matriculeCnss}
+                  onChange={(e) => setMatriculeCnss(e.target.value)}
+                  placeholder={language === 'ar' ? 'رقم الضمان...' : 'Ex: 12345678-90'}
+                  className="h-10 bg-surface text-sm"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="clinic-bank" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Building2 className="size-3.5 text-muted-foreground" />
+                  {language === 'ar' ? 'البنك' : language === 'en' ? 'Bank' : 'Banque'}
+                </Label>
+                <Input
+                  id="clinic-bank"
+                  value={bank}
+                  onChange={(e) => setBank(e.target.value)}
+                  placeholder={language === 'ar' ? 'اسم البنك...' : 'Ex: Amen Bank, BIAT...'}
+                  className="h-10 bg-surface text-sm"
+                />
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="clinic-rib" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Building2 className="size-3.5 text-muted-foreground" />
+                  {language === 'ar' ? 'رقم الحساب البنكي (RIB)' : language === 'en' ? 'Bank Account (RIB)' : 'RIB (Relevé d\'Identité Bancaire)'}
+                </Label>
+                <Input
+                  id="clinic-rib"
+                  value={rib}
+                  onChange={(e) => setRib(e.target.value)}
+                  placeholder="Ex: 07 123 456789 01 23456 78"
+                  className="h-10 bg-surface text-sm font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Devise (Currency) */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <DollarSign className="size-3.5 text-muted-foreground" />
+                {t.clinicSettings.currencies.label}
+              </Label>
+              <Popover open={openCurrency} onOpenChange={setOpenCurrency}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={openCurrency}
+                    className="w-full justify-between h-10 bg-surface text-sm"
+                  >
+                    {currency
+                      ? t.clinicSettings.currencies.list.find((c) => c.value === currency)?.label
+                      : t.clinicSettings.currencies.placeholder}
+                    <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[300px] p-0" align={isRTL ? "end" : "start"}>
+                  <Command>
+                    <CommandInput placeholder={t.clinicSettings.currencies.placeholder} />
+                    <CommandList>
+                      <CommandEmpty>{t.clinicSettings.currencies.notFound}</CommandEmpty>
+                      <CommandGroup>
+                        {t.clinicSettings.currencies.list.map((c) => (
+                          <CommandItem
+                            key={c.value}
+                            value={c.value}
+                            onSelect={(currentValue) => {
+                              setCurrency(c.value);
+                              setOpenCurrency(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                currency === c.value ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            {c.label}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
         </SectionCard>
 
@@ -322,7 +478,7 @@ function ClinicSettingsPage() {
         >
           <div className="space-y-6">
             <p className="text-xs text-muted-foreground">
-              💡 Configurez ici les plages d'ouverture du cabinet. L'IA s'appuie sur ces horaires pour proposer des créneaux aux patients.
+              {language === "ar" ? "💡 قم بإعداد أوقات عمل العيادة هنا. سيعتمد الذكاء الاصطناعي على هذه الأوقات لاقتراح المواعيد للمرضى." : language === "en" ? "💡 Configure clinic opening hours here. AI uses these to propose slots." : "💡 Configurez ici les plages d'ouverture du cabinet. L'IA s'appuie sur ces horaires pour proposer des créneaux aux patients."}
             </p>
 
             <div className="space-y-4">
@@ -347,7 +503,7 @@ function ClinicSettingsPage() {
 
                     <div className="flex-1 space-y-2">
                       {!isActive ? (
-                        <div className="text-sm text-muted-foreground py-1">Fermé</div>
+                        <div className="text-sm text-muted-foreground py-1">{language === "ar" ? "مغلق" : language === "en" ? "Closed" : "Fermé"}</div>
                       ) : (
                         <div className="space-y-2">
                           {daySlots.map((slot, idx) => (
@@ -362,7 +518,7 @@ function ClinicSettingsPage() {
                                 }}
                                 className="w-28 h-8 text-xs"
                               />
-                              <span className="text-muted-foreground text-xs">à</span>
+                              <span className="text-muted-foreground text-xs">{language === "ar" ? "إلى" : language === "en" ? "to" : "à"}</span>
                               <Input
                                 type="time"
                                 value={slot.end}
@@ -399,7 +555,7 @@ function ClinicSettingsPage() {
                               }));
                             }}
                           >
-                            <Plus className="size-3" /> Ajouter une plage
+                            <Plus className="size-3" /> {language === "ar" ? "إضافة فترة" : language === "en" ? "Add a slot" : "Ajouter une plage"}
                           </Button>
                         </div>
                       )}
@@ -413,14 +569,14 @@ function ClinicSettingsPage() {
 
         {/* No-Show Policy Card */}
         <SectionCard
-          title="Politique d'Annulation & No-Shows"
-          description="Gérez les patients qui ne se présentent pas à leurs rendez-vous."
+          title={language === "ar" ? "سياسة الإلغاء وعدم الحضور" : language === "en" ? "Cancellation & No-Show Policy" : "Politique d'Annulation & No-Shows"}
+          description={language === "ar" ? "إدارة المرضى الذين لا يحضرون مواعيدهم." : language === "en" ? "Manage patients who do not show up for their appointments." : "Gérez les patients qui ne se présentent pas à leurs rendez-vous."}
         >
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <Label className="text-sm font-semibold">Bloquer les récidivistes</Label>
-                <p className="text-xs text-muted-foreground mt-1">L'IA refusera de donner un rendez-vous aux patients ayant dépassé la limite autorisée.</p>
+                <Label className="text-sm font-semibold">{language === "ar" ? "حظر المكررين" : language === "en" ? "Block repeat offenders" : "Bloquer les récidivistes"}</Label>
+                <p className="text-xs text-muted-foreground mt-1">{language === "ar" ? "سيرفض الذكاء الاصطناعي إعطاء موعد للمرضى الذين تجاوزوا الحد المسموح به." : language === "en" ? "AI will refuse to give an appointment to patients exceeding the limit." : "L'IA refusera de donner un rendez-vous aux patients ayant dépassé la limite autorisée."}</p>
               </div>
               <Switch checked={noShowPolicyEnabled} onCheckedChange={setNoShowPolicyEnabled} />
             </div>
