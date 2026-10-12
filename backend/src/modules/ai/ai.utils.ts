@@ -90,7 +90,7 @@ export function isPlaceholderPatient(p: any): boolean {
 // ──────────────────────────────────────────────────────────────────────────────
 export const TUNISIAN_ARABIZI_KEYWORDS = new Set([
   // الموافقة والتحية
-  "ey", "ee", "eey", "behy", "behi", "bahi", "bahy", "mrigel", "mrigla", "marhba",
+  "ey", "ee", "eey", "behy", "behi", "bahi", "bahy", "mrigel", "mrigla", "marhba", "marhbe",
   "mar7bé", "mar7be", "mar7ba", "aslema", "asslema", "ahlan", "sbeh el khir",
   "sbeh ennour", "masa el khir", "masa ennour", "tesba7 ala khir", "y3aychek",
   "aychek", "ya3aychek", "chokrane", "chokran", "barakallah fik", "rabbi y3aychek",
@@ -132,8 +132,9 @@ export const TUNISIAN_ARABIZI_KEYWORDS = new Set([
   "khouya", "5ouya", "okhti", "o5ti", "jaddi", "jedd i", "jeddati", "jeddi",
   "3ammi", "3amti", "5ali", "5alti", "sahbi", "sa7bi", "s7abi", "sa7bti",
   "qaribi", "9ribi", "famillti", "3ayelti",
-  // كلمات الطلب واللطف
+  // كلمات الطلب واللطف والتذكير
   "belehy", "belehi", "bellehi", "bellehy", "brabi", "barra", "aman",
+  "fakarni", "fakkarni", "tfakarni", "tfakkarni", "thakarni", "thakkarni",
   "min fadhlik", "men fadhlik", "law sama7t", "sama7ni", "samahni", "sema7ni",
   "sma7ni", "3afsek", "afek", "ya3tik essa7a", "rabbi yfadhelik", "nchallah",
   "inchallah", "inchaallah",
@@ -201,7 +202,7 @@ export function detectLanguageFromText(text: string, currentLanguage?: string): 
 
   if (tunisianScore > frenchScore) return "arabizi";
   if (frenchScore >= tunisianScore && frenchScore > 0) return "fr";
-  
+
   return (currentLanguage as "fr" | "ar" | "arabizi") || "fr";
 }
 
@@ -328,4 +329,14 @@ export function _neutralConfirmation(
 ): string {
   const verb = type === "booking" ? "confirmé" : "modifié";
   return `${patientFirstName} — rendez-vous ${verb} : ${appointment.date} ${appointment.startTime}-${appointment.endTime} (${appointment.treatment}).`;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Explicit profanity / vulgarity check (Tunisian, Arabic, French, English)
+// ──────────────────────────────────────────────────────────────────────────────
+const EXPLICIT_VULGAR_REGEX = /\b(?:nayek|mnayek|zebi|zabi|zabourti|zabour|ta7an|ta77an|9a7ba|qa7ba|kahba|nik|nikmok|rabek|rabk|omok|zok|merde|putain|connard|connasse|salope|salaud|bâtard|batard|nique|fuck|bitch|asshole)\b|[\u0600-\u06FF]*(?:نيك|زب|منيك|طحان|قحبة)[\u0600-\u06FF]*/i;
+
+export function isExplicitlyVulgar(text: string): boolean {
+  if (!text || typeof text !== "string") return false;
+  return EXPLICIT_VULGAR_REGEX.test(text.trim());
 }

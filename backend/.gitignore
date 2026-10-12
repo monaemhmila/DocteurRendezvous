@@ -1,0 +1,25 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Backend — .gitignore
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Node
+node_modules/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# ── P2-04: Compiled artefacts ─────────────────────────────────────────────
+# TypeScript compiles to backend/dist. Never commit generated files.
+# Sources in backend/src are TypeScript only — no .js/.d.ts/.js.map.
+dist/
+
+# In case tsc is accidentally run inside src (should not happen):
+src/**/*.js
+src/**/*.d.ts
+src/**/*.js.map
+
+# Logs
+*.log
+logs/

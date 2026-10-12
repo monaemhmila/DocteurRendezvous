@@ -27,6 +27,32 @@ export interface IPatient extends Document {
     updatedAt: Date;
   }[];
   specialtyData?: Record<string, any>;
+  files?: {
+    id: string; // Legacy UI ID or safeDisplayName
+    url?: string;
+    storageKey?: string;
+    title: string;
+    type: string;
+    size: number;
+    uploadedAt: Date;
+    checksum?: string;
+    fileStatus?: string;
+    isDicom?: boolean;
+    studyInstanceUID?: string;
+    seriesInstanceUID?: string;
+    sopInstanceUID?: string;
+    modality?: string;
+    studyDate?: string;
+    studyDescription?: string;
+    seriesDescription?: string;
+    instanceNumber?: number;
+    frameCount?: number;
+    pixelSpacing?: string;
+    windowCenter?: string;
+    windowWidth?: string;
+    metadataStatus?: string;
+    aiAnalysis?: Record<string, any>;
+  }[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -65,6 +91,34 @@ const PatientSchema = new Schema<IPatient>(
       }
     ],
     specialtyData: { type: Schema.Types.Mixed, default: {} },
+    files: [
+      {
+        id: { type: String, required: true },
+        url: { type: String },
+        storageKey: { type: String },
+        title: { type: String, required: true },
+        type: { type: String, required: true },
+        size: { type: Number, required: true },
+        uploadedAt: { type: Date, default: Date.now },
+        checksum: { type: String },
+        fileStatus: { type: String, default: "uploaded" },
+        isDicom: { type: Boolean, default: false },
+        studyInstanceUID: { type: String },
+        seriesInstanceUID: { type: String },
+        sopInstanceUID: { type: String },
+        modality: { type: String },
+        studyDate: { type: String },
+        studyDescription: { type: String },
+        seriesDescription: { type: String },
+        instanceNumber: { type: Number },
+        frameCount: { type: Number },
+        pixelSpacing: { type: String },
+        windowCenter: { type: String },
+        windowWidth: { type: String },
+        metadataStatus: { type: String, default: "unavailable" },
+        aiAnalysis: { type: Schema.Types.Mixed }
+      },
+    ],
   },
   { timestamps: true }
 );

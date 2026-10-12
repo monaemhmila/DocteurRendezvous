@@ -3,17 +3,15 @@ import { Patient } from "../patients/patient.model";
 import { Conversation, Message } from "./communication.model";
 import { aiAutoBookingService } from "../ai/ai.auto-booking.service";
 import { aiDoctorService } from "../ai/ai.doctor.service";
+import { audioTranscriptionService } from "../ai/audio-transcription.service";
 
-// ── Message Burst Debounce ────────────────────────────────────────────────────
-// When a patient sends several messages in quick succession, we wait until they
-// stop typing (DEBOUNCE_MS of silence) before triggering the AI — so the AI
-// always sees the complete thought and only replies once.
-// stop typing (DEBOUNCE_MS of silence) before triggering the AI — so the AI
-// processes the combined messages as a single query.
-const DEBOUNCE_MS = 5000;
-const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-// lastWamid per conversationId so we always pass the most recent message id to the AI
-const debounceLastWamid = new Map<string, string>();
+import { createDebouncer } from "../ai/conversation-queue";
+
+// ── Message Burst Debounce & Exclusive Queue ──────────────────────────────────
+// Regroupe les messages rapprochés d'un même patient (3.5s sans dépasser 8s)
+// et garantit un traitement STRICTEMENT séquentiel par conversation (runExclusive)
+// pour éliminer les réponses en double et les conflits d'état MongoDB.
+const conversationDebouncer = createDebouncer(3500, 8000);
 
 export class CommunicationService {
   /**
@@ -55,7 +53,21 @@ export class CommunicationService {
         if (msg.type === "text") {
           content = msg.text.body;
         } else if (msg.type === "audio") {
-          content = "[Audio Message]"; // Doctor Service will handle transcription later if needed
+          const mediaId = msg.audio?.id;
+          if (mediaId && tenantDoc) {
+            console.log(`[Webhook Doctor] Transcribing audio note (mediaId: ${mediaId})...`);
+            const hints = [tenantDoc.name || ""];
+            const res = await audioTranscriptionService.transcribeVoiceNote(mediaId, tenantDoc as any, hints, from);
+            if (res.ok) {
+              content = res.text;
+            } else {
+              console.warn(`[Webhook Doctor] Voice note transcription failed (code: ${res.code})`);
+              content = "[Message vocal non transcrit]";
+            }
+          }
+          if (!content) {
+            content = "[Message vocal non transcrit]";
+          }
         }
 
         await Message.create({
@@ -89,9 +101,69 @@ export class CommunicationService {
       console.log(`[Webhook] Auto-created new patient record for WhatsApp number ${from}: ${patient.firstName} ${patient.lastName}`);
     }
 
+    let isVoiceNoteInbound = false;
     let content = "";
     if (msg.type === "text") {
       content = msg.text.body;
+    } else if (msg.type === "audio") {
+      isVoiceNoteInbound = true;
+      const mediaId = msg.audio?.id;
+      if (mediaId && tenantDoc) {
+        console.log(`[Webhook Patient] Transcribing voice note from ${from} (mediaId: ${mediaId})...`);
+        const hints = [
+          tenantDoc.name || "",
+          ...(tenantDoc.settings?.doctors?.map((d: any) => d.name) || []),
+        ].filter(Boolean);
+
+        const res = await audioTranscriptionService.transcribeVoiceNote(mediaId, tenantDoc as any, hints, from);
+        if (res.ok) {
+          content = res.text;
+        } else {
+          console.warn(`[Webhook Patient] Voice note transcription failed (code: ${res.code})`);
+          // Send helpful feedback to the patient
+          try {
+            const patientLang = (patient as any)?.language === "fr" ? "fr" : "tn-arabizi";
+            const { t } = await import("../ai/tn-templates");
+            let errorReply = t(patientLang as any, "voiceUnclear");
+
+            if (res.code === "too_large") {
+              errorReply = patientLang === "fr" 
+                ? "Votre message vocal est trop volumineux (max 3 Mo). Pouvez-vous nous envoyer un vocal plus court ou écrire votre message ?"
+                : "El vocal kbir barcha (max 3 Mo). Tnajem tab3ath vocal a9sar wala tekteb talabek ?";
+            } else if (res.code === "too_long") {
+              errorReply = patientLang === "fr"
+                ? "Votre message vocal est trop long (max 2 minutes). Pouvez-vous nous envoyer un vocal plus court ou nous écrire ?"
+                : "El vocal twil barcha (feyet 2 d9aye9). Tnajem tab3ath vocal a9sar wala tekteb ?";
+            } else if (res.code === "rate_limited") {
+              errorReply = patientLang === "fr"
+                ? "Vous avez envoyé plusieurs messages vocaux récemment. Merci de patienter ou de nous écrire directement par message texte."
+                : "B3atht barcha vocaux wara b3adhhom. Stanna chwaya wala ektebelna bel klem.";
+            } else if (res.code === "unsupported_format") {
+              errorReply = patientLang === "fr"
+                ? "Le format de votre note vocale n'est pas pris en charge. Pouvez-vous nous écrire par message ?"
+                : "El format mta3 el vocal mch ma9boul. Tnajem tekteb talabek ?";
+            }
+
+            const { MetaWhatsAppProvider } = await import("./providers/messaging.provider");
+            const provider = new MetaWhatsAppProvider();
+            await provider.sendMessage(
+              {
+                to: from,
+                type: "text",
+                content: errorReply,
+              },
+              tenantDoc as any
+            );
+          } catch (replyErr) {
+            console.error(`[Webhook Patient] Failed to send transcription failure reply:`, replyErr);
+          }
+
+          content = "[Message vocal inaudible / non transcrit]";
+        }
+      }
+      if (!content) {
+        content = "[Message vocal non transcrit]";
+      }
     } else if (msg.type === "interactive") {
       if (msg.interactive.type === "button_reply") {
         content = msg.interactive.button_reply.title;
@@ -107,6 +179,18 @@ export class CommunicationService {
     // Find or create conversation
     let conversation;
     try {
+      // ── FIX: if a pendingActionConfirmation is already active, do NOT
+      // set pendingVoiceConfirmation — the patient is answering the
+      // confirmation question, not starting a new booking request.
+      let setPendingVoice = isVoiceNoteInbound;
+      if (isVoiceNoteInbound) {
+        const existingConv = await Conversation.findOne({ tenantId, contactWaId: from }).select("pendingActionConfirmation").lean();
+        if ((existingConv as any)?.pendingActionConfirmation) {
+          setPendingVoice = false;
+          console.log(`[Webhook Patient] Voice note received but pendingActionConfirmation is active — skipping pendingVoiceConfirmation flag.`);
+        }
+      }
+
       conversation = await Conversation.findOneAndUpdate(
         { tenantId, contactWaId: from },
         { 
@@ -115,7 +199,8 @@ export class CommunicationService {
             status: "active", 
             lastMessageAt: new Date(),
             needsHuman: false,
-            ...(patient ? { patientId: patient._id } : {}) 
+            ...(patient ? { patientId: patient._id } : {}),
+            ...(setPendingVoice ? { pendingVoiceConfirmation: true } : {})
           }
         },
         { upsert: true, returnDocument: 'after' }
@@ -124,6 +209,21 @@ export class CommunicationService {
       console.error(`[Webhook] Conversation upsert error:`, convErr.message);
       throw convErr;
     }
+
+    // ── Session boundary: clear sessionStartedAt on first new message ─────────
+    // When the secretary marks a RDV as "completed", sessionStartedAt is set so
+    // the AI greets the patient fresh. Once the patient actually sends their first
+    // new message, we clear sessionStartedAt — the session is now underway and
+    // messages should accumulate normally until the next completion.
+    if (conversation?.sessionStartedAt) {
+      await Conversation.updateOne(
+        { _id: conversation._id },
+        { $unset: { sessionStartedAt: "" } }
+      );
+      console.log(`[Webhook] New session started for conversation ${conversation._id} — sessionStartedAt cleared.`);
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
 
     // Create message
     try {
@@ -148,21 +248,13 @@ export class CommunicationService {
         });
       }
 
-      // Trigger the AI conversation flow (debounced — waits for patient to finish typing)
+      // Trigger the AI conversation flow (debounced & runExclusive per conversation)
       if (conversation?._id) {
         const convId = conversation._id.toString();
-        // Track the most recent wamid so the AI always processes from the latest message
-        debounceLastWamid.set(convId, (msg.id as string) ?? "");
-        // Cancel any pending timer for this conversation
-        const existing = debounceTimers.get(convId);
-        if (existing) clearTimeout(existing);
-        // Schedule a new timer — fires only after DEBOUNCE_MS of silence
-        const timer = setTimeout(async () => {
-          debounceTimers.delete(convId);
-          const latestWamid = debounceLastWamid.get(convId);
-          debounceLastWamid.delete(convId);
+        conversationDebouncer(convId, (msg.id as string) ?? "", async (wamids: string[]) => {
+          const latestWamid = wamids[wamids.length - 1];
           try {
-            console.log(`[Webhook] Debounce fired — processing AI for conversation ${convId}`);
+            console.log(`[Webhook] Debounced batch (${wamids.length} msgs) — processing AI for conversation ${convId}`);
             await aiAutoBookingService.processInboundMessage(
               tenantId.toString(),
               convId,
@@ -171,8 +263,7 @@ export class CommunicationService {
           } catch (err) {
             console.error("[Webhook] AI Conversation error (debounced):", err);
           }
-        }, DEBOUNCE_MS);
-        debounceTimers.set(convId, timer);
+        });
       }
     } catch (err: any) {
       // Catch duplicate key error in case of parallel webhook execution

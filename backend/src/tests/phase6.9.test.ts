@@ -15,7 +15,6 @@ import { communicationService } from "../modules/communications/communication.se
 import { handleWebhookEvent } from "../modules/communications/webhook.controller";
 import {
   AIAutoBookingService,
-  buildBookingConfirmationMessage,
 } from "../modules/ai/ai.auto-booking.service";
 import { executeAIAction } from "../modules/ai/ai.action.executor";
 import { Patient } from "../modules/patients/patient.model";
@@ -37,6 +36,7 @@ import { availabilityService } from "../modules/appointments/availability.servic
 import { IMessagingProvider } from "../modules/communications/providers/messaging.provider";
 
 dotenv.config();
+process.env.ASYNC_WEBHOOK_PROCESSING = "false";
 
 const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/medical-ai-test";
 

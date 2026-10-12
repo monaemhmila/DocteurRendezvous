@@ -172,6 +172,12 @@ export async function executeAIAction(
       return handleRecoveryAction(tenantId, action.targetId, conversationPatientId, "dismissed");
 
     case "confirm_appointment":
+      if (action.targetId === "self") {
+        const { Appointment: ApptModel } = await import("../appointments/appointment.model");
+        const appt = await ApptModel.findOne({ tenantId, patientId: conversationPatientId, status: { $in: ["scheduled", "confirmed"] } }).sort({ date: 1, startTime: 1 }).lean();
+        if (!appt) throw new ActionTargetNotFoundError();
+        action.targetId = appt._id.toString();
+      }
       if (!mongoose.Types.ObjectId.isValid(action.targetId)) throw new ActionTargetNotFoundError();
       return handleAppointmentConfirm(tenantId, action.targetId, conversationPatientId);
 
@@ -182,6 +188,12 @@ export async function executeAIAction(
       return handleAppointmentReschedule(tenantId, action.targetId, conversationPatientId, action.booking);
 
     case "cancel_appointment":
+      if (action.targetId === "self") {
+        const { Appointment: ApptModel } = await import("../appointments/appointment.model");
+        const appt = await ApptModel.findOne({ tenantId, patientId: conversationPatientId, status: { $in: ["scheduled", "confirmed"] } }).sort({ date: 1, startTime: 1 }).lean();
+        if (!appt) throw new ActionTargetNotFoundError();
+        action.targetId = appt._id.toString();
+      }
       if (!mongoose.Types.ObjectId.isValid(action.targetId)) throw new ActionTargetNotFoundError();
       return handleAppointmentCancel(tenantId, action.targetId, conversationPatientId);
       
@@ -437,7 +449,30 @@ async function handleAppointmentBooking(
     // Target is a valid tenant-scoped patient — allow the family booking
     resolvedPatientId = targetId;
   } else {
-    throw new ActionConversationMismatchError();
+    // Phase 6.17.2: targetId is a name, fuzzy match family member
+    const { Patient: FbPatientModel } = await import("../patients/patient.model");
+    const conversationPatient = await FbPatientModel.findOne({ _id: conversationPatientId, tenantId }).lean();
+    if (conversationPatient && (conversationPatient as any).phone) {
+      const familyMembers = await FbPatientModel.find({
+        tenantId,
+        phone: (conversationPatient as any).phone
+      }).lean();
+      
+      const targetLower = targetId.toLowerCase().trim();
+      const matchedMember = familyMembers.find((m: any) => 
+        (m.firstName && targetLower.includes(m.firstName.toLowerCase())) ||
+        (m.lastName && targetLower.includes(m.lastName.toLowerCase())) ||
+        (m.firstName && m.lastName && targetLower.includes(`${m.firstName.toLowerCase()} ${m.lastName.toLowerCase()}`))
+      );
+
+      if (matchedMember) {
+        resolvedPatientId = matchedMember._id.toString();
+      } else {
+        throw new ActionConversationMismatchError();
+      }
+    } else {
+      throw new ActionConversationMismatchError();
+    }
   }
 
   if (!bookingData || !bookingData.date || !bookingData.startTime || !bookingData.durationMin || !bookingData.treatment) {

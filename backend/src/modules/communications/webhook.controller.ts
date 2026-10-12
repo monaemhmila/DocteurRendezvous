@@ -41,6 +41,32 @@ function isValidMetaSignature(req: RawBodyRequest): boolean {
   );
 }
 
+/**
+ * P1-06 — Webhook acknowledgement policy:
+ *
+ * Meta requires a 200 response within 20 seconds or it marks the delivery
+ * as failed and begins exponential retries.
+ *
+ * ASYNC mode (ASYNC_WEBHOOK_PROCESSING=true  — REQUIRED in production):
+ *   1. Ack 200 immediately.
+ *   2. Write the raw event to WebhookEvent (idempotent — unique providerMessageId).
+ *   3. Create a Job for the background worker — replay-safe, retryable.
+ *
+ * SYNC mode (default — development only):
+ *   Processing happens in the same request after the ack.
+ *   Any error is caught and logged but NOT replayed.
+ *   ⚠️  DO NOT use sync mode in production; messages may be silently lost.
+ */
+
+// Guard: warn at process start if running in production without async mode.
+if (process.env.NODE_ENV === "production" && process.env.ASYNC_WEBHOOK_PROCESSING !== "true") {
+  console.error(
+    "[Webhook] ⚠️  PRODUCTION SAFETY: ASYNC_WEBHOOK_PROCESSING is not set to 'true'. " +
+    "Webhook events will be processed synchronously and may be silently lost on errors. " +
+    "Set ASYNC_WEBHOOK_PROCESSING=true in your production .env."
+  );
+}
+
 export const verifyWebhook = (req: Request, res: Response) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -65,10 +91,12 @@ export const handleWebhookEvent = async (req: RawBodyRequest, res: Response) => 
     return res.status(403).json({ error: "Invalid webhook signature" });
   }
 
+  // ── P1-06: Acknowledge IMMEDIATELY before any processing ─────────────────
+  // Meta requires a 200 within 20 s. We must respond before hitting the DB.
+  res.status(200).send("EVENT_RECEIVED");
+  // ─────────────────────────────────────────────────────────────────────────
+
   const payload = req.body;
-  if (!res.headersSent) {
-    res.status(200).send("EVENT_RECEIVED");
-  }
 
   if (
     !payload ||
@@ -147,6 +175,7 @@ export const handleWebhookEvent = async (req: RawBodyRequest, res: Response) => 
                 }
               }
             } else {
+              // ⚠️  SYNC MODE — errors here are NOT replayed (P1-06 degraded path)
               await communicationService.handleIncomingMessage(tenantId.toString(), msg, value);
             }
           }
@@ -192,6 +221,7 @@ export const handleWebhookEvent = async (req: RawBodyRequest, res: Response) => 
                 }
               }
             } else {
+              // ⚠️  SYNC MODE — errors here are NOT replayed (P1-06 degraded path)
               await communicationService.handleMessageStatus(tenantId.toString(), status);
             }
           }
@@ -202,3 +232,4 @@ export const handleWebhookEvent = async (req: RawBodyRequest, res: Response) => 
     console.error("[Webhook] Error processing event:", error);
   }
 };
+

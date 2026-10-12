@@ -66,6 +66,21 @@ export interface IConversation extends Document {
     appointmentSummary: string;
     actionData?: any;
   };
+  /**
+   * Set when an inbound message is a voice note requesting an appointment or action.
+   * Hard gate: blocks automated creation/reschedule until explicitly confirmed by the patient (text or yes).
+   */
+  pendingVoiceConfirmation?: boolean;
+  /**
+   * Marks the beginning of the current conversation session.
+   * When a new session starts (e.g. after an appointment is marked completed),
+   * this timestamp is set to NOW. The AI only loads messages AFTER this date,
+   * so the patient is greeted fresh without losing their dossier context.
+   *
+   * Set by: handleStatusChange() in appointment.service.ts when status → completed.
+   * Reset by: patient sending a message when session was previously closed.
+   */
+  sessionStartedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -118,6 +133,11 @@ const ConversationSchema = new Schema<IConversation>(
       appointmentSummary: { type: String },
       actionData: { type: Schema.Types.Mixed },
     },
+    // Hard gate: requires explicit confirmation before mutating bookings if requested by voice
+    pendingVoiceConfirmation: { type: Boolean, default: false },
+    // Session boundary — messages before this date are excluded from AI context (P2-bot)
+    // Set when an appointment is completed so the next patient contact starts fresh.
+    sessionStartedAt: { type: Date },
   },
   { timestamps: true }
 );

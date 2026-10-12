@@ -145,10 +145,22 @@ export class AIService {
       throw new ConversationNotFoundError();
     }
 
-    // Load last MAX_MESSAGES messages for this conversation (ascending for context order)
+    // Load last MAX_MESSAGES messages for this conversation (ascending for context order).
+    // ── Session boundary (bot context reset) ──────────────────────────────────
+    // When the secretary marks an appointment as "completed" (honoré), the backend
+    // sets conversation.sessionStartedAt = now. From that point on, the AI only
+    // sees messages AFTER that timestamp — the patient is greeted fresh on their
+    // next message, while the full patient dossier (appointments, notes, etc.)
+    // is still passed through aiContext. This prevents "Ken 3andek 7aja okhra?"
+    // responses when the patient returns days after their last visit.
+    const sessionFilter = conversation.sessionStartedAt
+      ? { createdAt: { $gt: conversation.sessionStartedAt } }
+      : {};
+
     const rawMessages = await Message.find({
       tenantId: new mongoose.Types.ObjectId(tenantId),
       conversationId: new mongoose.Types.ObjectId(conversationId),
+      ...sessionFilter,
     })
       .sort({ createdAt: -1 })
       .limit(MAX_MESSAGES)
@@ -196,6 +208,7 @@ export class AIService {
       clinicSpecialty: tenantDoc?.specialty,
       clinicAddress: tenantDoc?.address,
       clinicPhone: tenantDoc?.phone || tenantDoc?.settings?.whatsappConfig?.phoneNumber,
+      clinicCurrency: tenantDoc?.currency,
       customInstructions: aiConfig.customInstructions,
       tone: aiConfig.tone,
       bookingMode: aiConfig.mode,
@@ -386,16 +399,65 @@ export class AIService {
       };
     }
 
+    // Build a quick lookup: providerMessageId → content for quoted message resolution
+    const msgByWamid = new Map<string, string>();
+    for (const m of messages) {
+      if ((m as any).providerMessageId && m.content) {
+        msgByWamid.set((m as any).providerMessageId, m.content);
+      }
+    }
+
+    // ── Linguistic Anchor (Lock Language upstream) ─────────────────────────
+    const inboundMessages = messages.filter((m) => m.direction === "inbound" && m.content);
+    const systemButtonRegex = /^(oui|non|ey|le|نعم|لا|oui, je confirme|non, annuler|نعم، أؤكد|لا، إلغاء)\b/i;
+    const patientText = inboundMessages
+      .map((m) => m.content?.trim() || "")
+      .filter((t) => t.length > 0 && !systemButtonRegex.test(t))
+      .slice(-3)
+      .join(" ");
+
+    if (patientText) {
+      if (/[\u0600-\u06FF]/.test(patientText)) {
+        aiContext.lockedLanguage = "ar";
+      } else {
+        const detected = detectLanguageFromText(patientText, aiContext.language);
+        if (detected === "arabizi") {
+          aiContext.lockedLanguage = "tn-arabizi";
+        } else if (detected === "ar") {
+          aiContext.lockedLanguage = "ar";
+        } else if (detected === "fr") {
+          aiContext.lockedLanguage = "fr";
+        }
+      }
+    } else if (aiContext.language) {
+      const pLang = aiContext.language;
+      if (pLang === "arabizi" || pLang === "tn-arabizi") aiContext.lockedLanguage = "tn-arabizi";
+      else if (pLang === "ar") aiContext.lockedLanguage = "ar";
+      else if (pLang === "en") aiContext.lockedLanguage = "en";
+      else aiContext.lockedLanguage = "fr";
+    }
+
     // Build the message array for the AI provider
     const systemPrompt = buildSystemPrompt(aiContext);
 
     const aiMessages: IChatMessage[] = [
       { role: "system", content: systemPrompt },
       // Map conversation messages to AI roles
-      ...messages.map((msg) => ({
-        role: (msg.direction === "inbound" ? "user" : "assistant") as "user" | "assistant",
-        content: msg.content,
-      })),
+      // If a message is a reply (drag-to-reply), prepend the quoted message so the AI has context
+      ...messages.map((msg) => {
+        let content = msg.content;
+        const quotedWamid = (msg as any).quotedProviderMessageId;
+        if (msg.direction === "inbound" && quotedWamid) {
+          const quotedContent = msgByWamid.get(quotedWamid);
+          if (quotedContent) {
+            content = `[En réponse au message: "${quotedContent}"]\n${content}`;
+          }
+        }
+        return {
+          role: (msg.direction === "inbound" ? "user" : "assistant") as "user" | "assistant",
+          content,
+        };
+      }),
     ];
 
     // Call the AI provider (PASS 1)

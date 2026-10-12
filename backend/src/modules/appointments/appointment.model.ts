@@ -42,6 +42,7 @@ export interface IAppointment extends Document {
   cancellationReason?: string;
   source?: string;
   reminderSentAt?: Date;
+  dayOfReminderSentAt?: Date;
   status: "scheduled" | "confirmed" | "completed" | "cancelled" | "no_show";
   createdAt: Date;
   updatedAt: Date;
@@ -63,6 +64,7 @@ const AppointmentSchema = new Schema<IAppointment>(
     cancellationReason: { type: String },
     source: { type: String },
     reminderSentAt: { type: Date },
+    dayOfReminderSentAt: { type: Date },
     status: {
       type: String,
       enum: ["scheduled", "confirmed", "completed", "cancelled", "no_show"],

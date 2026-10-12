@@ -3,6 +3,7 @@ import { AuthRequest } from "../../shared/middleware/requireAuth";
 import { appointmentService } from "./appointment.service";
 import { availabilityService } from "./availability.service";
 import { Tenant } from "../tenants/tenant.model";
+import { auditService } from "../audit/audit.service";
 
 import { parsePagination, buildPaginationMeta } from "../../shared/utils/pagination";
 
@@ -74,6 +75,14 @@ export const createAppointment = async (req: AuthRequest, res: Response) => {
     // Doctor resolution is backend-owned and deterministic; the frontend must
     // never choose or send doctorId.
     const saved = await appointmentService.createAppointment(req.body, tenantId);
+    
+    await auditService.logAction({
+      req,
+      action: "CREATE_APPOINTMENT",
+      resourceType: "appointment",
+      resourceId: saved._id.toString(),
+    });
+
     res.status(201).json({ id: saved._id, ...saved.toObject() });
   } catch (error: any) {
     if (error.message === "SLOT_UNAVAILABLE") {
@@ -90,6 +99,14 @@ export const updateAppointment = async (req: AuthRequest, res: Response) => {
 
     const updated = await appointmentService.updateAppointment(id as string, req.body, tenantId as string);
     if (!updated) return res.status(404).json({ error: "Appointment not found" });
+
+    await auditService.logAction({
+      req,
+      action: "UPDATE_APPOINTMENT",
+      resourceType: "appointment",
+      resourceId: id as string,
+    });
+
     res.json({ id: updated._id, ...updated.toObject() });
   } catch (error: any) {
     if (error.message === "SLOT_UNAVAILABLE") {
@@ -106,6 +123,13 @@ export const deleteAppointment = async (req: AuthRequest, res: Response) => {
 
     const deleted = await appointmentService.deleteAppointment(id as string, tenantId as string);
     if (!deleted) return res.status(404).json({ error: "Appointment not found" });
+
+    await auditService.logAction({
+      req,
+      action: "DELETE_APPOINTMENT",
+      resourceType: "appointment",
+      resourceId: id as string,
+    });
 
     res.json({ message: "Appointment deleted successfully" });
   } catch (error) {
@@ -161,6 +185,15 @@ export const updateAppointmentStatus = async (req: AuthRequest, res: Response) =
 
     const updated = await appointmentService.updateStatus(id as string, status, tenantId);
     if (!updated) return res.status(404).json({ error: "Appointment not found" });
+
+    await auditService.logAction({
+      req,
+      action: "UPDATE_APPOINTMENT_STATUS",
+      resourceType: "appointment",
+      resourceId: id as string,
+      details: { newStatus: status },
+    });
+
     res.json({ id: updated._id, ...updated.toObject() });
   } catch (error: any) {
     if (error.message === "INVALID_APPOINTMENT_TRANSITION") {

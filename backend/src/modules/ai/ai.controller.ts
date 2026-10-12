@@ -19,8 +19,12 @@
  */
 
 import { Response } from "express";
+import { isValidObjectId } from "mongoose";
 import { AuthRequest } from "../../shared/middleware/requireAuth";
+import { Patient } from "../patients/patient.model";
 import { AIService } from "./ai.service";
+import { normalizeAnalysis } from "./ai.vision.normalize";
+import { buildVisionPrompt, isDentalImage, PROMPT_VERSION } from "./ai.vision.prompt";
 import { OpenAICompatibleProvider } from "./openai-compatible.provider";
 import { ConversationNotFoundError, ProviderNotConfiguredError, ProviderUnavailableError } from "./ai.errors";
 import {
@@ -131,5 +135,160 @@ export async function executeAIActionHandler(req: AuthRequest, res: Response): P
     }
     console.error("[AI] Unexpected error in executeAIActionHandler:", (err as Error).message);
     res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+const LANGS = ["fr", "ar", "en"] as const;
+type SupportedLang = typeof LANGS[number];
+
+/**
+ * POST /api/v1/ai/analyze-image
+ * Vision AI Analysis for medical and dental imaging.
+ */
+export async function analyzeMedicalImageHandler(req: AuthRequest, res: Response): Promise<void> {
+  const tenantId = req.user?.tenantId;
+  if (!tenantId) {
+    res.status(403).json({ error: "Forbidden: authentication required" });
+    return;
+  }
+
+  const rawLang = req.body.language;
+  const language: SupportedLang = LANGS.includes(rawLang) ? rawLang : "fr";
+
+  const rawPatientId = req.body.patientId;
+  const patientId = typeof rawPatientId === "string" && isValidObjectId(rawPatientId)
+    ? rawPatientId
+    : undefined;
+
+  const rawFileId = req.body.fileId;
+  const fileId = typeof rawFileId === "string" && rawFileId.length < 200
+    ? rawFileId
+    : undefined;
+
+  const forceRefresh = Boolean(req.body.forceRefresh);
+
+  const { imageBase64, modality, title } = req.body;
+  if (!imageBase64 || typeof imageBase64 !== "string") {
+    res.status(400).json({ error: "Missing or invalid imageBase64" });
+    return;
+  }
+
+  // Sanity check: prevent memory exhaustion from oversized base64 (> 65MB)
+  if (imageBase64.length > 65 * 1024 * 1024) {
+    res.status(413).json({ error: "Payload too large" });
+    return;
+  }
+
+  // Cache check: ignore cache if promptVersion differs or not found
+  if (patientId && fileId && !forceRefresh) {
+    try {
+      const patientDoc = await Patient.findOne({ _id: patientId, tenantId }).select("files").lean();
+      const existingFile = patientDoc?.files?.find((f: any) => f.id === fileId || f._id?.toString() === fileId);
+      const cachedEntry = existingFile?.aiAnalysis?.[language];
+      if (cachedEntry && cachedEntry.promptVersion === PROMPT_VERSION && cachedEntry.analysis) {
+        res.status(200).json(cachedEntry.analysis);
+        return;
+      }
+    } catch (cacheErr) {
+      console.warn("[AI Vision] Cache check error, proceeding to live analysis:", cacheErr);
+    }
+  }
+
+  const providerUrl = process.env.AI_PROVIDER_URL?.trim()?.replace(/^["']|["']$/g, "");
+  const apiKey = process.env.AI_API_KEY?.trim()?.replace(/^["']|["']$/g, "");
+  const model = process.env.AI_MODEL?.trim()?.replace(/^["']|["']$/g, "") || "gpt-4o-mini";
+
+  if (!providerUrl || !apiKey) {
+    res.status(503).json({ error: "AI provider not configured" });
+    return;
+  }
+
+  try {
+    // Les consignes dentaires ne s'appliquent qu'aux images dentaires (modalité/nom de fichier),
+    // jamais à un scanner cervical d'un cabinet dentaire.
+    const dental = isDentalImage(modality, title);
+    const { system: prompt, user: userPrompt } = buildVisionPrompt({ language, dental });
+
+    if (process.env.AI_DEBUG_PROMPT === "true") {
+      // Journalisation du prompt réellement envoyé (sans l'image) pour les tests.
+      console.log("[AI Vision] prompt", JSON.stringify({ promptVersion: PROMPT_VERSION, language, dental, modality, title, system: prompt, user: userPrompt }));
+    }
+
+    const endpoint = `${providerUrl}/chat/completions`;
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: prompt },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: userPrompt },
+              {
+                type: "image_url",
+                image_url: {
+                  url: imageBase64.startsWith("data:") ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`,
+                  detail: "high"
+                }
+              }
+            ]
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.0
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("[AI Vision] Provider error:", response.status, errText);
+      res.status(502).json({ error: "Erreur du fournisseur d'IA lors de l'analyse d'image" });
+      return;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || "";
+    let rawParsed: unknown = null;
+    try {
+      rawParsed = JSON.parse(content);
+    } catch {
+      rawParsed = null;
+    }
+
+    // Normalisation pure et stricte (hors prompt)
+    const analysis = normalizeAnalysis(rawParsed, language);
+
+    // Persistance dans MongoDB avec métadonnées de versioning
+    if (patientId && fileId) {
+      try {
+        await Patient.updateOne(
+          { _id: patientId, tenantId, "files.id": fileId },
+          {
+            $set: {
+              [`files.$.aiAnalysis.${language}`]: {
+                analysis,
+                raw: rawParsed,
+                model,
+                promptVersion: PROMPT_VERSION,
+                dentalRulesApplied: dental,
+                createdAt: new Date(),
+              },
+            },
+          }
+        );
+      } catch (saveErr) {
+        console.warn("[AI Vision] Could not persist analysis:", saveErr);
+      }
+    }
+
+    res.status(200).json(analysis);
+  } catch (error: any) {
+    console.error("[AI Vision] Unexpected error in analyzeMedicalImageHandler:", error?.message);
+    res.status(500).json({ error: "Failed to analyze image" });
   }
 }

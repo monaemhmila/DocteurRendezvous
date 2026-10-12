@@ -12,25 +12,46 @@ import { Conversation, Message } from "../communications/communication.model";
 import { MetaWhatsAppProvider } from "../communications/providers/messaging.provider";
 import { nowInTimezone, toIsoDate, DEFAULT_TIMEZONE } from "../ai/temporal.utils";
 
+/**
+ * Enforces the appointment lifecycle state machine.
+ *
+ * Allowed transitions:
+ *   scheduled  → confirmed | cancelled | no_show
+ *   confirmed  → completed | cancelled | no_show
+ *   completed  → (terminal — no transitions)
+ *   cancelled  → (terminal — no transitions)
+ *   no_show    → (terminal — no transitions)
+ *
+ * The transition scheduled → completed is intentionally FORBIDDEN.
+ * A confirmation step is required before an appointment can be marked as done.
+ */
 function assertAppointmentTransition(currentStatus: string, nextStatus: string): void {
   if (currentStatus === nextStatus) return;
 
   const transitions: Record<string, string[]> = {
-    scheduled: ["confirmed", "completed", "cancelled", "no_show"],
+    scheduled: ["confirmed", "cancelled", "no_show"],
     confirmed: ["completed", "cancelled", "no_show"],
     completed: [],
     cancelled: [],
     no_show: [],
   };
 
-  const allowed = transitions[currentStatus] || [];
+  if (!(currentStatus in transitions)) {
+    throw new Error(`INVALID_APPOINTMENT_TRANSITION: unknown status '${currentStatus}'`);
+  }
+
+  const allowed = transitions[currentStatus]!;
   if (!allowed.includes(nextStatus)) {
-    throw new Error("INVALID_APPOINTMENT_TRANSITION");
+    throw new Error(
+      `INVALID_APPOINTMENT_TRANSITION: '${currentStatus}' → '${nextStatus}' is not allowed. ` +
+      `Allowed: [${allowed.join(", ") || "none (terminal state)"}]`
+    );
   }
 }
 
 let reminderWorkerTimer: NodeJS.Timeout | null = null;
 let isReminderRunning = false;
+let isSameDayRunning = false;
 
 export const reminderService = {
   /**
@@ -47,7 +68,12 @@ export const reminderService = {
       tomorrow.setDate(tomorrow.getDate() + 1);
       const tomorrowIso = tomorrow.toISOString().slice(0, 10);
 
-      // Find all appointments scheduled for tomorrow without a reminder
+      // Find all appointments scheduled for tomorrow without a reminder.
+      // Sentinel strategy (P1-05): we atomically claim each appointment
+      // by writing a preliminary reminderSentAt value BEFORE sending.
+      // This prevents any concurrent instance from double-sending.
+      // The sentinel is overwritten with the real timestamp on success,
+      // or cleared on failure so the slot can be retried next cycle.
       const pendingAppointments = await Appointment.find({
         date: tomorrowIso,
         status: { $in: ["scheduled", "confirmed"] },
@@ -71,6 +97,21 @@ export const reminderService = {
 
           if (!patient?.phone) continue;
 
+          // ── P1-05 atomic reservation ─────────────────────────────────────
+          // Claim the slot BEFORE sending. If another worker already claimed
+          // it (reminderSentAt now exists), this update returns null → skip.
+          const SENTINEL = new Date(0); // epoch = "claimed but not yet sent"
+          const claimed = await Appointment.findOneAndUpdate(
+            { _id: appt._id, reminderSentAt: { $exists: false } },
+            { $set: { reminderSentAt: SENTINEL } },
+            { returnDocument: 'after' }
+          );
+          if (!claimed) {
+            // Another instance already claimed this appointment.
+            continue;
+          }
+          // ─────────────────────────────────────────────────────────────────
+
           const cleanPhone = patient.phone.replace(/[^0-9]/g, "");
           const patientName = patient.firstName && patient.firstName.toLowerCase() !== "patient"
             ? `${patient.firstName} ${patient.lastName || ""}`.trim()
@@ -90,7 +131,7 @@ export const reminderService = {
           const rdvFr = isMainPatient ? "votre rendez-vous" : `le rendez-vous de ${patientName}`;
           const rdvAr = isMainPatient ? "بموعدك" : `بموعد ${patientName}`;
           const rdvTn = isMainPatient ? "b rendez-vous mte3ek" : `b rendez-vous mte3 ${patientName}`;
-          
+
           let reminderTextBody = "";
           let btnYes = "";
           let btnNo = "";
@@ -104,8 +145,8 @@ export const reminderService = {
             btnYes = "OUI, je confirme";
             btnNo = "NON, annuler";
           } else {
-            // Default to Tunisian Arabizi
-            reminderTextBody = `Nhebou nfakrouk ${rdvTn} ghodwa *${appt.date}* m3a *${appt.startTime}* fi ${clinicName} (${treatment}).\n\nT2akedli brabi eli enty jey(a)?`;
+            // Default to Tunisian Arabizi - polite and professional
+            reminderTextBody = `Aslema ${greetingName} 👋\nNhebou nfakrouk ${rdvTn} ghodwa *${appt.date}* m3a *${appt.startTime}* fi ${clinicName} (${treatment}).\n\nTnajjem t'akkedli 7dhourek aman ?`;
             btnYes = "OUI, je confirme"; // We keep French buttons for Arabizi as they are widely understood and standard
             btnNo = "NON, annuler";
           }
@@ -163,6 +204,7 @@ export const reminderService = {
             appointmentId: appt._id,
           });
 
+          // ── P1-05: stamp real timestamp (replace sentinel) on success ──
           await Appointment.findByIdAndUpdate(appt._id, {
             $set: { reminderSentAt: new Date() },
           });
@@ -171,11 +213,14 @@ export const reminderService = {
           console.log(`[Reminder Service] 24h Reminder sent to ${cleanPhone} for appointment on ${appt.date} at ${appt.startTime}`);
         } catch (err: any) {
           console.error(`[Reminder Service] Error sending reminder for appointment ${appt._id}:`, err.message);
-          
-          // CRITICAL FIX: If it fails (e.g. Meta 24h window closed, parameter value invalid), 
-          // we MUST mark it as processed to prevent infinite retry loops in the background worker.
+
+          // CRITICAL FIX: If it fails (e.g. Meta 24h window closed, parameter value invalid),
+          // clear the sentinel so the next cycle can retry, but also add a note.
+          // After repeated failures the reminder worker will eventually skip the appointment
+          // on the next calendar day when it no longer matches `date: tomorrowIso`.
           await Appointment.findByIdAndUpdate(appt._id, {
-            $set: { reminderSentAt: new Date(), notes: (appt.notes || "") + "\n[Reminder failed to send]" },
+            $unset: { reminderSentAt: "" },
+            $set: { notes: (appt.notes || "") + "\n[Reminder failed to send]" },
           });
         }
       }
@@ -183,6 +228,121 @@ export const reminderService = {
       console.error("[Reminder Service] Error in processUpcomingReminders:", err.message);
     } finally {
       isReminderRunning = false;
+    }
+
+    return { sentCount };
+  },
+
+  /**
+   * J-0: Send a same-day morning reminder to patients whose appointment TODAY
+   * is still in "scheduled" status (not yet confirmed) and haven't received
+   * the day-of reminder yet. Runs around 8:00 AM local time.
+   */
+  processSameDayReminders: async (): Promise<{ sentCount: number }> => {
+    if (isSameDayRunning) return { sentCount: 0 };
+    isSameDayRunning = true;
+
+    // Only run between 07:30 and 10:00 to avoid spamming at other times
+    const nowHour = new Date().getHours();
+    if (nowHour < 7 || nowHour >= 10) {
+      isSameDayRunning = false;
+      return { sentCount: 0 };
+    }
+
+    let sentCount = 0;
+    try {
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const messagingProvider = new MetaWhatsAppProvider();
+
+      // Target only UNCONFIRMED (still "scheduled") appointments today
+      const pendingAppointments = await Appointment.find({
+        date: todayIso,
+        status: "scheduled", // not confirmed
+        dayOfReminderSentAt: { $exists: false },
+      }).lean();
+
+      for (const appt of pendingAppointments) {
+        try {
+          const tenant = await Tenant.findById(appt.tenantId).lean();
+          if (!tenant) continue;
+          if (tenant.settings?.aiConfig?.capabilities?.reminders === false) continue;
+
+          const patient = await Patient.findOne({ _id: appt.patientId, tenantId: appt.tenantId }).lean();
+          if (!patient?.phone) continue;
+
+          // Atomic claim
+          const SENTINEL = new Date(0);
+          const claimed = await Appointment.findOneAndUpdate(
+            { _id: appt._id, dayOfReminderSentAt: { $exists: false } },
+            { $set: { dayOfReminderSentAt: SENTINEL } },
+            { returnDocument: 'after' }
+          );
+          if (!claimed) continue;
+
+          const cleanPhone = patient.phone.replace(/[^0-9]/g, "");
+          const patientName = patient.firstName && patient.firstName.toLowerCase() !== "patient"
+            ? `${patient.firstName} ${patient.lastName || ""}`.trim()
+            : "Cher patient";
+          const clinicName = tenant.name || "notre cabinet";
+          const treatment = appt.treatment || "Consultation";
+
+          const isArabic = patient.language === "ar";
+          const isFrench = patient.language === "fr";
+
+          let msgBody = "";
+          if (isArabic) {
+            msgBody = `صباح الخير ${patientName} 🌅\nتذكير: لديك موعد اليوم *${appt.date}* في تمام الساعة *${appt.startTime}* في ${clinicName} (${treatment}).\n\nهل تؤكد حضورك؟`;
+          } else if (isFrench) {
+            msgBody = `Bonjour ${patientName} 🌅\nRappel de dernière minute : vous avez un rendez-vous *aujourd'hui* à *${appt.startTime}* au ${clinicName} (${treatment}).\n\nMerci de confirmer votre présence.`;
+          } else {
+            msgBody = `Sba7 el khir ${patientName} 🌅\nRappel: 3andek rendez-vous lyoum *${appt.date}* m3a *${appt.startTime}* fi ${clinicName} (${treatment}).\n\nAkkedli enty jey(a)?`;
+          }
+
+          const interactivePayload = {
+            type: "button",
+            body: { text: msgBody },
+            action: {
+              buttons: [
+                { type: "reply", reply: { id: "confirm_yes", title: isArabic ? "نعم، أؤكد" : "OUI, je confirme" } },
+                { type: "reply", reply: { id: "confirm_no", title: isArabic ? "لا، إلغاء" : "NON, annuler" } },
+              ]
+            }
+          };
+
+          let conv = await Conversation.findOne({ tenantId: appt.tenantId, contactWaId: cleanPhone });
+          if (!conv) {
+            conv = await Conversation.create({
+              tenantId: appt.tenantId, patientId: patient._id,
+              contactWaId: cleanPhone, channel: "whatsapp",
+              status: "active", lastMessageAt: new Date(),
+            });
+          }
+
+          const sendResult = await messagingProvider.sendMessage(
+            { to: cleanPhone, type: "interactive", interactive: interactivePayload },
+            tenant as any
+          );
+
+          await Message.create({
+            tenantId: appt.tenantId, conversationId: conv._id,
+            patientId: patient._id, direction: "outbound", status: "sent",
+            content: msgBody,
+            providerMessageId: sendResult.providerMessageId || `dayof_${appt._id}_${Date.now()}`,
+            appointmentId: appt._id,
+          });
+
+          await Appointment.findByIdAndUpdate(appt._id, { $set: { dayOfReminderSentAt: new Date() } });
+          sentCount++;
+          console.log(`[Reminder Service] J-0 reminder sent to ${cleanPhone} for appointment at ${appt.startTime}`);
+        } catch (err: any) {
+          console.error(`[Reminder Service] J-0 error for appt ${appt._id}:`, err.message);
+          await Appointment.findByIdAndUpdate(appt._id, { $unset: { dayOfReminderSentAt: "" } });
+        }
+      }
+    } catch (err: any) {
+      console.error("[Reminder Service] J-0 global error:", err.message);
+    } finally {
+      isSameDayRunning = false;
     }
 
     return { sentCount };
@@ -197,10 +357,12 @@ export const reminderService = {
 
     setTimeout(() => {
       reminderService.processUpcomingReminders().catch((err) => console.error("[Reminder Service] Initial run error:", err.message));
+      reminderService.processSameDayReminders().catch((err) => console.error("[Reminder Service] J-0 Initial run error:", err.message));
     }, 15_000);
 
     reminderWorkerTimer = setInterval(() => {
       reminderService.processUpcomingReminders().catch((err) => console.error("[Reminder Service] Scheduled run error:", err.message));
+      reminderService.processSameDayReminders().catch((err) => console.error("[Reminder Service] J-0 Scheduled run error:", err.message));
     }, intervalMs);
   }
 };
@@ -266,10 +428,10 @@ export const appointmentService = {
 
     for (const appt of activeAppts) {
       if (excludeAppointmentId && appt._id.toString() === excludeAppointmentId) continue;
-      
+
       const apptDate = appt.date;
       const apptEndTime = appt.endTime;
-      
+
       if (apptDate > tnDate || (apptDate === tnDate && apptEndTime > tnTime)) {
         throw new Error(`Active_Appointment_Exists:${apptDate}:${appt.startTime}`);
       }
@@ -277,26 +439,26 @@ export const appointmentService = {
   },
 
   getAppointments: async (
-    tenantId: string, 
-    patientId?: string, 
-    status?: string, 
+    tenantId: string,
+    patientId?: string,
+    status?: string,
     date?: string,
     dateFrom?: string,
     dateTo?: string,
-    skip: number = 0, 
+    skip: number = 0,
     limit: number = 20
   ) => {
     const query: any = { tenantId };
     if (patientId) query.patientId = patientId;
     if (status) query.status = status;
     if (date) query.date = date;
-    
+
     if (dateFrom || dateTo) {
       query.date = query.date || {};
       if (dateFrom) query.date.$gte = dateFrom;
       if (dateTo) query.date.$lte = dateTo;
     }
-    
+
     const [data, total] = await Promise.all([
       Appointment.find(query)
         .populate("patientId", "firstName lastName phone")
@@ -305,7 +467,7 @@ export const appointmentService = {
         .limit(limit),
       Appointment.countDocuments(query)
     ]);
-    
+
     return { data, total };
   },
   getAppointmentById: async (id: string, tenantId: string) => {
@@ -357,7 +519,7 @@ export const appointmentService = {
     if (appointmentData.price === undefined || appointmentData.price === null || isNaN(Number(appointmentData.price))) {
       const tenant = await Tenant.findById(tenantId).lean();
       const services = tenant?.settings?.services || [];
-      const match = services.find((s: any) => 
+      const match = services.find((s: any) =>
         s.name?.toLowerCase().trim() === appointmentData.treatment?.toLowerCase().trim()
       );
       if (match?.price) {
@@ -387,7 +549,7 @@ export const appointmentService = {
     const appointment = new Appointment({ ...appointmentData, tenantId });
     try {
       const savedAppt = await appointment.save();
-      
+
       // Update patient lastVisit only for past or today's appointments (not future bookings)
       const todayStr = new Date().toISOString().slice(0, 10);
       if ((savedAppt.status === "confirmed" || savedAppt.status === "scheduled") && savedAppt.date <= todayStr) {
@@ -396,7 +558,7 @@ export const appointmentService = {
           { $set: { "metrics.lastVisit": new Date(savedAppt.date) } }
         );
       }
-      
+
       return savedAppt;
     } catch (err: any) {
       // Catch MongoDB Duplicate Key Error (11000)
@@ -408,7 +570,7 @@ export const appointmentService = {
   },
   updateAppointment: async (id: string, data: Partial<IAppointment>, tenantId: string) => {
     let session: mongoose.ClientSession | undefined;
-    
+
     try {
       session = await mongoose.startSession();
       session.startTransaction();
@@ -428,10 +590,10 @@ export const appointmentService = {
     }
 
     try {
-      const existing = session 
+      const existing = session
         ? await Appointment.findOne({ _id: id, tenantId }).session(session)
         : await Appointment.findOne({ _id: id, tenantId });
-        
+
       if (!existing) {
         if (session) {
           await session.abortTransaction();
@@ -534,71 +696,126 @@ export const appointmentService = {
 
     if (currentStatus === nextStatus) return existing;
 
-    const updated = await Appointment.findOneAndUpdate(
-      { _id: id, tenantId, status: currentStatus },
-      { $set: { status: nextStatus } },
-      { returnDocument: 'after' }
-    );
-    
-    if (!updated) {
-      const latest = await Appointment.findOne({ _id: id, tenantId });
-      if (latest?.status === nextStatus) {
-        return latest;
+    // ── P1-04: Transactional status + OutboxEvent ──────────────────────────
+    // On Replica Set / Atlas: both the status write and the OutboxEvent
+    // insertion are covered by a single session transaction so they either
+    // both commit or both roll back.
+    //
+    // On standalone MongoDB (MONGO_STANDALONE=true or startSession fails):
+    // we fall back to the previous sequential writes and log a warning.
+    // This degraded mode is acceptable for local development ONLY.
+    // ──────────────────────────────────────────────────────────────────────
+    let session: mongoose.ClientSession | null = null;
+    const isStandalone = process.env.MONGO_STANDALONE === "true";
+
+    if (!isStandalone) {
+      try {
+        session = await mongoose.startSession();
+        session.startTransaction();
+      } catch (err: any) {
+        console.warn(
+          "[updateStatus] Could not start MongoDB transaction (standalone mode?). " +
+          "Falling back to non-transactional writes. DO NOT use this in production.\n" +
+          err.message
+        );
+        session = null;
       }
-      throw new Error("INVALID_APPOINTMENT_TRANSITION");
     }
 
-    // If async mode is enabled and status is confirmed, create OutboxEvent
-    if (process.env.ASYNC_WEBHOOK_PROCESSING === "true" && nextStatus === "confirmed") {
-      const tenant = await Tenant.findById(tenantId).lean();
-      const patient = await Patient.findById(updated.patientId).lean();
-      
-      if (tenant && patient && patient.phone) {
-        const cleanPhone = patient.phone.replace(/[^0-9]/g, "");
-        const phoneNumberId = tenant.settings?.whatsappConfig?.phoneNumberId;
-        
-        if (phoneNumberId) {
-          const patientName = patient.firstName && patient.firstName.toLowerCase() !== "patient"
-            ? `${patient.firstName} ${patient.lastName || ""}`.trim()
-            : "Cher patient";
-          const clinicName = tenant.name || "notre cabinet dentaire";
-          const treatment = updated.treatment || "Consultation dentaire";
-          const isArabic = patient.language === "ar";
-          const isFrench = patient.language === "fr";
-          const isEnglish = patient.language === "en";
+    try {
+      // 1. Atomically update status (optimistic check on currentStatus)
+      const updateOpts = session
+        ? { returnDocument: 'after' as const, session }
+        : { returnDocument: 'after' as const };
 
-          let confirmationText = `Mrigel ${patientName}! 👋\nRendez-vous mte3ek m'akéd: nhar ${updated.date} men ${updated.startTime} l ${updated.endTime} fi ${clinicName}. Nestanew fik!`;
-          if (isArabic) {
-            confirmationText = `عسلامة ${patientName} 👋\nتم تأكيد موعدك بنجاح: ${updated.date} من ${updated.startTime} إلى ${updated.endTime} (${treatment}) في ${clinicName}. نراكم قريباً!`;
-          } else if (isFrench) {
-            confirmationText = `Parfait ${patientName} ! 👋\nVotre rendez-vous est confirmé pour le ${updated.date} de ${updated.startTime} à ${updated.endTime} (${treatment}) au ${clinicName}. À très bientôt !`;
-          } else if (isEnglish) {
-            confirmationText = `Hello ${patientName} 👋\nYour appointment is confirmed for ${updated.date} from ${updated.startTime} to ${updated.endTime} (${treatment}) at ${clinicName}. See you soon!`;
-          }
+      const updated = await Appointment.findOneAndUpdate(
+        { _id: id, tenantId, status: currentStatus },
+        { $set: { status: nextStatus } },
+        updateOpts
+      );
 
-          const { OutboxEvent } = await import("../jobs/outbox-event.model");
-          
-          await OutboxEvent.create([{
-            eventType: "appointment.confirmed",
-            aggregateType: "appointment",
-            aggregateId: updated._id.toString(),
-            tenantId: updated.tenantId,
-            phoneNumberId: phoneNumberId,
-            idempotencyKey: `appointment:${updated._id}:confirmed`,
-            payload: {
-              to: cleanPhone,
-              type: "text",
-              content: confirmationText
+      if (!updated) {
+        const latest = await Appointment.findOne({ _id: id, tenantId });
+        if (latest?.status === nextStatus) {
+          if (session) { await session.abortTransaction(); session.endSession(); }
+          return latest;
+        }
+        throw new Error("INVALID_APPOINTMENT_TRANSITION");
+      }
+
+      // 2. Create OutboxEvent for WhatsApp confirmation message (same transaction)
+      if (nextStatus === "confirmed") {
+        const tenant = await Tenant.findById(tenantId).lean();
+        const patient = await Patient.findById(updated.patientId).lean();
+
+        if (tenant && patient && patient.phone) {
+          const cleanPhone = patient.phone.replace(/[^0-9]/g, "");
+          const phoneNumberId = tenant.settings?.whatsappConfig?.phoneNumberId;
+
+          if (phoneNumberId) {
+            const patientName = patient.firstName && patient.firstName.toLowerCase() !== "patient"
+              ? `${patient.firstName} ${patient.lastName || ""}`.trim()
+              : "Cher patient";
+            const clinicName = tenant.name || "notre cabinet dentaire";
+            const treatment = updated.treatment || "Consultation dentaire";
+            const isArabic = patient.language === "ar";
+            const isFrench = patient.language === "fr";
+            const isEnglish = patient.language === "en";
+
+            let confirmationText = `Mrigel ${patientName}! 👋\nRendez-vous mte3ek m'akéd: nhar ${updated.date} men ${updated.startTime} l ${updated.endTime} fi ${clinicName}. Nestanew fik!`;
+            if (isArabic) {
+              confirmationText = `عسلامة ${patientName} 👋\nتم تأكيد موعدك بنجاح: ${updated.date} من ${updated.startTime} إلى ${updated.endTime} (${treatment}) في ${clinicName}. نراكم قريباً!`;
+            } else if (isFrench) {
+              confirmationText = `Parfait ${patientName} ! 👋\nVotre rendez-vous est confirmé pour le ${updated.date} de ${updated.startTime} à ${updated.endTime} (${treatment}) au ${clinicName}. À très bientôt !`;
+            } else if (isEnglish) {
+              confirmationText = `Hello ${patientName} 👋\nYour appointment is confirmed for ${updated.date} from ${updated.startTime} to ${updated.endTime} (${treatment}) at ${clinicName}. See you soon!`;
             }
-          }]);
+
+            const { OutboxEvent } = await import("../jobs/outbox-event.model");
+            const outboxDoc = [{
+              eventType: "appointment.confirmed",
+              aggregateType: "appointment",
+              aggregateId: updated._id.toString(),
+              tenantId: updated.tenantId,
+              phoneNumberId,
+              idempotencyKey: `appointment:${updated._id}:confirmed`,
+              payload: { to: cleanPhone, type: "text", content: confirmationText },
+            }];
+
+            // insertMany with session (no-op if idempotencyKey already exists)
+            try {
+              await OutboxEvent.insertMany(outboxDoc, {
+                ...(session ? { session } : {}),
+                ordered: false,
+              });
+            } catch (insertErr: any) {
+              // Duplicate key on idempotencyKey = already created, safe to ignore
+              if (insertErr.code !== 11000 && !(insertErr.writeErrors?.every((e: any) => e.code === 11000))) {
+                throw insertErr;
+              }
+            }
+          }
         }
       }
-    }
 
-    // Only handle async side-effects after commit
-    await handleStatusChange(updated, tenantId);
-    
-    return updated;
+      // 3. Commit
+      if (session) {
+        await session.commitTransaction();
+        session.endSession();
+        session = null;
+      }
+
+      // 4. Non-transactional side-effects (recovery, patient metrics) — after commit
+      await handleStatusChange(updated, tenantId);
+
+      return updated;
+    } catch (err: any) {
+      if (session) {
+        await session.abortTransaction();
+        session.endSession();
+      }
+      throw err;
+    }
   }
 };
 
@@ -610,7 +827,7 @@ export const appointmentService = {
  */
 async function handleStatusChange(appointment: any, tenantId: string) {
   const status = appointment.status;
-  
+
   if (status === "confirmed" || status === "scheduled") {
     if (appointment.patientId) {
       // Update lastVisit only for past or today appointments
@@ -623,7 +840,7 @@ async function handleStatusChange(appointment: any, tenantId: string) {
       }
     }
   }
-  
+
   if (status === "no_show") {
     // 1. Increment patient metrics noShowCount
     if (appointment.patientId) {
@@ -734,7 +951,7 @@ async function handleStatusChange(appointment: any, tenantId: string) {
       }
     }
   }
-  
+
   if (status === "cancelled") {
     const recovery = await recoveryService.createOpportunity({
       patientId: appointment.patientId,
@@ -760,7 +977,7 @@ async function handleStatusChange(appointment: any, tenantId: string) {
   // Phase 3.5: Waitlist Slot-Filling Trigger
   if (status === "cancelled" || status === "no_show") {
     let isUsable = true;
-    
+
     // For no_show, only attempt to fill if the slot hasn't passed
     if (status === "no_show") {
       const now = new Date();
@@ -768,7 +985,7 @@ async function handleStatusChange(appointment: any, tenantId: string) {
       const [year, month, day] = appointment.date.split("-").map(Number);
       const [hour, minute] = appointment.endTime.split(":").map(Number);
       const slotEndTime = new Date(year, month - 1, day, hour, minute);
-      
+
       if (now > slotEndTime) {
         isUsable = false;
       }
@@ -783,7 +1000,7 @@ async function handleStatusChange(appointment: any, tenantId: string) {
     }
   }
 
-  
+
   // When an appointment is completed, search ONLY for the Recovery opportunity
   // explicitly linked via recoveryAppointmentId to this specific completed appointment.
   if (status === "completed") {
@@ -792,7 +1009,7 @@ async function handleStatusChange(appointment: any, tenantId: string) {
       recoveryAppointmentId: appointment._id,
       status: "booked",
     });
-    
+
     if (bookedOpp) {
       await recoveryService.markVisited(
         bookedOpp._id.toString(),
@@ -800,5 +1017,40 @@ async function handleStatusChange(appointment: any, tenantId: string) {
         tenantId
       );
     }
+
+    // ── Bot session reset (P2-bot) ────────────────────────────────────────────
+    // The appointment is now honoré. When the patient contacts us next (hours
+    // or days later), the bot must NOT continue the previous conversation thread.
+    // We set sessionStartedAt = now and clear all pending booking / action state.
+    // The AI will load only messages AFTER this timestamp → fresh greeting.
+    // The full patient dossier (history, notes, family members) is still provided
+    // via aiContext, so the bot knows who the patient is.
+    if (appointment.patientId) {
+      try {
+        const patient = await Patient.findOne({ _id: appointment.patientId, tenantId }).lean();
+        if (patient?.phone) {
+          const cleanPhone = patient.phone.replace(/[^0-9]/g, "");
+          const { Conversation } = await import("../communications/communication.model");
+          await Conversation.findOneAndUpdate(
+            { tenantId, contactWaId: cleanPhone },
+            {
+              $set: { sessionStartedAt: new Date() },
+              $unset: {
+                pendingBookingContext: "",
+                pendingBookingIntent: "",
+                pendingActionConfirmation: "",
+                needsHuman: "",
+              },
+            }
+          );
+          console.log(`[handleStatusChange] Bot session reset for patient ${patient.firstName} (${cleanPhone}) after completed appointment.`);
+        }
+      } catch (sessionErr) {
+        // Non-critical — log and continue. The session reset is best-effort.
+        console.warn("[handleStatusChange] Could not reset bot session after completion:", (sessionErr as any)?.message);
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
   }
 }
+

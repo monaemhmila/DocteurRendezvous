@@ -6,7 +6,14 @@ export interface ITenant extends Document {
   email?: string;
   phone?: string;
   address?: string;
+  taxId?: string;
+  matriculeCnam?: string;
+  matriculeCnss?: string;
+  bank?: string;
+  rib?: string;
+  commercialRegister?: string;
   timezone?: string;
+  currency?: string;
   status: "active" | "suspended" | "trial";
   suspensionReason?: string;
   plan?: "starter" | "pro" | "enterprise";
@@ -38,7 +45,14 @@ const TenantSchema = new Schema<ITenant>(
     email: { type: String },
     phone: { type: String },
     address: { type: String },
+    taxId: { type: String },
+    matriculeCnam: { type: String },
+    matriculeCnss: { type: String },
+    bank: { type: String },
+    rib: { type: String },
+    commercialRegister: { type: String },
     timezone: { type: String, default: "Africa/Tunis" },
+    currency: { type: String, default: "TND" },
     status: {
       type: String,
       enum: ["active", "suspended", "trial"],

@@ -88,6 +88,7 @@ const updateTenantSchema = z.object({
   email: z.string().email().optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
+  currency: z.string().optional(),
   plan: z.enum(["starter", "pro", "enterprise"]).optional(),
   status: z.enum(["active", "suspended", "trial"]).optional(),
   suspensionReason: z.string().optional(),
@@ -233,6 +234,7 @@ export const updateTenant = async (req: AuthRequest, res: Response) => {
     if (data.email !== undefined) tenant.email = data.email;
     if (data.phone !== undefined) tenant.phone = data.phone;
     if (data.address !== undefined) tenant.address = data.address;
+    if (data.currency !== undefined) tenant.currency = data.currency;
     if (data.plan !== undefined) tenant.plan = data.plan;
     if (data.status !== undefined) tenant.status = data.status;
     if (data.suspensionReason !== undefined) tenant.suspensionReason = data.suspensionReason;
@@ -390,9 +392,10 @@ export const updateCurrentTenant = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: "Cabinet introuvable ou inactif (TENANT_NOT_AVAILABLE)" });
     }
 
-    const { name, specialty, email, phone, address, settings } = req.body;
+    const { name, specialty, email, phone, address, currency, settings } = req.body;
 
     if (name !== undefined) tenant.name = name.trim();
+    if (currency !== undefined) tenant.currency = currency.trim();
     if (specialty !== undefined) {
       const newSpecialty = specialty.trim();
       // If specialty changed or services are empty, re-inject defaults

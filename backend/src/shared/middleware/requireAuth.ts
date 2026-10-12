@@ -13,8 +13,15 @@ export interface AuthRequest extends Request {
 
 export const requireAuth = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
+  let token = "";
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.slice("Bearer ".length).trim();
+  } else if (req.query.token && typeof req.query.token === 'string') {
+    token = req.query.token;
+  }
+
+  if (!token) {
     return res.status(401).json({ error: "Unauthorized: Missing or invalid token" });
   }
 
@@ -24,10 +31,7 @@ export const requireAuth = async (req: AuthRequest, res: Response, next: NextFun
     return res.status(503).json({ error: "Authentication service is not configured" });
   }
 
-  const token = authHeader.slice("Bearer ".length).trim();
-  if (!token) {
-    return res.status(401).json({ error: "Unauthorized: Missing or invalid token" });
-  }
+
 
   try {
     const decoded = jwt.verify(token, secret, { algorithms: ["HS256"] }) as JwtPayload;

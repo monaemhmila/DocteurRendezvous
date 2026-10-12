@@ -39,6 +39,63 @@ export class AIBookingManager {
 
     if (!rawBooking) return false;
 
+    // ── Hard Gate : Confirmation obligatoire pour toute réservation issue d'un message vocal ──
+    if (conversation.pendingVoiceConfirmation) {
+      console.log("[AI Conversation] pendingVoiceConfirmation active — asking explicit confirmation before booking.");
+      // Détecter la langue
+      const patLang = (conversation.patientId && (await Patient.findById(conversation.patientId).select("language").lean()) as any)?.language || "arabizi";
+      const proposedDate = rawBooking.date || conversation.pendingBookingContext?.date || new Date().toISOString().slice(0, 10);
+      const proposedTime = normalizeTime(rawBooking.startTime);
+      const { formatDate } = await import("./tn-nlu");
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const formattedDateStr = formatDate(proposedDate, patLang === "fr" ? "fr" : patLang === "ar" ? "ar" : "tn-arabizi", todayIso);
+      
+      let confirmPrompt = "";
+      if (patLang === "fr") {
+        confirmPrompt = `J'ai bien écouté votre message vocal. Pour confirmer votre rendez-vous ${formattedDateStr} à ${proposedTime}, répondez par « oui » ou précisez-moi le moment qui vous convient le mieux.`;
+      } else if (patLang === "ar") {
+        confirmPrompt = `استمعت إلى رسالتك الصوتية. لتأكيد موعدك ${formattedDateStr} في الساعة ${proposedTime}، أجب بـ «نعم» أو أعلمني بالوقت الذي يناسبك.`;
+      } else {
+        confirmPrompt = `Sma3t el vocal mte3ek. Theb n'confirmiw rendez-vous ${formattedDateStr} m3a ${proposedTime} ? (9olli ey wala mriguel, wala 9olli wa9tech theb).`;
+      }
+
+      // ── GUARD: Do NOT overwrite an already-active pendingActionConfirmation.
+      // If a PAC is already set (e.g. from the first voice note), a second
+      // voice note must not replace it — the patient is answering the existing
+      // confirmation, not starting a new booking. Let the PAC handler take over.
+      const freshConvForVoiceGate = await Conversation.findById(conversationId).select("pendingActionConfirmation").lean();
+      if ((freshConvForVoiceGate as any)?.pendingActionConfirmation) {
+        console.log("[AI Conversation] pendingActionConfirmation already active — voice gate skipping new PAC. Patient voice note treated as PAC reply.");
+        await Conversation.findByIdAndUpdate(conversationId, { $unset: { pendingVoiceConfirmation: 1 } });
+        return true;
+      }
+
+      await Conversation.findByIdAndUpdate(conversationId, {
+        $set: {
+          pendingActionConfirmation: {
+            type: "confirm_appointment_status",
+            appointmentId: "pending_voice",
+            appointmentSummary: `${formattedDateStr} à ${proposedTime}`,
+            actionData: {
+              rawBooking,
+              result
+            }
+          }
+        },
+        $unset: { pendingVoiceConfirmation: 1 }
+      });
+
+      const confirmResult = {
+        ...result,
+        suggestion: confirmPrompt,
+        reply: confirmPrompt,
+        structured: true,
+        action: undefined
+      };
+      await this.sendConversationalReply(tenantId, conversationId, conversation, confirmResult as any, inboundWaId);
+      return true;
+    }
+
     const conversationPatientId = conversation.patientId;
     if (!conversationPatientId) {
       console.warn("[AI Conversation] No patientId on conversation — cannot book.");

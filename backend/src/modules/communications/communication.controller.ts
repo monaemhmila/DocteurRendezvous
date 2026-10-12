@@ -211,6 +211,15 @@ export const sendMessageToPatient = async (req: AuthRequest, res: Response) => {
     if (!patient) return res.status(404).json({ error: "Patient not found" });
 
     let conversation = await Conversation.findOne({ tenantId, patientId: patient._id });
+    if (!conversation && patient.phone) {
+      // It might exist but without patientId linked yet
+      conversation = await Conversation.findOne({ tenantId, contactWaId: patient.phone });
+      if (conversation) {
+        conversation.patientId = patient._id as any;
+        await conversation.save();
+      }
+    }
+    
     if (!conversation) {
       if (!patient.phone) return res.status(400).json({ error: "Patient has no phone number" });
       conversation = await Conversation.create({
